@@ -7,9 +7,9 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIO(server);
 const port = process.env.PORT || 3000;
-const canvasWidth = 1005;
+const canvasWidth = 1000;
 const canvasHeight = 600;
-const segmentSize = 15;
+const segmentSize = 10;
 const gameSpeed = 75;
 
 app.use(express.static('public'));
