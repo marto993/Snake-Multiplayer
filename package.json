@@ -1,0 +1,24 @@
+{
+  "name": "snake-multiplayer",
+  "version": "2.0.0",
+  "description": "Snake multiplayer game with rounds and scoring system",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "keywords": ["snake", "multiplayer", "game", "socket.io", "realtime"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
