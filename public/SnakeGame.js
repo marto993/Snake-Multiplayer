@@ -96,7 +96,7 @@ document.addEventListener("DOMContentLoaded", function() {
   const retroColors = {
     snake: ['#00ff41', '#ff0080', '#00ffff', '#ffff00', '#ff4040', '#8040ff', '#40ff80', '#ff8040'],
     background: '#000000',
-    grid: '#004400',
+    grid: '#001100',
     food: '#ff0080',
     foodGlow: '#ff40a0',
     projectile: '#ffff00'
@@ -721,8 +721,8 @@ document.addEventListener("DOMContentLoaded", function() {
   // Game functions with retro style
   function drawGrid() {
     // Almost imperceptible retro grid
-    ctx.strokeStyle = '#001100';
-    ctx.lineWidth = 1;
+    //ctx.strokeStyle = '#001100';
+    //ctx.lineWidth = 1;
     
     for (let x = 0; x <= canvas.width; x += segmentSize) {
       ctx.beginPath();
