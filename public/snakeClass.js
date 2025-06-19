@@ -1,7 +1,6 @@
 class Snake {
     constructor(ID, playerName, segmentSize, canvasWidht, canvasHeight, startX, startY, directionX, directionY) {
       this.id = ID;
-      //this.ctx = ctx;
       this.name = playerName;
       this.canvaswidht = canvasWidht;
       this.canvasheight = canvasHeight;
@@ -15,8 +14,8 @@ class Snake {
       this.score = 0;
       this.gameover = false;
       this.scoreLeftToGrow = 0;
-      //this.gameboard = gameBoard;
     }
+    
     move() {
       const head = { ...this.segments[0] };
       head.x += this.direction.x * this.segmentSize;
@@ -25,13 +24,14 @@ class Snake {
       this.segments.unshift(head); // Agregar la nueva cabeza al inicio
   
       // Eliminar el último segmento si no se ha comido algo
-      if (this.scoreLeftToGrow === 0) {//(!this.eatFood) {
+      if (this.scoreLeftToGrow === 0) {
         this.segments.pop();
       } else { // entonces, si se comió la comida...
         this.scoreLeftToGrow--;
         this.eatFood = false;
       } 
     }
+    
     changeDirection(newDirection) {
       // Evitar cambiar la dirección opuesta
       if (
@@ -52,6 +52,7 @@ class Snake {
         this.scoreLeftToGrow = scoreFood;
         this.eatFood = true;
     }
+    
     GameOver() {
       this.gameover = true;
       this.direction.x = 0;
@@ -60,8 +61,7 @@ class Snake {
         { x: 0, y: 0 }
       ];
     }
-  }
-
+}
 
 // Verificar si el código se está ejecutando en Node.js o en el navegador
 if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {

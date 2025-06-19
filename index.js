@@ -14,11 +14,30 @@ app.use(express.static('public'));
 let rooms = new Map();
 
 function generateRoomId() {
-  return Math.random().toString(36).substring(2, 8).toUpperCase();
+  let roomId;
+  do {
+    roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+  } while (rooms.has(roomId));
+  return roomId;
+}
+
+function validateRoomConfig(config) {
+  return {
+    maxPlayers: Math.max(2, Math.min(20, parseInt(config.maxPlayers) || 8)),
+    minPlayers: Math.max(2, Math.min(parseInt(config.maxPlayers) || 8, parseInt(config.minPlayers) || 2)),
+    maxRounds: Math.max(1, Math.min(10, parseInt(config.maxRounds) || 3)),
+    gameSpeed: Math.max(25, Math.min(200, parseInt(config.gameSpeed) || 75)),
+    canvasWidth: Math.max(400, Math.min(1600, parseInt(config.canvasWidth) || 1000)),
+    canvasHeight: Math.max(300, Math.min(1000, parseInt(config.canvasHeight) || 600)),
+    segmentSize: Math.max(5, Math.min(25, parseInt(config.segmentSize) || 10)),
+    countdownTime: Math.max(1, Math.min(10, parseInt(config.countdownTime) || 3))
+  };
 }
 
 function createRoom(hostId, hostName) {
   const roomId = generateRoomId();
+  const defaultConfig = validateRoomConfig({});
+  
   rooms.set(roomId, {
     id: roomId,
     host: hostId,
@@ -28,46 +47,27 @@ function createRoom(hostId, hostName) {
     gameState: {
       playing: false,
       round: 1,
-      timeoutIdStartGame: 0,
-      downCounter: 3,
-      intervalId: 0
+      timeoutIdStartGame: null,
+      downCounter: defaultConfig.countdownTime,
+      intervalId: null
     },
-    // Configuraciones por defecto que pueden ser modificadas
-    config: {
-      maxPlayers: 8,
-      minPlayers: 2,
-      maxRounds: 3,
-      gameSpeed: 75,
-      canvasWidth: 1000,
-      canvasHeight: 600,
-      segmentSize: 10,
-      countdownTime: 3
-    },
+    config: defaultConfig,
     gameboard: [],
-    food: {
-      x: 0,
-      y: 0,
-      score: 1
-    },
+    food: { x: 0, y: 0, score: 1 },
     roundScores: {}
   });
   
   const room = rooms.get(roomId);
-  
-  // Inicializar el tablero inmediatamente
   resetGameBoard(room);
+  generateFood(room);
   
-  room.food = {
-    x: getRandomCoordinate(room.config.canvasWidth, room.config.segmentSize),
-    y: getRandomCoordinate(room.config.canvasHeight, room.config.segmentSize),
-    score: Math.floor(Math.random() * 9) + 3
-  };
-  
+  console.log(`Room ${roomId} created by ${hostName}`);
   return roomId;
 }
 
 function getRoom(roomId) {
-  return rooms.get(roomId);
+  const room = rooms.get(roomId);
+  return room && !room.finished ? room : null;
 }
 
 function deleteRoom(roomId) {
@@ -76,6 +76,7 @@ function deleteRoom(roomId) {
     if (room.gameState.intervalId) clearInterval(room.gameState.intervalId);
     if (room.gameState.timeoutIdStartGame) clearTimeout(room.gameState.timeoutIdStartGame);
     rooms.delete(roomId);
+    console.log(`Room ${roomId} deleted`);
   }
 }
 
@@ -84,23 +85,18 @@ function resetGameBoard(room) {
   const gridWidth = Math.floor(canvasWidth / segmentSize);
   const gridHeight = Math.floor(canvasHeight / segmentSize);
   
-  room.gameboard = [];
-  for(let i = 0; i < gridWidth; i++){
-    room.gameboard[i] = [];
-    for (let j = 0; j < gridHeight; j++){
-      room.gameboard[i][j] = 0;
-    }
-  }
+  room.gameboard = Array(gridWidth).fill().map(() => Array(gridHeight).fill(0));
 }
 
 function updateGameBoard(room) {
   resetGameBoard(room);
-  const { canvasWidth, canvasHeight, segmentSize } = room.config;
-  const gridWidth = Math.floor(canvasWidth / segmentSize);
-  const gridHeight = Math.floor(canvasHeight / segmentSize);
+  const { segmentSize } = room.config;
+  const gridWidth = room.gameboard.length;
+  const gridHeight = room.gameboard[0].length;
   
+  // Mark snake segments
   room.players.forEach((player) => {
-    if (!player.gameover) {
+    if (!player.gameover && player.segments) {
       player.segments.forEach((segment) => {
         const x = Math.floor(segment.x / segmentSize);
         const y = Math.floor(segment.y / segmentSize);
@@ -111,22 +107,25 @@ function updateGameBoard(room) {
     }
   });
   
-  const foodX = Math.floor(room.food.x / segmentSize);
-  const foodY = Math.floor(room.food.y / segmentSize);
-  if (foodX >= 0 && foodX < gridWidth && foodY >= 0 && foodY < gridHeight) {
-    room.gameboard[foodX][foodY] = 2;
+  // Mark food
+  if (room.food) {
+    const foodX = Math.floor(room.food.x / segmentSize);
+    const foodY = Math.floor(room.food.y / segmentSize);
+    if (foodX >= 0 && foodX < gridWidth && foodY >= 0 && foodY < gridHeight) {
+      room.gameboard[foodX][foodY] = 2;
+    }
   }
 }
 
 function getRandomCoordinate(max, segmentSize) {
-  return Math.floor(Math.random() * max / segmentSize) * segmentSize;
+  return Math.floor(Math.random() * (max / segmentSize)) * segmentSize;
 }
 
 function getPlayerSpawnPosition(room, playerIndex) {
   const { canvasWidth, canvasHeight, segmentSize } = room.config;
-  const spawnX = Math.floor(canvasWidth * 0.1); // 10% from left edge
-  const spacing = segmentSize * 3; // 3 segments between players
-  const startY = Math.floor(canvasHeight * 0.2); // Start at 20% from top
+  const spawnX = Math.floor(canvasWidth * 0.1);
+  const spacing = segmentSize * 3;
+  const startY = Math.floor(canvasHeight * 0.2);
   
   return {
     x: Math.floor(spawnX / segmentSize) * segmentSize,
@@ -135,28 +134,17 @@ function getPlayerSpawnPosition(room, playerIndex) {
 }
 
 function verifyCoordinate(room, x, y) {
-  try {
-    const { canvasWidth, canvasHeight, segmentSize } = room.config;
-    const gridX = Math.floor(x / segmentSize);
-    const gridY = Math.floor(y / segmentSize);
-    
-    if (gridX < 0 || gridX >= Math.floor(canvasWidth/segmentSize) || 
-        gridY < 0 || gridY >= Math.floor(canvasHeight/segmentSize)) {
-      return false;
-    }
-    
-    // Asegurar que el tablero esté inicializado
-    if (!room.gameboard[gridX] || room.gameboard[gridX][gridY] === undefined) {
-      resetGameBoard(room);
-      return room.gameboard[gridX] && room.gameboard[gridX][gridY] === 0;
-    }
-    
-    return room.gameboard[gridX][gridY] === 0;
-  } catch (error) {
-    console.error('Error in verifyCoordinate:', error);
+  const { segmentSize } = room.config;
+  const gridX = Math.floor(x / segmentSize);
+  const gridY = Math.floor(y / segmentSize);
+  
+  if (!room.gameboard || !room.gameboard[gridX]) {
     resetGameBoard(room);
-    return false;
   }
+  
+  return gridX >= 0 && gridX < room.gameboard.length &&
+         gridY >= 0 && gridY < room.gameboard[0].length &&
+         room.gameboard[gridX][gridY] === 0;
 }
 
 function generateFood(room) {
@@ -171,7 +159,12 @@ function generateFood(room) {
     attempts++;
   } while (!verifyCoordinate(room, foodX, foodY) && attempts < maxAttempts);
   
-  const scoreFood = Math.floor(Math.random() * 9) + 3;
+  if (attempts >= maxAttempts) {
+    foodX = Math.floor(canvasWidth / 2 / segmentSize) * segmentSize;
+    foodY = Math.floor(canvasHeight / 2 / segmentSize) * segmentSize;
+  }
+  
+  const scoreFood = Math.floor(Math.random() * 7) + 3;
   room.food = { x: foodX, y: foodY, score: scoreFood };
 }
 
@@ -218,6 +211,13 @@ function endRound(room) {
 }
 
 function endGame(room) {
+  room.gameState.playing = false;
+  
+  if (room.gameState.intervalId) {
+    clearInterval(room.gameState.intervalId);
+    room.gameState.intervalId = null;
+  }
+  
   const finalWinner = Object.values(room.roundScores).reduce((prev, current) => 
     (prev.totalScore > current.totalScore) ? prev : current
   );
@@ -232,26 +232,14 @@ function endGame(room) {
   setTimeout(() => deleteRoom(room.id), 30000);
 }
 
-function resetGame(room) {
-  room.gameState.playing = false;
-  room.gameState.round = 1;
-  room.gameState.downCounter = room.config.countdownTime;
-  room.players.forEach(player => player.GameOver());
-  room.roundScores = {};
-  resetGameBoard(room);
-  if (room.gameState.intervalId) {
-    clearInterval(room.gameState.intervalId);
-  }
-}
-
 function startNewRound(room) {
-  const { canvasWidth, canvasHeight, segmentSize } = room.config;
+  room.gameState.downCounter = room.config.countdownTime;
   
   room.players.forEach((player, index) => {
     const spawnPos = getPlayerSpawnPosition(room, index);
     
     player.segments = [{ x: spawnPos.x, y: spawnPos.y }];
-    player.direction = { x: 1, y: 0 }; // Everyone starts moving right
+    player.direction = { x: 1, y: 0 };
     player.score = 0;
     player.gameover = false;
     player.scoreLeftToGrow = 0;
@@ -265,19 +253,24 @@ function startNewRound(room) {
 function startGame(room) {
   if (room.gameState.downCounter === 0) {
     resetGameBoard(room);
-    clearTimeout(room.gameState.timeoutIdStartGame);
+    
+    if (room.gameState.timeoutIdStartGame) {
+      clearTimeout(room.gameState.timeoutIdStartGame);
+      room.gameState.timeoutIdStartGame = null;
+    }
+    
     room.gameState.playing = true;
     
-    console.log(`Starting round ${room.gameState.round} in room ${room.id}!`);
+    console.log(`Starting round ${room.gameState.round} in room ${room.id}`);
     io.to(room.id).emit('gameStart', {
       players: room.players,
       food: room.food,
       config: room.config,
       gameState: room.gameState
     });
+    
     room.gameState.intervalId = setInterval(() => gameLoop(room), room.config.gameSpeed);
   } else {
-    console.log(`Round ${room.gameState.round} starting in ${room.gameState.downCounter}`);
     io.to(room.id).emit('countdown', room.gameState.downCounter, room.gameState);
     room.gameState.downCounter--;
     room.gameState.timeoutIdStartGame = setTimeout(() => startGame(room), 1000);
@@ -285,10 +278,11 @@ function startGame(room) {
 }
 
 function gameLoop(room) {
+  if (!room.gameState.playing) return;
+  
   const { canvasWidth, canvasHeight, segmentSize } = room.config;
   let alivePlayers = 0;
   
-  // Verificar que el tablero esté correctamente inicializado
   if (!room.gameboard || room.gameboard.length === 0) {
     resetGameBoard(room);
   }
@@ -297,19 +291,25 @@ function gameLoop(room) {
     if (!player.gameover) {
       player.move();
       const head = player.segments[0];
+      
+      if (!head) {
+        player.GameOver();
+        return;
+      }
+      
       const headX = Math.floor(head.x / segmentSize);
       const headY = Math.floor(head.y / segmentSize);
       
-      // Verificar límites del canvas
+      // Check bounds
       if (headX < 0 || headX >= Math.floor(canvasWidth/segmentSize) || 
           headY < 0 || headY >= Math.floor(canvasHeight/segmentSize)) {
         player.GameOver();
       }
-      // Verificar colisión con serpientes (solo si el tablero está correctamente inicializado)
+      // Check collisions
       else if (room.gameboard[headX] && room.gameboard[headX][headY] === 1) {
         player.GameOver();
       }
-      // Verificar si comió comida
+      // Check food
       else if (room.gameboard[headX] && room.gameboard[headX][headY] === 2) {
         player.EatFood(room.food.score);
         generateFood(room);
@@ -320,10 +320,14 @@ function gameLoop(room) {
   });
   
   updateGameBoard(room);
+  
+  // Only emit if there are alive players to avoid unnecessary renders
   io.to(room.id).emit('gameFrame', room.players, room.food, room.gameState);
   
+  // Check end conditions
   if (alivePlayers <= 1 && room.players.length > 1) {
     clearInterval(room.gameState.intervalId);
+    room.gameState.intervalId = null;
     setTimeout(() => endRound(room), 1000);
   }
 }
@@ -333,14 +337,25 @@ io.on('connection', (socket) => {
   let currentRoom = null;
 
   socket.on('createRoom', (data) => {
-    const roomId = createRoom(socket.id, data.username);
+    if (!data.username || data.username.length < 2 || data.username.length > 20) {
+      socket.emit('gameError', 'Username must be 2-20 characters');
+      return;
+    }
+    
+    const roomId = createRoom(socket.id, data.username.trim());
     currentRoom = roomId;
     socket.join(roomId);
     
     const room = getRoom(roomId);
+    if (!room) {
+      socket.emit('gameError', 'Failed to create room');
+      return;
+    }
+    
     const { canvasWidth, canvasHeight, segmentSize } = room.config;
-    const spawnPos = getPlayerSpawnPosition(room, 0); // First player (index 0)
-    const player = new Snake(socket.id, data.username, segmentSize, canvasWidth, canvasHeight, spawnPos.x, spawnPos.y, 1, 0);
+    const spawnPos = getPlayerSpawnPosition(room, 0);
+    const player = new Snake(socket.id, data.username.trim(), segmentSize, canvasWidth, canvasHeight, 
+      spawnPos.x, spawnPos.y, 1, 0);
     room.players.push(player);
     
     socket.emit('roomCreated', { 
@@ -348,19 +363,24 @@ io.on('connection', (socket) => {
       isHost: true,
       config: room.config
     });
-    io.to(roomId).emit('updatePlayers', room.players, room.gameState, room.config, { host: room.host, roomId });
-    console.log(`Room ${roomId} created by ${data.username}`);
+    io.to(roomId).emit('updatePlayers', room.players, room.gameState, room.config, 
+      { host: room.host, roomId });
   });
 
   socket.on('joinRoom', (data) => {
-    const room = getRoom(data.roomId);
-    if (!room) {
-      socket.emit('gameError', 'Room not found');
+    if (!data.username || data.username.length < 2 || data.username.length > 20) {
+      socket.emit('gameError', 'Username must be 2-20 characters');
       return;
     }
     
-    if (room.finished) {
-      socket.emit('gameError', 'Room has finished');
+    if (!data.roomId || data.roomId.length !== 6) {
+      socket.emit('gameError', 'Invalid room ID');
+      return;
+    }
+    
+    const room = getRoom(data.roomId);
+    if (!room) {
+      socket.emit('gameError', 'Room not found or has ended');
       return;
     }
     
@@ -374,14 +394,20 @@ io.on('connection', (socket) => {
       return;
     }
     
+    if (room.players.some(p => p.name === data.username.trim())) {
+      socket.emit('gameError', 'Username already taken in this room');
+      return;
+    }
+    
     currentRoom = data.roomId;
     socket.join(data.roomId);
     
     const { canvasWidth, canvasHeight, segmentSize } = room.config;
-    const playerIndex = room.players.length; // Current number of players = index for new player
+    const playerIndex = room.players.length;
     const spawnPos = getPlayerSpawnPosition(room, playerIndex);
     
-    const player = new Snake(socket.id, data.username, segmentSize, canvasWidth, canvasHeight, spawnPos.x, spawnPos.y, 1, 0);
+    const player = new Snake(socket.id, data.username.trim(), segmentSize, canvasWidth, canvasHeight, 
+      spawnPos.x, spawnPos.y, 1, 0);
     room.players.push(player);
     
     initializeRoundScores(room);
@@ -390,11 +416,10 @@ io.on('connection', (socket) => {
       isHost: false,
       config: room.config
     });
-    io.to(data.roomId).emit('updatePlayers', room.players, room.gameState, room.config, { host: room.host, roomId: data.roomId });
-    console.log(`Player ${data.username} joined room ${data.roomId}`);
+    io.to(data.roomId).emit('updatePlayers', room.players, room.gameState, room.config, 
+      { host: room.host, roomId: data.roomId });
   });
 
-  // Nuevo evento para actualizar configuración de sala
   socket.on('updateRoomConfig', (newConfig) => {
     if (!currentRoom) return;
     
@@ -409,40 +434,25 @@ io.on('connection', (socket) => {
       return;
     }
     
-    // Validar configuración
-    const validConfig = {
-      maxPlayers: Math.max(2, Math.min(20, parseInt(newConfig.maxPlayers) || 8)),
-      minPlayers: Math.max(2, Math.min(parseInt(newConfig.maxPlayers) || 8, parseInt(newConfig.minPlayers) || 2)),
-      maxRounds: Math.max(1, Math.min(10, parseInt(newConfig.maxRounds) || 3)),
-      gameSpeed: Math.max(25, Math.min(200, parseInt(newConfig.gameSpeed) || 75)),
-      canvasWidth: Math.max(400, Math.min(1600, parseInt(newConfig.canvasWidth) || 1000)),
-      canvasHeight: Math.max(300, Math.min(1000, parseInt(newConfig.canvasHeight) || 600)),
-      segmentSize: Math.max(5, Math.min(25, parseInt(newConfig.segmentSize) || 10)),
-      countdownTime: Math.max(1, Math.min(10, parseInt(newConfig.countdownTime) || 3))
-    };
+    const validConfig = validateRoomConfig(newConfig);
     
-    // Actualizar configuración
     room.config = validConfig;
     room.gameState.downCounter = validConfig.countdownTime;
     
-    // Reposicionar jugadores con nuevas dimensiones
     room.players.forEach((player, index) => {
       const spawnPos = getPlayerSpawnPosition(room, index);
       player.segments = [{ x: spawnPos.x, y: spawnPos.y }];
       player.direction = { x: 1, y: 0 };
-      player.segmentSize = validConfig.segmentSize; // Update segmentSize in player
+      player.segmentSize = validConfig.segmentSize;
     });
     
-    // Regenerar tablero con nuevas dimensiones
     resetGameBoard(room);
     generateFood(room);
     updateGameBoard(room);
     
-    // Notificar a todos los jugadores
     io.to(currentRoom).emit('configUpdated', validConfig);
-    io.to(currentRoom).emit('updatePlayers', room.players, room.gameState, room.config, { host: room.host, roomId: currentRoom });
-    
-    console.log(`Room ${currentRoom} config updated by host`);
+    io.to(currentRoom).emit('updatePlayers', room.players, room.gameState, room.config, 
+      { host: room.host, roomId: currentRoom });
   });
 
   socket.on('startGame', () => {
@@ -465,7 +475,6 @@ io.on('connection', (socket) => {
     
     initializeRoundScores(room);
     updateGameBoard(room);
-    // Send current scores when starting new round
     io.to(currentRoom).emit('updateScores', room.roundScores);
     room.gameState.timeoutIdStartGame = setTimeout(() => startGame(room), 1000);
   });
@@ -492,20 +501,21 @@ io.on('connection', (socket) => {
     if (!currentRoom) return;
     
     const room = getRoom(currentRoom);
-    if (!room) return;
+    if (!room || !room.gameState.playing) return;
     
     const playerToMove = room.players.find(player => player.id === socket.id);
     if (!playerToMove || playerToMove.gameover) return;
     
     const directions = {
-      37: { x: -1, y: 0 },
-      39: { x: 1, y: 0 },
-      38: { x: 0, y: -1 },
-      40: { x: 0, y: 1 }
+      37: { x: -1, y: 0 }, // Left
+      39: { x: 1, y: 0 },  // Right
+      38: { x: 0, y: -1 }, // Up
+      40: { x: 0, y: 1 }   // Down
     };
     
-    if (directions[data.key]) {
-      playerToMove.changeDirection(directions[data.key]);
+    const newDirection = directions[data.key];
+    if (newDirection) {
+      playerToMove.changeDirection(newDirection);
     }
   });
 
@@ -513,7 +523,6 @@ io.on('connection', (socket) => {
     if (currentRoom) {
       socket.leave(currentRoom);
       currentRoom = null;
-      isHost = false;
     }
     socket.emit('backToMenuSuccess');
   });
@@ -543,16 +552,21 @@ io.on('connection', (socket) => {
         }
       }
       
-      io.to(currentRoom).emit('updatePlayers', room.players, room.gameState, room.config, { host: room.host, roomId: currentRoom });
+      io.to(currentRoom).emit('updatePlayers', room.players, room.gameState, room.config, 
+        { host: room.host, roomId: currentRoom });
       
       if (room.players.length < room.config.minPlayers && room.gameState.playing) {
-        resetGame(room);
+        room.gameState.playing = false;
+        if (room.gameState.intervalId) {
+          clearInterval(room.gameState.intervalId);
+          room.gameState.intervalId = null;
+        }
         io.to(currentRoom).emit('gameError', 'Not enough players to continue');
       }
       
       if (room.players.length < room.config.minPlayers && room.gameState.timeoutIdStartGame) {
         clearTimeout(room.gameState.timeoutIdStartGame);
-        room.gameState.timeoutIdStartGame = 0;
+        room.gameState.timeoutIdStartGame = null;
         room.gameState.downCounter = room.config.countdownTime;
       }
     }
