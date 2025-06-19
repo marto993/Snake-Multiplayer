@@ -49,143 +49,74 @@ document.addEventListener("DOMContentLoaded", function() {
   let roomConfig = {};
   let roomScores = {};
 
-  // Enhanced rendering functions
-  function drawRoundedRect(ctx, x, y, width, height, radius) {
-    ctx.beginPath();
-    ctx.moveTo(x + radius, y);
-    ctx.lineTo(x + width - radius, y);
-    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-    ctx.lineTo(x + width, y + height - radius);
-    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-    ctx.lineTo(x + radius, y + height);
-    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-    ctx.lineTo(x, y + radius);
-    ctx.quadraticCurveTo(x, y, x + radius, y);
-    ctx.closePath();
-  }
+  // Retro color palette
+  const retroColors = {
+    snake: ['#00ff41', '#ff0080', '#00ffff', '#ffff00', '#ff4040', '#8040ff', '#40ff80', '#ff8040'],
+    background: '#000000',
+    grid: '#004400',
+    food: '#ff0080',
+    foodGlow: '#ff40a0',
+    projectile: '#ffff00'
+  };
 
-  function drawSnakeSegment(ctx, x, y, size, color, isHead = false, direction = null, isCurrentPlayer = false) {
-    const radius = size * 0.2;
-    const padding = 1;
-    const innerSize = size - (padding * 2);
-    
-    // Main segment with rounded corners
+  // Enhanced rendering functions with retro style
+  function drawRetroRect(ctx, x, y, width, height, color, glowColor = null) {
     ctx.fillStyle = color;
-    drawRoundedRect(ctx, x + padding, y + padding, innerSize, innerSize, radius);
-    ctx.fill();
+    ctx.fillRect(x, y, width, height);
     
-    // Add subtle shadow/depth
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.2)';
-    ctx.shadowBlur = 2;
-    ctx.shadowOffsetX = 1;
-    ctx.shadowOffsetY = 1;
-    drawRoundedRect(ctx, x + padding, y + padding, innerSize, innerSize, radius);
-    ctx.fill();
-    
-    // Reset shadow
-    ctx.shadowColor = 'transparent';
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 0;
-    
-    // Head specific features
-    if (isHead) {
-      // Highlight border for head
-      ctx.strokeStyle = isCurrentPlayer ? '#ff4757' : darkenColor(color, 30);
-      ctx.lineWidth = 2;
-      drawRoundedRect(ctx, x + padding, y + padding, innerSize, innerSize, radius);
-      ctx.stroke();
-      
-      // Eyes based on direction
-      if (direction && isCurrentPlayer) {
-        drawEyes(ctx, x, y, size, direction);
-      } else {
-        drawEyes(ctx, x, y, size, { x: 1, y: 0 });
-      }
-      
-      // Glossy effect
-      const gradient = ctx.createLinearGradient(x, y, x, y + size);
-      gradient.addColorStop(0, 'rgba(255, 255, 255, 0.3)');
-      gradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.1)');
-      gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-      
-      ctx.fillStyle = gradient;
-      drawRoundedRect(ctx, x + padding, y + padding, innerSize, innerSize, radius);
-      ctx.fill();
-    } else {
-      // Body segment - subtle inner highlight
-      const innerGradient = ctx.createLinearGradient(x, y, x + size, y + size);
-      innerGradient.addColorStop(0, 'rgba(255, 255, 255, 0.15)');
-      innerGradient.addColorStop(1, 'rgba(255, 255, 255, 0.05)');
-      
-      ctx.fillStyle = innerGradient;
-      drawRoundedRect(ctx, x + padding + 2, y + padding + 2, innerSize - 4, innerSize - 4, radius - 1);
-      ctx.fill();
+    if (glowColor) {
+      ctx.shadowColor = glowColor;
+      ctx.shadowBlur = 5;
+      ctx.fillRect(x, y, width, height);
+      ctx.shadowBlur = 0;
+      ctx.shadowColor = 'transparent';
     }
   }
 
-  function drawProjectile(ctx, projectile, segmentSize) {
+  function drawRetroSnakeSegment(ctx, x, y, size, color, isHead = false, direction = null, isCurrentPlayer = false) {
+    const padding = 1;
+    const innerSize = size - (padding * 2);
+    
+    // Main segment
+    drawRetroRect(ctx, x + padding, y + padding, innerSize, innerSize, color);
+    
+    // Head specific features
+    if (isHead) {
+      // Border for head
+      ctx.strokeStyle = isCurrentPlayer ? '#ffffff' : '#000000';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + padding, y + padding, innerSize, innerSize);
+      
+      // Simple dot eyes for retro style
+      if (direction) {
+        drawRetroEyes(ctx, x, y, size, direction);
+      }
+    }
+    
+    // Simple border
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + padding, y + padding, innerSize, innerSize);
+  }
+
+  function drawRetroProjectile(ctx, projectile, segmentSize) {
     const centerX = projectile.x + segmentSize / 2;
     const centerY = projectile.y + segmentSize / 2;
-    const arrowLength = segmentSize * 0.8;
-    const arrowWidth = segmentSize * 0.4;
+    const size = segmentSize * 0.6;
     
+    // Simple diamond shape for projectiles
     ctx.save();
     ctx.translate(centerX, centerY);
+    ctx.rotate(Math.PI / 4); // 45 degree rotation for diamond
     
-    // Rotate based on direction
-    let angle = 0;
-    if (projectile.direction.x === 1) angle = 0;
-    else if (projectile.direction.x === -1) angle = Math.PI;
-    else if (projectile.direction.y === -1) angle = -Math.PI / 2;
-    else if (projectile.direction.y === 1) angle = Math.PI / 2;
-    
-    ctx.rotate(angle);
-    
-    // Draw arrow body
-    ctx.fillStyle = projectile.color;
-    ctx.beginPath();
-    ctx.moveTo(-arrowLength / 2, -arrowWidth / 4);
-    ctx.lineTo(arrowLength / 4, -arrowWidth / 4);
-    ctx.lineTo(arrowLength / 4, -arrowWidth / 2);
-    ctx.lineTo(arrowLength / 2, 0);
-    ctx.lineTo(arrowLength / 4, arrowWidth / 2);
-    ctx.lineTo(arrowLength / 4, arrowWidth / 4);
-    ctx.lineTo(-arrowLength / 2, arrowWidth / 4);
-    ctx.closePath();
-    ctx.fill();
-    
-    // Add shadow effect
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
-    ctx.shadowBlur = 3;
-    ctx.shadowOffsetX = 2;
-    ctx.shadowOffsetY = 2;
-    ctx.fill();
-    
-    // Add highlight
-    ctx.shadowColor = 'transparent';
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 0;
-    
-    ctx.fillStyle = lightenColor(projectile.color, 30);
-    ctx.beginPath();
-    ctx.moveTo(-arrowLength / 2 + 2, -arrowWidth / 4 + 1);
-    ctx.lineTo(arrowLength / 4 - 2, -arrowWidth / 4 + 1);
-    ctx.lineTo(arrowLength / 4 - 2, -arrowWidth / 2 + 2);
-    ctx.lineTo(arrowLength / 2 - 3, 0);
-    ctx.lineTo(arrowLength / 4 - 2, arrowWidth / 2 - 2);
-    ctx.lineTo(arrowLength / 4 - 2, arrowWidth / 4 - 1);
-    ctx.lineTo(-arrowLength / 2 + 2, arrowWidth / 4 - 1);
-    ctx.closePath();
-    ctx.fill();
+    drawRetroRect(ctx, -size/2, -size/2, size, size, retroColors.projectile, '#ffff80');
     
     ctx.restore();
   }
 
-  function drawEyes(ctx, x, y, size, direction) {
-    const eyeSize = Math.max(2, size * 0.15);
-    const eyeOffset = size * 0.25;
+  function drawRetroEyes(ctx, x, y, size, direction) {
+    const eyeSize = Math.max(2, size * 0.2);
+    const eyeOffset = size * 0.3;
     
     // Eye positions based on direction
     let leftEyeX, leftEyeY, rightEyeX, rightEyeY;
@@ -212,91 +143,46 @@ document.addEventListener("DOMContentLoaded", function() {
       rightEyeY = y + size - eyeOffset;
     }
     
-    // Draw eyes with white background
+    // Draw simple square eyes
     ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.arc(leftEyeX, leftEyeY, eyeSize, 0, 2 * Math.PI);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(rightEyeX, rightEyeY, eyeSize, 0, 2 * Math.PI);
-    ctx.fill();
-    
-    // Draw pupils
-    ctx.fillStyle = '#2f3640';
-    const pupilSize = eyeSize * 0.6;
-    ctx.beginPath();
-    ctx.arc(leftEyeX, leftEyeY, pupilSize, 0, 2 * Math.PI);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(rightEyeX, rightEyeY, pupilSize, 0, 2 * Math.PI);
-    ctx.fill();
+    ctx.fillRect(leftEyeX - eyeSize/2, leftEyeY - eyeSize/2, eyeSize, eyeSize);
+    ctx.fillRect(rightEyeX - eyeSize/2, rightEyeY - eyeSize/2, eyeSize, eyeSize);
   }
 
-  function drawEnhancedFood(ctx, food, segmentSize) {
-    const centerX = food.x + segmentSize / 2;
-    const centerY = food.y + segmentSize / 2;
-    const baseRadius = segmentSize * 0.4;
-    const pulseRadius = baseRadius + Math.sin(Date.now() * 0.01) * 2;
+  function drawRetroFood(ctx, food, segmentSize) {
+    const padding = 2;
+    const size = segmentSize - (padding * 2);
     
-    // Outer glow
-    const glowGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, pulseRadius + 5);
-    glowGradient.addColorStop(0, 'rgba(255, 107, 107, 0.6)');
-    glowGradient.addColorStop(0.7, 'rgba(255, 107, 107, 0.3)');
-    glowGradient.addColorStop(1, 'rgba(255, 107, 107, 0)');
+    // Pulsing effect
+    const pulse = Math.sin(Date.now() * 0.01) * 0.1 + 1;
+    const pulseSize = size * pulse;
+    const offset = (size - pulseSize) / 2;
     
-    ctx.fillStyle = glowGradient;
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, pulseRadius + 5, 0, 2 * Math.PI);
-    ctx.fill();
-    
-    // Main food body
-    const foodGradient = ctx.createRadialGradient(
-      centerX - pulseRadius * 0.3, centerY - pulseRadius * 0.3, 0,
-      centerX, centerY, pulseRadius
+    // Main food body with glow
+    drawRetroRect(
+      ctx, 
+      food.x + padding + offset, 
+      food.y + padding + offset, 
+      pulseSize, 
+      pulseSize, 
+      retroColors.food, 
+      retroColors.foodGlow
     );
-    foodGradient.addColorStop(0, '#ff8a8a');
-    foodGradient.addColorStop(0.6, '#ff6b6b');
-    foodGradient.addColorStop(1, '#ee5a52');
     
-    ctx.fillStyle = foodGradient;
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, pulseRadius, 0, 2 * Math.PI);
-    ctx.fill();
-    
-    // Highlight
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-    ctx.beginPath();
-    ctx.arc(centerX - pulseRadius * 0.3, centerY - pulseRadius * 0.3, pulseRadius * 0.3, 0, 2 * Math.PI);
-    ctx.fill();
-    
-    // Score text with better styling
-    ctx.fillStyle = '#fff';
-    ctx.strokeStyle = '#333';
-    ctx.lineWidth = 2;
-    ctx.font = `bold ${Math.max(10, segmentSize * 0.5)}px Arial`;
+    // Score text
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `bold ${Math.max(8, segmentSize * 0.4)}px monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     
+    const centerX = food.x + segmentSize / 2;
+    const centerY = food.y + segmentSize / 2;
+    
+    // Text outline
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2;
     ctx.strokeText(food.score, centerX, centerY);
     ctx.fillText(food.score, centerX, centerY);
-  }
-
-  function darkenColor(color, percent) {
-    const num = parseInt(color.replace("#", ""), 16);
-    const amt = Math.round(2.55 * percent);
-    const R = Math.max((num >> 16) - amt, 0);
-    const G = Math.max((num >> 8 & 0x00FF) - amt, 0);
-    const B = Math.max((num & 0x0000FF) - amt, 0);
-    return "#" + (0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1);
-  }
-
-  function lightenColor(color, percent) {
-    const num = parseInt(color.replace("#", ""), 16);
-    const amt = Math.round(2.55 * percent);
-    const R = Math.min((num >> 16) + amt, 255);
-    const G = Math.min((num >> 8 & 0x00FF) + amt, 255);
-    const B = Math.min((num & 0x0000FF) + amt, 255);
-    return "#" + (0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1);
   }
 
   // Keyboard handling
@@ -316,14 +202,14 @@ document.addEventListener("DOMContentLoaded", function() {
 
   // Socket events
   socket.on('connect', () => {
-    console.log('Connected to server:', socket.id);
+    console.log('Conectado al servidor:', socket.id);
     isConnected = true;
     refreshRooms();
   });
 
   socket.on('disconnect', () => {
     isConnected = false;
-    showStatus('Disconnected from server', 'error');
+    showStatus('Desconectado del servidor', 'error');
   });
 
   socket.on('gameError', (message) => {
@@ -337,7 +223,7 @@ document.addEventListener("DOMContentLoaded", function() {
     showGameInterface();
     updateConfigPanel();
     updateAttackControls();
-    showStatus(`Room ${data.roomId} created!`, 'success');
+    showStatus(`¡Sala ${data.roomId} creada!`, 'success');
   });
 
   socket.on('roomJoined', (data) => {
@@ -347,7 +233,7 @@ document.addEventListener("DOMContentLoaded", function() {
     showGameInterface();
     updateConfigPanel();
     updateAttackControls();
-    showStatus(`Joined room ${data.roomId}!`, 'success');
+    showStatus(`¡Te uniste a la sala ${data.roomId}!`, 'success');
   });
 
   socket.on('roomsList', (rooms) => {
@@ -357,7 +243,7 @@ document.addEventListener("DOMContentLoaded", function() {
   socket.on('newHost', (data) => {
     if (data.hostId === socket.id) {
       isHost = true;
-      showStatus('You are now the host!', 'info');
+      showStatus('¡Ahora eres el anfitrión!', 'info');
     }
     updateHostControls();
     updateConfigPanel();
@@ -382,7 +268,7 @@ document.addEventListener("DOMContentLoaded", function() {
     
     if (players.length < config.minPlayers) {
       showElement(waitingSpan);
-      showStatus(`Need ${config.minPlayers - players.length} more players`, 'info');
+      showStatus(`Necesitas ${config.minPlayers - players.length} jugadores más`, 'info');
     } else {
       hideElement(waitingSpan);
     }
@@ -393,7 +279,7 @@ document.addEventListener("DOMContentLoaded", function() {
     updateConfigInputs(newConfig);
     updateCanvasSize(newConfig);
     updateAttackControls();
-    showStatus('Room settings updated!', 'success');
+    showStatus('¡Configuración actualizada!', 'success');
   });
 
   socket.on('updateScores', (scores) => {
@@ -414,8 +300,8 @@ document.addEventListener("DOMContentLoaded", function() {
     hideElement(gameOverScreen);
     hideElement(startGameButton);
     hideElement(configPanel);
-    showStatus(`Round ${data.gameState.round} - Fight!`, 'success');
-    console.log(`Round ${data.gameState.round} started!`);
+    showStatus(`Ronda ${data.gameState.round} - ¡Batalla!`, 'success');
+    console.log(`¡Ronda ${data.gameState.round} iniciada!`);
     
     // Initial render
     gameLoop();
@@ -423,7 +309,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
   socket.on('countdown', (count, state) => {
     gameState = state;
-    showStatus(`Round ${state.round} starting in ${count}...`, 'info');
+    showStatus(`Ronda ${state.round} inicia en ${count}...`, 'info');
     updateGameInfo(state);
   });
 
@@ -438,9 +324,9 @@ document.addEventListener("DOMContentLoaded", function() {
 
   socket.on('roundEnd', (data) => {
     roomScores = data.scores;
-    showStatus(`Round ${data.round} finished!`, 'info');
+    showStatus(`¡Ronda ${data.round} terminada!`, 'info');
     if (data.winner) {
-      showStatus(`Round winner: ${data.winner.name}`, 'success');
+      showStatus(`Ganador de la ronda: ${data.winner.name}`, 'success');
     }
     
     updateGameInfo({ round: data.round + 1, maxRounds: roomConfig.maxRounds });
@@ -448,7 +334,7 @@ document.addEventListener("DOMContentLoaded", function() {
     
     if (data.nextRound) {
       setTimeout(() => {
-        showStatus(`Preparing round ${data.round + 1}...`, 'info');
+        showStatus(`Preparando ronda ${data.round + 1}...`, 'info');
         updateGameInfo({ round: data.round + 1, maxRounds: roomConfig.maxRounds });
       }, 2000);
     }
@@ -460,11 +346,11 @@ document.addEventListener("DOMContentLoaded", function() {
   });
 
   socket.on('gameEnd', (data) => {
-    showStatus(`Game Over! Champion: ${data.winner.name}`, 'success');
+    showStatus(`¡Juego Terminado! Campeón: ${data.winner.name}`, 'success');
     if (data.roomFinished) {
       showFinalScreen(data.winner, data.finalScores);
     } else {
-      showGameOverScreen(`Champion: ${data.winner.name}`, data.finalScores);
+      showGameOverScreen(`Campeón: ${data.winner.name}`, data.finalScores);
       if (isHost) {
         showElement(startGameButton);
         updateConfigPanel();
@@ -481,7 +367,7 @@ document.addEventListener("DOMContentLoaded", function() {
     isHost = false;
     roomConfig = {};
     showRoomSelection();
-    showStatus('Returned to menu', 'info');
+    showStatus('Regresaste al menú', 'info');
   });
 
   // Configuration functions
@@ -491,11 +377,11 @@ document.addEventListener("DOMContentLoaded", function() {
       if (isHost) {
         showElement(saveConfigButton);
         setConfigInputsEnabled(true);
-        toggleConfigButton.textContent = '⚙️ Room Settings';
+        toggleConfigButton.textContent = '⚙️ Configuración';
       } else {
         hideElement(saveConfigButton);
         setConfigInputsEnabled(false);
-        toggleConfigButton.textContent = '👁️ View Settings';
+        toggleConfigButton.textContent = '👁️ Ver Configuración';
       }
     } else {
       hideElement(configPanel);
@@ -543,7 +429,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
   function saveConfiguration() {
     if (!isHost) {
-      showStatus('Only the host can modify settings', 'error');
+      showStatus('Solo el anfitrión puede modificar la configuración', 'error');
       return;
     }
 
@@ -561,7 +447,7 @@ document.addEventListener("DOMContentLoaded", function() {
     };
 
     if (newConfig.minPlayers > newConfig.maxPlayers) {
-      showStatus('Min players cannot exceed max players', 'error');
+      showStatus('Los jugadores mínimos no pueden exceder los máximos', 'error');
       return;
     }
 
@@ -587,7 +473,7 @@ document.addEventListener("DOMContentLoaded", function() {
     
     if (rooms.length === 0) {
       const emptyMsg = document.createElement('li');
-      emptyMsg.textContent = 'No rooms available';
+      emptyMsg.textContent = 'No hay salas disponibles';
       emptyMsg.className = 'empty-room';
       roomsList.appendChild(emptyMsg);
       return;
@@ -599,14 +485,14 @@ document.addEventListener("DOMContentLoaded", function() {
       const attacksStatus = room.config.attacksEnabled ? '⚔️' : '';
       roomItem.innerHTML = `
         <div class="room-info">
-          <strong>Room: ${room.id}</strong> ${attacksStatus}<br>
-          Host: ${room.hostName}<br>
-          Players: ${room.players}/${room.maxPlayers}
+          <strong>Sala: ${room.id}</strong> ${attacksStatus}<br>
+          Anfitrión: ${room.hostName}<br>
+          Jugadores: ${room.players}/${room.maxPlayers}
           <div class="room-config">
-            ${room.config.maxRounds} rounds • ${room.config.canvasWidth}x${room.config.canvasHeight} • Speed: ${room.config.gameSpeed}ms
+            ${room.config.maxRounds} rondas • ${room.config.canvasWidth}x${room.config.canvasHeight} • Velocidad: ${room.config.gameSpeed}ms
           </div>
         </div>
-        <button onclick="joinSpecificRoom('${room.id}')" class="join-room-btn">Join</button>
+        <button onclick="joinSpecificRoom('${room.id}')" class="join-room-btn">Unirse</button>
       `;
       roomsList.appendChild(roomItem);
     });
@@ -615,8 +501,8 @@ document.addEventListener("DOMContentLoaded", function() {
   function updateRoomInfo(roomData) {
     if (roomInfo && roomData) {
       roomInfo.innerHTML = `
-        <strong>Room:</strong> ${roomData.roomId}<br>
-        <strong>Host:</strong> ${roomData.host === socket.id ? 'You' : 'Other player'}
+        <strong>Sala:</strong> ${roomData.roomId}<br>
+        <strong>Anfitrión:</strong> ${roomData.host === socket.id ? 'Tú' : 'Otro jugador'}
       `;
     }
   }
@@ -633,10 +519,11 @@ document.addEventListener("DOMContentLoaded", function() {
     socket.emit('getRooms');
   }
 
-  // Game functions
+  // Game functions with retro style
   function drawGrid() {
-    ctx.strokeStyle = '#e0e0e0';
-    ctx.lineWidth = 0.5;
+    // Almost imperceptible retro grid
+    ctx.strokeStyle = '#001100';
+    ctx.lineWidth = 1;
     
     for (let x = 0; x <= canvas.width; x += segmentSize) {
       ctx.beginPath();
@@ -651,33 +538,23 @@ document.addEventListener("DOMContentLoaded", function() {
       ctx.lineTo(canvas.width, y);
       ctx.stroke();
     }
-    
-    ctx.strokeStyle = '#333';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(0, 0, canvas.width, canvas.height);
   }
 
   function drawPlayers() {
-    const playerColors = [
-      '#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', 
-      '#feca57', '#ff9ff3', '#54a0ff', '#fd79a8'
-    ];
-    
     snakes.forEach((snake, index) => {
       if (!snake.gameover && snake.segments && snake.segments.length > 0) {
         const isCurrentPlayer = snake.id === socket.id;
-        const baseColor = playerColors[index % playerColors.length];
+        const baseColor = retroColors.snake[index % retroColors.snake.length];
         
         snake.segments.forEach((segment, segIndex) => {
           const isHead = segIndex === 0;
-          const segmentColor = isHead ? baseColor : lightenColor(baseColor, 25);
           
-          drawSnakeSegment(
+          drawRetroSnakeSegment(
             ctx, 
             segment.x, 
             segment.y, 
             segmentSize, 
-            segmentColor, 
+            baseColor, 
             isHead, 
             isHead ? snake.direction : null,
             isCurrentPlayer
@@ -687,19 +564,22 @@ document.addEventListener("DOMContentLoaded", function() {
     });
 
     if (foods) {
-      drawEnhancedFood(ctx, foods, segmentSize);
+      drawRetroFood(ctx, foods, segmentSize);
     }
 
     // Draw projectiles
     if (projectiles && projectiles.length > 0) {
       projectiles.forEach(projectile => {
-        drawProjectile(ctx, projectile, segmentSize);
+        drawRetroProjectile(ctx, projectile, segmentSize);
       });
     }
   }
 
   function gameLoop() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Clear with black background
+    ctx.fillStyle = retroColors.background;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
     drawGrid();
     drawPlayers();
     updatePlayerList(snakes);
@@ -738,7 +618,7 @@ document.addEventListener("DOMContentLoaded", function() {
       } else {
         const totalScore = (roomScores && roomScores[player.id]) ? roomScores[player.id].totalScore : 0;
         const roundWins = (roomScores && roomScores[player.id]) ? roomScores[player.id].roundWins : 0;
-        score.innerHTML = `${totalScore}<br><small>${roundWins}W</small>`;
+        score.innerHTML = `${totalScore}<br><small>${roundWins}V</small>`;
       }
       
       const status = document.createElement('span');
@@ -756,7 +636,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
   function updateGameInfo(state) {
     if (roundInfo && roomConfig.maxRounds) {
-      roundInfo.textContent = `Round ${state.round}/${roomConfig.maxRounds}`;
+      roundInfo.textContent = `Ronda ${state.round}/${roomConfig.maxRounds}`;
     }
   }
 
@@ -767,11 +647,11 @@ document.addEventListener("DOMContentLoaded", function() {
     const finalScoresList = document.getElementById('finalScoresList');
     
     if (reason) {
-      finalTitle.textContent = 'Room Ended';
+      finalTitle.textContent = 'Sala Terminada';
       finalMessage.textContent = reason;
     } else {
-      finalTitle.textContent = 'Game Complete!';
-      finalMessage.textContent = winner ? `Champion: ${winner.name}` : 'Game finished';
+      finalTitle.textContent = '¡Juego Completo!';
+      finalMessage.textContent = winner ? `Campeón: ${winner.name}` : 'Juego terminado';
     }
     
     finalScoresList.innerHTML = '';
@@ -784,7 +664,7 @@ document.addEventListener("DOMContentLoaded", function() {
         <span class="final-rank">#${index + 1}</span>
         <span class="final-name">${player.name}</span>
         <span class="final-total">${player.totalScore} pts</span>
-        <span class="final-wins">${player.roundWins} wins</span>
+        <span class="final-wins">${player.roundWins} victorias</span>
       `;
       finalScoresList.appendChild(item);
     });
@@ -846,7 +726,7 @@ document.addEventListener("DOMContentLoaded", function() {
   window.joinSpecificRoom = function(roomId) {
     const username = usernameInput.value.trim();
     if (!username || username.length < 2 || username.length > 20) {
-      showStatus('Please enter a valid username (2-20 characters)', 'error');
+      showStatus('Por favor ingresa un nombre válido (2-20 caracteres)', 'error');
       usernameInput.focus();
       return;
     }
@@ -857,10 +737,10 @@ document.addEventListener("DOMContentLoaded", function() {
   toggleConfigButton.addEventListener('click', () => {
     if (configSettings.classList.contains('hidden')) {
       showElement(configSettings);
-      toggleConfigButton.textContent = '▼ Room Settings';
+      toggleConfigButton.textContent = '▼ Configuración';
     } else {
       hideElement(configSettings);
-      toggleConfigButton.textContent = '⚙️ Room Settings';
+      toggleConfigButton.textContent = '⚙️ Configuración';
     }
   });
 
@@ -900,7 +780,7 @@ document.addEventListener("DOMContentLoaded", function() {
     if (username && username.length >= 2 && username.length <= 20) {
       socket.emit('createRoom', { username });
     } else {
-      showStatus('Username must be 2-20 characters', 'error');
+      showStatus('El nombre debe tener 2-20 caracteres', 'error');
       usernameInput.focus();
     }
   });
@@ -910,13 +790,13 @@ document.addEventListener("DOMContentLoaded", function() {
     const roomId = roomIdInput.value.trim().toUpperCase();
     
     if (!username || username.length < 2) {
-      showStatus('Username must be 2-20 characters', 'error');
+      showStatus('El nombre debe tener 2-20 caracteres', 'error');
       usernameInput.focus();
       return;
     }
     
     if (!roomId || roomId.length !== 6) {
-      showStatus('Please enter a valid room ID', 'error');
+      showStatus('Por favor ingresa un ID de sala válido', 'error');
       roomIdInput.focus();
       return;
     }
@@ -944,5 +824,5 @@ document.addEventListener("DOMContentLoaded", function() {
 
   // Initialize
   handleResize();
-  showStatus('Connected! Enter your username to start.', 'info');
+  showStatus('¡Conectado! Ingresa tu nombre para comenzar.', 'info');
 });

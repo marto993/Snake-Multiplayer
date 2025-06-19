@@ -1,12 +1,14 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Snake Multiplayer Arena</title>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono:wght@400@700&display=swap');
+        
         * { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            font-family: 'Share Tech Mono', monospace; 
             box-sizing: border-box;
         }
         
@@ -16,9 +18,10 @@
             align-items: flex-start;
             min-height: 100vh;
             margin: 0;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: #333;
+            background: #0a0a0a;
+            color: #00ff41;
             padding: 20px;
+            overflow-x: auto;
         }
         
         .container {
@@ -29,11 +32,10 @@
         }
         
         .game-panel {
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 15px;
+            background: #1a1a1a;
+            border: 2px solid #00ff41;
             padding: 20px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-            backdrop-filter: blur(10px);
+            box-shadow: 0 0 8px rgba(0, 255, 65, 0.15);
         }
         
         .left-panel {
@@ -50,33 +52,37 @@
         
         h1 {
             margin: 0 0 20px 0;
-            color: #764ba2;
+            color: #00ff41;
             font-size: 2.5em;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+            text-shadow: 0 0 3px #00ff41;
+            text-transform: uppercase;
+            letter-spacing: 3px;
         }
         
         h2 {
             margin: 0 0 15px 0;
-            color: #667eea;
+            color: #ff0080;
             font-size: 1.4em;
+            text-transform: uppercase;
+            letter-spacing: 2px;
         }
         
         h3 {
             margin: 15px 0 10px 0;
-            color: #667eea;
+            color: #00ffff;
             font-size: 1.2em;
+            text-transform: uppercase;
         }
         
         .game-info {
-            background: linear-gradient(45deg, #667eea, #764ba2);
-            color: white;
-            border-radius: 10px;
+            background: #222;
+            color: #00ff41;
+            border: 2px solid #00ff41;
             padding: 15px;
         }
         
         .status {
-            padding: 10px;
-            border-radius: 8px;
+            padding: 15px;
             margin-bottom: 15px;
             font-weight: bold;
             text-align: center;
@@ -84,30 +90,32 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: opacity 0.3s ease;
+            transition: opacity 0.2s ease;
+            /*border: 2px solid;*/
+            text-transform: uppercase;
         }
         
         .status.info {
-            background: #e3f2fd;
-            color: #1976d2;
-            border: 1px solid #bbdefb;
+            background: #001122;
+            color: #00ffff;
+            /*border-color: #00ffff;*/
         }
         
         .status.success {
-            background: #e8f5e8;
-            color: #2e7d32;
-            border: 1px solid #c8e6c9;
+            background: #002200;
+            color: #00ff41;
+            /*border-color: #00ff41;*/
         }
         
         .status.error {
-            background: #ffebee;
-            color: #c62828;
-            border: 1px solid #ffcdd2;
+            background: #220000;
+            color: #ff4040;
+            /*border-color: #ff4040;*/
         }
         
         .config-panel {
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
+            background: #333;
+            border: 1px solid #666;
             padding: 15px;
             margin-bottom: 15px;
         }
@@ -127,48 +135,51 @@
             font-size: 0.9em;
             font-weight: 500;
             flex: 1;
+            color: #ccc;
         }
         
         .config-input {
             width: 80px;
             padding: 5px 8px;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            border-radius: 5px;
-            background: rgba(255, 255, 255, 0.9);
-            color: #333;
+            border: 1px solid #666;
+            background: #222;
+            color: #00ff41;
             font-size: 0.9em;
             text-align: center;
+            font-family: 'Share Tech Mono', monospace;
         }
         
-        .config-input::placeholder {
-            color: rgba(0, 0, 0, 0.5);
+        .config-input:focus {
+            outline: none;
+            border-color: #00ff41;
+            box-shadow: 0 0 5px rgba(0, 255, 65, 0.5);
         }
         
         .config-input:disabled {
-            background: rgba(255, 255, 255, 0.7);
-            color: #666;
+            background: #444;
+            color: #888;
             cursor: not-allowed;
         }
         
         .config-select {
             width: 80px;
             padding: 5px;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            border-radius: 5px;
-            background: rgba(255, 255, 255, 0.9);
-            color: #333;
+            border: 1px solid #666;
+            background: #222;
+            color: #00ff41;
             font-size: 0.9em;
+            font-family: 'Share Tech Mono', monospace;
         }
         
         .config-select option {
-            background: white;
-            color: #333;
+            background: #222;
+            color: #00ff41;
             padding: 5px;
         }
         
         .config-select:disabled {
-            background: rgba(255, 255, 255, 0.7);
-            color: #666;
+            background: #444;
+            color: #888;
             cursor: not-allowed;
         }
         
@@ -176,6 +187,7 @@
             width: 20px;
             height: 20px;
             cursor: pointer;
+            accent-color: #00ff41;
         }
         
         .config-checkbox:disabled {
@@ -183,19 +195,21 @@
         }
         
         .config-button {
-            background: rgba(255, 255, 255, 0.2);
-            color: white;
-            border: 1px solid rgba(255, 255, 255, 0.3);
+            background: #333;
+            color: #00ff41;
+            border: 1px solid #00ff41;
             padding: 8px 12px;
-            border-radius: 5px;
             font-size: 0.9em;
             cursor: pointer;
             transition: all 0.3s ease;
             margin-bottom: 10px;
+            font-family: 'Share Tech Mono', monospace;
+            text-transform: uppercase;
         }
         
         .config-button:hover {
-            background: rgba(255, 255, 255, 0.3);
+            background: #00ff41;
+            color: #000;
         }
         
         #playerList {
@@ -210,27 +224,29 @@
             gap: 10px;
             padding: 8px;
             margin-bottom: 5px;
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 8px;
+            background: #333;
+            border: 1px solid #666;
             transition: all 0.3s ease;
         }
         
         .player-item.current-player {
-            background: rgba(255, 255, 255, 0.4);
-            border: 2px solid #ffd700;
+            background: #002200;
+            border: 2px solid #00ff41;
+            box-shadow: 0 0 5px rgba(0, 255, 65, 0.2);
         }
         
         .player-item.eliminated {
             opacity: 0.6;
-            background: rgba(255, 0, 0, 0.1);
+            background: #220000;
+            border-color: #ff4040;
         }
         
         .player-rank {
             font-weight: bold;
             min-width: 25px;
             text-align: center;
-            background: rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
+            background: #444;
+            color: #fff;
             padding: 2px;
         }
         
@@ -238,6 +254,7 @@
             flex: 1;
             text-align: left;
             font-weight: 500;
+            color: #fff;
         }
         
         .player-score {
@@ -246,12 +263,13 @@
             text-align: right;
             line-height: 1.2;
             font-size: 0.9em;
+            color: #00ff41;
         }
         
         .player-score small {
             display: block;
             font-size: 0.8em;
-            color: rgba(255, 255, 255, 0.8);
+            color: #aaa;
             font-weight: normal;
         }
         
@@ -260,73 +278,91 @@
         }
         
         .form-panel {
-            background: white;
-            border-radius: 10px;
+            background: #1a1a1a;
+            border: 2px solid #ff0080;
             padding: 20px;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 0 8px rgba(255, 0, 128, 0.15);
         }
         
         .form-panel label {
             display: block;
             margin-bottom: 8px;
             font-weight: bold;
-            color: #555;
+            color: #ff0080;
+            text-transform: uppercase;
         }
         
         .form-panel input {
             width: 100%;
             padding: 12px;
-            border: 2px solid #ddd;
-            border-radius: 8px;
+            border: 2px solid #666;
+            background: #222;
+            color: #fff;
             font-size: 16px;
             margin-bottom: 15px;
             transition: border-color 0.3s ease;
+            font-family: 'Share Tech Mono', monospace;
         }
         
         .form-panel input:focus {
             outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            border-color: #ff0080;
+            box-shadow: 0 0 10px rgba(255, 0, 128, 0.5);
         }
         
         button {
-            background: linear-gradient(45deg, #667eea, #764ba2);
-            color: white;
-            border: none;
+            background: #333;
+            color: #00ff41;
+            border: 2px solid #00ff41;
             padding: 12px 24px;
-            border-radius: 8px;
             font-size: 16px;
             font-weight: bold;
             cursor: pointer;
             transition: all 0.3s ease;
             width: 100%;
             margin-bottom: 10px;
+            font-family: 'Share Tech Mono', monospace;
+            text-transform: uppercase;
         }
         
         button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            background: #00ff41;
+            color: #000;
+            box-shadow: 0 0 6px rgba(0, 255, 65, 0.3);
         }
         
         button:active {
-            transform: translateY(0);
+            transform: scale(0.98);
         }
         
         button.secondary {
-            background: linear-gradient(45deg, #95a5a6, #7f8c8d);
+            background: #333;
+            color: #00ffff;
+            border-color: #00ffff;
+        }
+        
+        button.secondary:hover {
+            background: #00ffff;
+            color: #000;
         }
         
         #startGameButton {
-            background: linear-gradient(45deg, #27ae60, #2ecc71);
+            background: #333;
+            color: #ffff00;
+            border-color: #ffff00;
             font-size: 18px;
             padding: 15px 30px;
         }
         
+        #startGameButton:hover {
+            background: #ffff00;
+            color: #000;
+        }
+        
         #game {
-            border: 3px solid #333;
-            border-radius: 10px;
-            background: #f8f9fa;
-            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.15);
+            border: 3px solid #00ff41;
+            background: #000;
+            box-shadow: 0 0 10px rgba(0, 255, 65, 0.2);
         }
         
         .game-over-screen {
@@ -334,21 +370,22 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.9);
-            color: white;
+            background: rgba(0, 0, 0, 0.95);
+            color: #00ff41;
             padding: 40px;
-            border-radius: 15px;
+            border: 3px solid #00ff41;
             text-align: center;
             font-size: 24px;
             font-weight: bold;
             z-index: 1000;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 0 15px rgba(0, 255, 65, 0.3);
         }
         
         .game-over-screen h1 {
-            color: #ff6b6b;
+            color: #ff4040;
             margin-bottom: 20px;
             font-size: 3em;
+            text-shadow: 0 0 5px #ff4040;
         }
         
         .hidden {
@@ -356,26 +393,29 @@
         }
         
         .waiting-message {
-            background: rgba(255, 255, 255, 0.9);
-            border-radius: 10px;
+            background: #1a1a1a;
+            border: 2px solid #00ffff;
             padding: 20px;
             margin: 20px 0;
-            border-left: 4px solid #667eea;
+            text-align: center;
+            color: #00ffff;
         }
         
         #roundInfo {
             font-size: 1.2em;
             font-weight: bold;
-            color: white;
+            color: #ffff00;
             margin-bottom: 10px;
+            text-transform: uppercase;
         }
         
         .controls-hint {
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 8px;
+            background: #333;
+            border: 1px solid #666;
             padding: 10px;
             margin-top: 15px;
             font-size: 0.9em;
+            color: #ccc;
         }
         
         #roomsList {
@@ -392,19 +432,19 @@
             align-items: center;
             padding: 10px;
             margin-bottom: 8px;
-            background: #f8f9fa;
-            border-radius: 8px;
-            border: 1px solid #ddd;
+            background: #222;
+            border: 1px solid #666;
         }
         
         .room-info {
             flex: 1;
             font-size: 0.9em;
+            color: #fff;
         }
         
         .room-config {
             font-size: 0.8em;
-            color: #666;
+            color: #888;
             margin-top: 5px;
         }
         
@@ -418,7 +458,7 @@
         .empty-room {
             text-align: center;
             padding: 20px;
-            color: #888;
+            color: #666;
             font-style: italic;
         }
         
@@ -432,11 +472,12 @@
         }
         
         #roomInfo {
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 8px;
+            background: #333;
+            border: 1px solid #666;
             padding: 10px;
             margin-bottom: 15px;
             font-size: 0.9em;
+            color: #ccc;
         }
         
         .final-screen {
@@ -445,7 +486,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.95);
+            background: rgba(0, 0, 0, 0.98);
             display: flex;
             justify-content: center;
             align-items: center;
@@ -453,17 +494,17 @@
         }
         
         .final-content {
-            background: white;
-            border-radius: 20px;
+            background: #1a1a1a;
+            border: 3px solid #00ff41;
             padding: 40px;
             text-align: center;
             max-width: 500px;
             width: 90%;
-            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 0 15px rgba(0, 255, 65, 0.3);
         }
         
         .final-content h1 {
-            color: #764ba2;
+            color: #00ff41;
             margin-bottom: 20px;
             font-size: 2.5em;
         }
@@ -475,7 +516,7 @@
         
         .final-scores h3 {
             text-align: center;
-            color: #667eea;
+            color: #00ffff;
             margin-bottom: 20px;
         }
         
@@ -491,31 +532,48 @@
             gap: 15px;
             padding: 12px;
             margin-bottom: 8px;
-            background: #f8f9fa;
-            border-radius: 10px;
-            border-left: 4px solid #667eea;
+            background: #333;
+            border-left: 4px solid #00ff41;
         }
         
         .final-rank {
             font-weight: bold;
             font-size: 1.2em;
-            color: #764ba2;
+            color: #00ff41;
             min-width: 30px;
         }
         
         .final-name {
             flex: 1;
             font-weight: 600;
+            color: #fff;
         }
         
         .final-total {
             font-weight: bold;
-            color: #27ae60;
+            color: #ffff00;
         }
         
         .final-wins {
             font-size: 0.9em;
-            color: #666;
+            color: #888;
+        }
+
+        /* Scrollbar personalizada */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #333;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #00ff41;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #00cc33;
         }
 
         @media (max-width: 768px) {
@@ -551,110 +609,110 @@
         <div class="left-panel">
             <!-- Game Info Panel (shown during game) -->
             <div id="gameInterface" class="game-panel game-info hidden">
-                <h2>🐍 Players</h2>
+                <h2>🐍 Jugadores</h2>
                 <div id="roomInfo"></div>
-                <div id="roundInfo">Round 1/3</div>
+                <div id="roundInfo">Ronda 1/3</div>
                 
                 <!-- Room Configuration Panel (only visible to host) -->
                 <div id="configPanel" class="config-panel hidden">
-                    <button id="toggleConfigButton" class="config-button">⚙️ Room Settings</button>
+                    <button id="toggleConfigButton" class="config-button">⚙️ Configuración</button>
                     <div id="configSettings" class="hidden">
                         <div class="config-row">
-                            <span class="config-label">Max Players:</span>
+                            <span class="config-label">Máx. Jugadores:</span>
                             <input type="number" id="maxPlayersInput" class="config-input" min="2" max="20" value="8">
                         </div>
                         <div class="config-row">
-                            <span class="config-label">Min Players:</span>
+                            <span class="config-label">Mín. Jugadores:</span>
                             <input type="number" id="minPlayersInput" class="config-input" min="2" max="20" value="2">
                         </div>
                         <div class="config-row">
-                            <span class="config-label">Rounds:</span>
+                            <span class="config-label">Rondas:</span>
                             <input type="number" id="maxRoundsInput" class="config-input" min="1" max="10" value="3">
                         </div>
                         <div class="config-row">
-                            <span class="config-label">Speed (ms):</span>
+                            <span class="config-label">Velocidad (ms):</span>
                             <select id="gameSpeedInput" class="config-select">
-                                <option value="150">Slow</option>
+                                <option value="150">Lento</option>
                                 <option value="100">Normal</option>
-                                <option value="75" selected>Fast</option>
-                                <option value="50">Very Fast</option>
+                                <option value="75" selected>Rápido</option>
+                                <option value="50">Muy Rápido</option>
                             </select>
                         </div>
                         <div class="config-row">
-                            <span class="config-label">Canvas Size:</span>
+                            <span class="config-label">Tamaño Canvas:</span>
                             <select id="canvasSizeInput" class="config-select">
-                                <option value="800x500">Small</option>
-                                <option value="1000x600" selected>Medium</option>
-                                <option value="1200x700">Large</option>
-                                <option value="1400x800">X-Large</option>
+                                <option value="800x500">Pequeño</option>
+                                <option value="1000x600" selected>Mediano</option>
+                                <option value="1200x700">Grande</option>
+                                <option value="1400x800">Extra Grande</option>
                             </select>
                         </div>
                         <div class="config-row">
-                            <span class="config-label">Snake Size:</span>
+                            <span class="config-label">Tamaño Snake:</span>
                             <select id="segmentSizeInput" class="config-select">
-                                <option value="5">Tiny</option>
-                                <option value="8">Small</option>
+                                <option value="5">Diminuto</option>
+                                <option value="8">Pequeño</option>
                                 <option value="10" selected>Normal</option>
-                                <option value="15">Large</option>
+                                <option value="15">Grande</option>
                                 <option value="20">XL</option>
                             </select>
                         </div>
                         <div class="config-row">
-                            <span class="config-label">Countdown:</span>
+                            <span class="config-label">Cuenta Regresiva:</span>
                             <input type="number" id="countdownInput" class="config-input" min="1" max="10" value="3">
                         </div>
                         <div class="config-row">
-                            <span class="config-label">Enable Attacks:</span>
+                            <span class="config-label">Ataques:</span>
                             <input type="checkbox" id="attacksEnabledInput" class="config-checkbox">
                         </div>
-                        <button id="saveConfigButton" class="config-button">💾 Save Settings</button>
+                        <button id="saveConfigButton" class="config-button">💾 Guardar</button>
                     </div>
                 </div>
                 
                 <ol id="playerList"></ol>
-                <button id="startGameButton" class="hidden">🚀 Start Game</button>
+                <button id="startGameButton" class="hidden">🚀 Iniciar Juego</button>
                 <div class="controls-hint">
-                    <strong>Controls:</strong><br>
-                    ⬆️⬇️⬅️➡️ Arrow Keys<br>
-                    <span id="attackControls" class="hidden">🎯 Spacebar - Attack</span>
+                    <strong>Controles:</strong><br>
+                    ⬆️⬇️⬅️➡️ Flechas<br>
+                    <span id="attackControls" class="hidden">🎯 Espacio - Atacar</span>
                 </div>
             </div>
             
             <!-- Username Form -->
             <div id="joinForm" class="form-panel">
-                <h2>Enter Game</h2>
-                <label for="username">Your Username:</label>
-                <input type="text" id="username" placeholder="Enter your name" maxlength="20" required>
-                <button id="joinButton">🎮 Continue</button>
+                <h2>Entrar al Juego</h2>
+                <label for="username">Tu Nombre:</label>
+                <input type="text" id="username" placeholder="Ingresa tu nombre" maxlength="20" required>
+                <button id="joinButton">🎮 Continuar</button>
             </div>
             
             <!-- Room Selection Panel -->
             <div id="roomSelection" class="form-panel hidden">
-                <h2>Join or Create Room</h2>
+                <h2>Unirse o Crear Sala</h2>
                 
-                <button id="createRoomButton">🏠 Create New Room</button>
+                <button id="createRoomButton">🏠 Crear Nueva Sala</button>
                 
-                <div style="margin: 20px 0; text-align: center; font-weight: bold; color: #666;">OR</div>
+                <div style="margin: 20px 0; text-align: center; font-weight: bold; color: #666;">O</div>
                 
-                <label for="roomId">Join by Room ID:</label>
-                <input type="text" id="roomId" placeholder="Enter room ID" maxlength="6" style="text-transform: uppercase;">
-                <button id="joinRoomButton">🚪 Join Room</button>
+                <label for="roomId">Unirse por ID de Sala:</label>
+                <input type="text" id="roomId" placeholder="Ingresa ID de sala" maxlength="6" style="text-transform: uppercase;">
+                <button id="joinRoomButton">🚪 Unirse a Sala</button>
                 
-                <div style="margin: 20px 0; text-align: center; font-weight: bold; color: #666;">OR</div>
+                <div style="margin: 20px 0; text-align: center; font-weight: bold; color: #666;">O</div>
                 
                 <div>
                     <div class="button-group">
-                        <button id="refreshRoomsButton" class="secondary">🔄 Refresh</button>
+                        <button id="refreshRoomsButton" class="secondary">🔄 Actualizar</button>
                     </div>
-                    <h3>Available Rooms:</h3>
+                    <h3>Salas Disponibles:</h3>
                     <ul id="roomsList">
-                        <li class="empty-room">Loading rooms...</li>
+                        <li class="empty-room">Cargando salas...</li>
                     </ul>
                 </div>
             </div>
             
             <div class="waiting-message hidden" id="waitingSpan">
-                ⏳ Waiting for more players to start...
+                ⏳ Esperando más jugadores para iniciar...
             </div>
         </div>
         
@@ -666,22 +724,22 @@
     </div>
 
     <div id="gameOverScreen" class="game-over-screen hidden">
-        <h1>🏆 GAME OVER</h1>
+        <h1>🏆 JUEGO TERMINADO</h1>
         <p id="scoreDisplay"></p>
-        <button id="restartButton">Play Again</button>
+        <button id="restartButton">Jugar de Nuevo</button>
     </div>
 
     <div id="finalScreen" class="final-screen hidden">
         <div class="final-content">
-            <h1 id="finalTitle">🏆 Game Complete!</h1>
-            <p id="finalMessage">Champion: Player Name</p>
+            <h1 id="finalTitle">🏆 Juego Completo!</h1>
+            <p id="finalMessage">Campeón: Nombre Jugador</p>
             
             <div class="final-scores">
-                <h3>Final Standings</h3>
+                <h3>Clasificación Final</h3>
                 <ul id="finalScoresList"></ul>
             </div>
             
-            <button id="backToMenuButton">🏠 Back to Menu</button>
+            <button id="backToMenuButton">🏠 Volver al Menú</button>
         </div>
     </div>
     
