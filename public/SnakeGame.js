@@ -1,4 +1,10 @@
 document.addEventListener("DOMContentLoaded", function() {
+  // Variables de renderizado - DECLARADAS PRIMERO
+  let renderLoop = null;
+  let lastLogicUpdate = 0;
+  let lastFrameTime = 0;
+  let isGameRunning = false;
+
   const canvas = document.getElementById("game");
   const ctx = canvas.getContext("2d");
   const gameOverScreen = document.getElementById('gameOverScreen');
@@ -43,11 +49,48 @@ document.addEventListener("DOMContentLoaded", function() {
   let snakes = [];
   let foods = {};
   let projectiles = [];
+  let clientProjectiles = []; // Array de proyectiles interpolados
   let isConnected = false;
   let isHost = false;
   let currentRoomId = null;
   let roomConfig = {};
   let roomScores = {};
+
+  // Función lerp (linear interpolation)
+  function lerp(start, end, factor) {
+    return start + (end - start) * factor;
+  }
+
+  // Clase Projectile para interpolación (similar a Snake)
+  function ClientProjectile(serverProjectile) {
+    this.id = serverProjectile.id;
+    this.playerId = serverProjectile.playerId;
+    this.color = serverProjectile.color;
+    this.direction = { ...serverProjectile.direction };
+    
+    // Posiciones target (del servidor)
+    this.targetX = serverProjectile.x;
+    this.targetY = serverProjectile.y;
+    
+    // Posiciones de renderizado (interpoladas)
+    this.renderX = serverProjectile.prevX || serverProjectile.x;
+    this.renderY = serverProjectile.prevY || serverProjectile.y;
+    
+    this.interpolationSpeed = 0.2;
+  }
+
+  ClientProjectile.prototype.updateRenderPosition = function() {
+    this.renderX = lerp(this.renderX, this.targetX, this.interpolationSpeed);
+    this.renderY = lerp(this.renderY, this.targetY, this.interpolationSpeed);
+  };
+
+  ClientProjectile.prototype.updateTarget = function(serverProjectile) {
+    this.targetX = serverProjectile.x;
+    this.targetY = serverProjectile.y;
+    this.direction = { ...serverProjectile.direction };
+    this.color = serverProjectile.color;
+  };
+  let interpolatedProjectiles = []; // Para interpolación de proyectiles
 
   // Retro color palette
   const retroColors = {
@@ -100,8 +143,8 @@ document.addEventListener("DOMContentLoaded", function() {
   }
 
   function drawRetroProjectile(ctx, projectile, segmentSize) {
-    const centerX = projectile.x + segmentSize / 2;
-    const centerY = projectile.y + segmentSize / 2;
+    const centerX = projectile.renderX + segmentSize / 2;
+    const centerY = projectile.renderY + segmentSize / 2;
     const size = segmentSize * 0.6;
     
     // Simple diamond shape for projectiles
@@ -109,7 +152,7 @@ document.addEventListener("DOMContentLoaded", function() {
     ctx.translate(centerX, centerY);
     ctx.rotate(Math.PI / 4); // 45 degree rotation for diamond
     
-    drawRetroRect(ctx, -size/2, -size/2, size, size, retroColors.projectile, '#ffff80');
+    drawRetroRect(ctx, -size/2, -size/2, size, size, projectile.color || retroColors.projectile, '#ffff80');
     
     ctx.restore();
   }
@@ -200,6 +243,74 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   }
 
+  // Fase 1: Crear instancias Snake locales para interpolación
+  function createLocalSnake(serverSnake) {
+    const snake = new Snake(
+      serverSnake.id,
+      serverSnake.name,
+      segmentSize,
+      roomConfig.canvasWidth || 1000,
+      roomConfig.canvasHeight || 600,
+      serverSnake.segments[0].x,
+      serverSnake.segments[0].y,
+      serverSnake.direction.x,
+      serverSnake.direction.y
+    );
+    
+    // Copiar estado del servidor
+    snake.segments = serverSnake.segments.map(seg => ({ ...seg }));
+    snake.targetSegments = serverSnake.segments.map(seg => ({ ...seg }));
+    snake.renderSegments = serverSnake.segments.map(seg => ({ ...seg }));
+    snake.direction = { ...serverSnake.direction };
+    snake.score = serverSnake.score;
+    snake.gameover = serverSnake.gameover;
+    snake.scoreLeftToGrow = serverSnake.scoreLeftToGrow;
+    
+    return snake;
+  }
+
+  // Fase 1: Loop de renderizado a 60 FPS
+  function startRenderLoop() {
+    if (renderLoop) return; // Ya está ejecutándose
+    
+    function render(currentTime) {
+      const deltaTime = currentTime - lastFrameTime;
+      lastFrameTime = currentTime;
+      
+      if (isGameRunning && gameState.playing) {
+        // Interpolar posiciones de todas las serpientes
+        snakes.forEach(snake => {
+          if (snake.updateRenderPosition) {
+            snake.updateRenderPosition(deltaTime);
+          }
+        });
+        
+        // Interpolar proyectiles (igual que snakes)
+        clientProjectiles.forEach(projectile => {
+          projectile.updateRenderPosition();
+        });
+        
+        // Renderizar frame
+        gameLoop();
+      }
+      
+      if (isGameRunning) {
+        renderLoop = requestAnimationFrame(render);
+      }
+    }
+    
+    renderLoop = requestAnimationFrame(render);
+  }
+
+  // Detener render loop
+  function stopRenderLoop() {
+    if (renderLoop) {
+      cancelAnimationFrame(renderLoop);
+      renderLoop = null;
+    }
+    isGameRunning = false;
+  }
+
   // Socket events
   socket.on('connect', () => {
     console.log('Conectado al servidor:', socket.id);
@@ -209,6 +320,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
   socket.on('disconnect', () => {
     isConnected = false;
+    stopRenderLoop();
     showStatus('Desconectado del servidor', 'error');
   });
 
@@ -250,7 +362,22 @@ document.addEventListener("DOMContentLoaded", function() {
   });
 
   socket.on('updatePlayers', (players, state, config, roomData) => {
-    snakes = players;
+    snakes = players.map(serverPlayer => {
+      const existingSnake = snakes.find(s => s.id === serverPlayer.id);
+      if (existingSnake) {
+        // Actualizar snake existente
+        existingSnake.segments = serverPlayer.segments.map(seg => ({ ...seg }));
+        existingSnake.targetSegments = serverPlayer.segments.map(seg => ({ ...seg }));
+        existingSnake.direction = { ...serverPlayer.direction };
+        existingSnake.score = serverPlayer.score;
+        existingSnake.gameover = serverPlayer.gameover;
+        existingSnake.scoreLeftToGrow = serverPlayer.scoreLeftToGrow;
+        return existingSnake;
+      } else {
+        return createLocalSnake(serverPlayer);
+      }
+    });
+    
     gameState = state;
     roomConfig = config;
     updatePlayerList(players);
@@ -291,11 +418,17 @@ document.addEventListener("DOMContentLoaded", function() {
     canvas.width = data.config.canvasWidth;
     canvas.height = data.config.canvasHeight;
     segmentSize = data.config.segmentSize;
-    snakes = data.players;
+    
+    // Crear snakes locales para interpolación
+    snakes = data.players.map(serverPlayer => createLocalSnake(serverPlayer));
     foods = data.food;
     projectiles = data.projectiles || [];
     gameState = data.gameState;
     roomConfig = data.config;
+    
+    // Fase 1: Iniciar render loop
+    isGameRunning = true;
+    startRenderLoop();
     
     hideElement(gameOverScreen);
     hideElement(startGameButton);
@@ -313,16 +446,79 @@ document.addEventListener("DOMContentLoaded", function() {
     updateGameInfo(state);
   });
 
+  // Fase 1: Nuevo evento para updates de lógica
+  socket.on('gameLogicFrame', (data) => {
+    // Actualizar targets de las serpientes existentes
+    snakes.forEach(localSnake => {
+      const serverSnake = data.players.find(p => p.id === localSnake.id);
+      if (serverSnake) {
+        localSnake.targetSegments = serverSnake.segments.map(seg => ({ ...seg }));
+        localSnake.segments = serverSnake.segments.map(seg => ({ ...seg })); // Para lógica
+        localSnake.direction = { ...serverSnake.direction };
+        localSnake.score = serverSnake.score;
+        localSnake.gameover = serverSnake.gameover;
+        localSnake.scoreLeftToGrow = serverSnake.scoreLeftToGrow;
+      }
+    });
+    
+    // Actualizar proyectiles (igual que snakes)
+    const serverProjectiles = data.projectiles || [];
+    
+    // Actualizar proyectiles existentes
+    clientProjectiles.forEach(clientProjectile => {
+      const serverProjectile = serverProjectiles.find(p => p.id === clientProjectile.id);
+      if (serverProjectile) {
+        clientProjectile.updateTarget(serverProjectile);
+      }
+    });
+    
+    // Remover proyectiles que ya no existen
+    clientProjectiles = clientProjectiles.filter(clientProjectile => 
+      serverProjectiles.some(p => p.id === clientProjectile.id)
+    );
+    
+    // Agregar nuevos proyectiles
+    serverProjectiles.forEach(serverProjectile => {
+      if (!clientProjectiles.find(cp => cp.id === serverProjectile.id)) {
+        clientProjectiles.push(new ClientProjectile(serverProjectile));
+      }
+    });
+    
+    foods = data.food;
+    gameState = data.gameState;
+    projectiles = data.projectiles || []; // Mantener para compatibilidad
+    lastLogicUpdate = data.timestamp;
+  });
+
+  // Fase 1: Evento de sincronización para interpolación
+  socket.on('syncFrame', (data) => {
+    // Este evento se usa para mantener sincronizado el renderizado
+    // No actualiza lógica, solo indica que debe continuar interpolando
+  });
+
+  // Legacy event para compatibilidad
   socket.on('gameFrame', (players, food, state, projectilesData) => {
-    snakes = players;
+    // Actualizar como antes si no hay dual-loop
+    snakes.forEach(localSnake => {
+      const serverSnake = players.find(p => p.id === localSnake.id);
+      if (serverSnake) {
+        localSnake.segments = serverSnake.segments.map(seg => ({ ...seg }));
+        localSnake.targetSegments = serverSnake.segments.map(seg => ({ ...seg }));
+        localSnake.renderSegments = serverSnake.segments.map(seg => ({ ...seg }));
+        localSnake.direction = { ...serverSnake.direction };
+        localSnake.score = serverSnake.score;
+        localSnake.gameover = serverSnake.gameover;
+      }
+    });
+    
     foods = food;
     gameState = state;
     projectiles = projectilesData || [];
-    // Render only when we receive new data from server
     gameLoop();
   });
 
   socket.on('roundEnd', (data) => {
+    stopRenderLoop();
     roomScores = data.scores;
     showStatus(`¡Ronda ${data.round} terminada!`, 'info');
     if (data.winner) {
@@ -346,6 +542,7 @@ document.addEventListener("DOMContentLoaded", function() {
   });
 
   socket.on('gameEnd', (data) => {
+    stopRenderLoop();
     showStatus(`¡Juego Terminado! Campeón: ${data.winner.name}`, 'success');
     if (data.roomFinished) {
       showFinalScreen(data.winner, data.finalScores);
@@ -359,10 +556,12 @@ document.addEventListener("DOMContentLoaded", function() {
   });
 
   socket.on('roomFinished', (data) => {
+    stopRenderLoop();
     showFinalScreen(null, data.finalScores, data.reason);
   });
 
   socket.on('backToMenuSuccess', () => {
+    stopRenderLoop();
     currentRoomId = null;
     isHost = false;
     roomConfig = {};
@@ -542,11 +741,12 @@ document.addEventListener("DOMContentLoaded", function() {
 
   function drawPlayers() {
     snakes.forEach((snake, index) => {
-      if (!snake.gameover && snake.segments && snake.segments.length > 0) {
+      if (!snake.gameover && snake.getRenderSegments) {
         const isCurrentPlayer = snake.id === socket.id;
         const baseColor = retroColors.snake[index % retroColors.snake.length];
+        const renderSegments = snake.getRenderSegments();
         
-        snake.segments.forEach((segment, segIndex) => {
+        renderSegments.forEach((segment, segIndex) => {
           const isHead = segIndex === 0;
           
           drawRetroSnakeSegment(
@@ -567,9 +767,9 @@ document.addEventListener("DOMContentLoaded", function() {
       drawRetroFood(ctx, foods, segmentSize);
     }
 
-    // Draw projectiles
-    if (projectiles && projectiles.length > 0) {
-      projectiles.forEach(projectile => {
+    // Draw projectiles usando posiciones interpoladas (igual que snakes)
+    if (clientProjectiles && clientProjectiles.length > 0) {
+      clientProjectiles.forEach(projectile => {
         drawRetroProjectile(ctx, projectile, segmentSize);
       });
     }

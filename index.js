@@ -13,6 +13,28 @@ app.use(express.static('public'));
 // Game rooms management
 let rooms = new Map();
 
+// Función para serializar players y evitar referencias circulares
+function serializePlayers(players) {
+  return players.map(player => ({
+    id: player.id,
+    name: player.name,
+    segments: player.segments ? [...player.segments] : [],
+    direction: player.direction ? { ...player.direction } : { x: 1, y: 0 },
+    score: player.score || 0,
+    gameover: player.gameover || false,
+    scoreLeftToGrow: player.scoreLeftToGrow || 0,
+    eatFood: player.eatFood || false
+  }));
+}
+
+// Fase 2: Configuración de dual-loop
+const GAME_CONFIG = {
+  LOGIC_FPS: 12,           // Lógica de juego a 12 FPS
+  SYNC_FPS: 30,            // Sincronización a 30 FPS
+  LOGIC_INTERVAL: 1000 / 12,  // ~83ms
+  SYNC_INTERVAL: 1000 / 30    // ~33ms
+};
+
 function generateRoomId() {
   let roomId;
   do {
@@ -50,7 +72,8 @@ function createRoom(hostId, hostName) {
       round: 1,
       timeoutIdStartGame: null,
       downCounter: defaultConfig.countdownTime,
-      intervalId: null
+      intervalId: null,
+      syncIntervalId: null  // Nuevo: interval para sincronización
     },
     config: defaultConfig,
     gameboard: [],
@@ -76,6 +99,7 @@ function deleteRoom(roomId) {
   const room = rooms.get(roomId);
   if (room) {
     if (room.gameState.intervalId) clearInterval(room.gameState.intervalId);
+    if (room.gameState.syncIntervalId) clearInterval(room.gameState.syncIntervalId);
     if (room.gameState.timeoutIdStartGame) clearTimeout(room.gameState.timeoutIdStartGame);
     rooms.delete(roomId);
     console.log(`Room ${roomId} deleted`);
@@ -175,7 +199,6 @@ function createProjectile(room, player) {
     return false;
   }
   
-  // Check if player already has an active projectile
   const existingProjectile = room.projectiles.find(p => p.playerId === player.id);
   if (existingProjectile) {
     return false;
@@ -184,7 +207,6 @@ function createProjectile(room, player) {
   const head = player.segments[0];
   const { segmentSize } = room.config;
   
-  // Get player color
   const playerColors = [
     '#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', 
     '#feca57', '#ff9ff3', '#54a0ff', '#fd79a8'
@@ -192,21 +214,24 @@ function createProjectile(room, player) {
   const playerIndex = room.players.findIndex(p => p.id === player.id);
   const color = playerColors[playerIndex % playerColors.length];
   
-  // Create projectile
   const projectile = {
     id: Math.random().toString(36).substring(2, 9),
     playerId: player.id,
     x: head.x + (player.direction.x * segmentSize),
     y: head.y + (player.direction.y * segmentSize),
+    prevX: head.x, // For interpolation
+    prevY: head.y, // For interpolation
     direction: { ...player.direction },
     color: color
   };
   
-  // Remove two segments from player
   player.segments.pop();
   if (player.segments.length > 1) {
     player.segments.pop();
   }
+  
+  // Actualizar targets para interpolación
+  player.updateTargets();
   
   room.projectiles.push(projectile);
   return true;
@@ -216,36 +241,32 @@ function moveProjectiles(room) {
   const { segmentSize, canvasWidth, canvasHeight } = room.config;
   
   room.projectiles = room.projectiles.filter(projectile => {
-    // Move projectile
     projectile.x += projectile.direction.x * segmentSize;
     projectile.y += projectile.direction.y * segmentSize;
     
-    // Check boundaries
     if (projectile.x < 0 || projectile.x >= canvasWidth || 
         projectile.y < 0 || projectile.y >= canvasHeight) {
-      return false; // Remove projectile
+      return false;
     }
     
-    // Check collision with snakes
     for (let player of room.players) {
       if (!player.gameover && player.segments) {
         for (let i = 0; i < player.segments.length; i++) {
           const segment = player.segments[i];
           if (segment.x === projectile.x && segment.y === projectile.y) {
             if (i === 0) {
-              // Hit head - player dies
               player.GameOver();
             } else {
-              // Hit body - cut snake at impact point
               player.segments = player.segments.slice(0, i);
+              player.updateTargets();
             }
-            return false; // Remove projectile
+            return false;
           }
         }
       }
     }
     
-    return true; // Keep projectile
+    return true;
   });
 }
 
@@ -299,6 +320,11 @@ function endGame(room) {
     room.gameState.intervalId = null;
   }
   
+  if (room.gameState.syncIntervalId) {
+    clearInterval(room.gameState.syncIntervalId);
+    room.gameState.syncIntervalId = null;
+  }
+  
   const finalWinner = Object.values(room.roundScores).reduce((prev, current) => 
     (prev.totalScore > current.totalScore) ? prev : current
   );
@@ -315,7 +341,7 @@ function endGame(room) {
 
 function startNewRound(room) {
   room.gameState.downCounter = room.config.countdownTime;
-  room.projectiles = []; // Clear projectiles
+  room.projectiles = [];
   
   room.players.forEach((player, index) => {
     const spawnPos = getPlayerSpawnPosition(room, index);
@@ -325,6 +351,9 @@ function startNewRound(room) {
     player.score = 0;
     player.gameover = false;
     player.scoreLeftToGrow = 0;
+    
+    // Inicializar interpolación
+    player.updateTargets();
   });
   
   generateFood(room);
@@ -332,6 +361,7 @@ function startNewRound(room) {
   startGame(room);
 }
 
+// Fase 2: Dual-loop system
 function startGame(room) {
   if (room.gameState.downCounter === 0) {
     resetGameBoard(room);
@@ -345,22 +375,32 @@ function startGame(room) {
     
     console.log(`Starting round ${room.gameState.round} in room ${room.id}`);
     io.to(room.id).emit('gameStart', {
-      players: room.players,
-      food: room.food,
-      projectiles: room.projectiles,
+      players: serializePlayers(room.players),
+      food: { ...room.food },
+      projectiles: [...room.projectiles],
       config: room.config,
-      gameState: room.gameState
+      gameState: {
+        playing: room.gameState.playing,
+        round: room.gameState.round
+      }
     });
     
-    room.gameState.intervalId = setInterval(() => gameLoop(room), room.config.gameSpeed);
+    // Fase 2: Loop de lógica a 12 FPS
+    room.gameState.intervalId = setInterval(() => gameLogicLoop(room), GAME_CONFIG.LOGIC_INTERVAL);
+    
+    // Fase 2: Loop de sincronización a 30 FPS para interpolación
+    room.gameState.syncIntervalId = setInterval(() => syncLoop(room), GAME_CONFIG.SYNC_INTERVAL);
+    
   } else {
-    io.to(room.id).emit('countdown', room.gameState.downCounter, room.gameState);
+    io.to(room.id).emit('countdown', room.gameState.downCounter, 
+      { playing: room.gameState.playing, round: room.gameState.round });
     room.gameState.downCounter--;
     room.gameState.timeoutIdStartGame = setTimeout(() => startGame(room), 1000);
   }
 }
 
-function gameLoop(room) {
+// Fase 2: Lógica de juego (colisiones, movimiento, etc.)
+function gameLogicLoop(room) {
   if (!room.gameState.playing) return;
   
   const { canvasWidth, canvasHeight, segmentSize } = room.config;
@@ -377,7 +417,8 @@ function gameLoop(room) {
   
   room.players.forEach((player) => {
     if (!player.gameover) {
-      player.move();
+      // Usar moveLogic() en lugar de move() para mejor interpolación
+      player.moveLogic();
       const head = player.segments[0];
       
       if (!head) {
@@ -409,10 +450,88 @@ function gameLoop(room) {
   
   updateGameBoard(room);
   
-  // Only emit if there are alive players to avoid unnecessary renders
-  io.to(room.id).emit('gameFrame', room.players, room.food, room.gameState, room.projectiles);
+  io.to(room.id).emit('gameLogicFrame', {
+    players: serializePlayers(room.players),
+    food: { ...room.food },
+    projectiles: [...room.projectiles],
+    gameState: {
+      playing: room.gameState.playing,
+      round: room.gameState.round
+    },
+    timestamp: Date.now()
+  });
   
   // Check end conditions
+  if (alivePlayers <= 1 && room.players.length > 1) {
+    clearInterval(room.gameState.intervalId);
+    clearInterval(room.gameState.syncIntervalId);
+    room.gameState.intervalId = null;
+    room.gameState.syncIntervalId = null;
+    setTimeout(() => endRound(room), 1000);
+  }
+}
+
+// Fase 2: Loop de sincronización para interpolación suave
+function syncLoop(room) {
+  if (!room.gameState.playing) return;
+  
+  io.to(room.id).emit('syncFrame', {
+    timestamp: Date.now(),
+    playing: room.gameState.playing
+  });
+}
+
+// Legacy gameLoop para compatibilidad (ya no se usa en dual-loop)
+function gameLoop(room) {
+  if (!room.gameState.playing) return;
+  
+  const { canvasWidth, canvasHeight, segmentSize } = room.config;
+  let alivePlayers = 0;
+  
+  if (!room.gameboard || room.gameboard.length === 0) {
+    resetGameBoard(room);
+  }
+  
+  if (room.config.attacksEnabled) {
+    moveProjectiles(room);
+  }
+  
+  room.players.forEach((player) => {
+    if (!player.gameover) {
+      player.move();
+      const head = player.segments[0];
+      
+      if (!head) {
+        player.GameOver();
+        return;
+      }
+      
+      const headX = Math.floor(head.x / segmentSize);
+      const headY = Math.floor(head.y / segmentSize);
+      
+      if (headX < 0 || headX >= Math.floor(canvasWidth/segmentSize) || 
+          headY < 0 || headY >= Math.floor(canvasHeight/segmentSize)) {
+        player.GameOver();
+      }
+      else if (room.gameboard[headX] && room.gameboard[headX][headY] === 1) {
+        player.GameOver();
+      }
+      else if (room.gameboard[headX] && room.gameboard[headX][headY] === 2) {
+        player.EatFood(room.food.score);
+        generateFood(room);
+      }
+      
+      if (!player.gameover) alivePlayers++;
+    }
+  });
+  
+  updateGameBoard(room);
+  
+  io.to(room.id).emit('gameFrame', serializePlayers(room.players), 
+    { ...room.food }, 
+    { playing: room.gameState.playing, round: room.gameState.round }, 
+    [...room.projectiles]);
+  
   if (alivePlayers <= 1 && room.players.length > 1) {
     clearInterval(room.gameState.intervalId);
     room.gameState.intervalId = null;
@@ -451,8 +570,9 @@ io.on('connection', (socket) => {
       isHost: true,
       config: room.config
     });
-    io.to(roomId).emit('updatePlayers', room.players, room.gameState, room.config, 
-      { host: room.host, roomId });
+    io.to(roomId).emit('updatePlayers', serializePlayers(room.players), 
+      { playing: room.gameState.playing, round: room.gameState.round }, 
+      room.config, { host: room.host, roomId });
   });
 
   socket.on('joinRoom', (data) => {
@@ -504,8 +624,9 @@ io.on('connection', (socket) => {
       isHost: false,
       config: room.config
     });
-    io.to(data.roomId).emit('updatePlayers', room.players, room.gameState, room.config, 
-      { host: room.host, roomId: data.roomId });
+    io.to(data.roomId).emit('updatePlayers', serializePlayers(room.players), 
+      { playing: room.gameState.playing, round: room.gameState.round }, 
+      room.config, { host: room.host, roomId: data.roomId });
   });
 
   socket.on('updateRoomConfig', (newConfig) => {
@@ -532,6 +653,9 @@ io.on('connection', (socket) => {
       player.segments = [{ x: spawnPos.x, y: spawnPos.y }];
       player.direction = { x: 1, y: 0 };
       player.segmentSize = validConfig.segmentSize;
+      
+      // Actualizar interpolación
+      player.updateTargets();
     });
     
     resetGameBoard(room);
@@ -539,8 +663,9 @@ io.on('connection', (socket) => {
     updateGameBoard(room);
     
     io.to(currentRoom).emit('configUpdated', validConfig);
-    io.to(currentRoom).emit('updatePlayers', room.players, room.gameState, room.config, 
-      { host: room.host, roomId: currentRoom });
+    io.to(currentRoom).emit('updatePlayers', serializePlayers(room.players), 
+      { playing: room.gameState.playing, round: room.gameState.round }, 
+      room.config, { host: room.host, roomId: currentRoom });
   });
 
   socket.on('startGame', () => {
@@ -640,9 +765,7 @@ io.on('connection', (socket) => {
       room.players.splice(playerIndex, 1);
       console.log(`Player "${playerName}" disconnected from room ${currentRoom}`);
       
-      // Remove player's projectiles
       room.projectiles = room.projectiles.filter(p => p.playerId !== socket.id);
-      
       delete room.roundScores[socket.id];
       
       if (room.host === socket.id) {
@@ -656,14 +779,19 @@ io.on('connection', (socket) => {
         }
       }
       
-      io.to(currentRoom).emit('updatePlayers', room.players, room.gameState, room.config, 
-        { host: room.host, roomId: currentRoom });
+      io.to(currentRoom).emit('updatePlayers', serializePlayers(room.players), 
+        { playing: room.gameState.playing, round: room.gameState.round }, 
+        room.config, { host: room.host, roomId: currentRoom });
       
       if (room.players.length < room.config.minPlayers && room.gameState.playing) {
         room.gameState.playing = false;
         if (room.gameState.intervalId) {
           clearInterval(room.gameState.intervalId);
           room.gameState.intervalId = null;
+        }
+        if (room.gameState.syncIntervalId) {
+          clearInterval(room.gameState.syncIntervalId);
+          room.gameState.syncIntervalId = null;
         }
         io.to(currentRoom).emit('gameError', 'Not enough players to continue');
       }

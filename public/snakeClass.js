@@ -14,6 +14,12 @@ class Snake {
       this.score = 0;
       this.gameover = false;
       this.scoreLeftToGrow = 0;
+      
+      // Nuevas propiedades para interpolación (Fase 1)
+      this.targetSegments = [{ x: startX, y: startY }];
+      this.renderSegments = [{ x: startX, y: startY }];
+      this.interpolationSpeed = 0.12; // Velocidad de interpolación
+      this.lastMoveTime = Date.now();
     }
     
     move() {
@@ -21,15 +27,80 @@ class Snake {
       head.x += this.direction.x * this.segmentSize;
       head.y += this.direction.y * this.segmentSize;
       
-      this.segments.unshift(head); // Agregar la nueva cabeza al inicio
+      this.segments.unshift(head);
   
-      // Eliminar el último segmento si no se ha comido algo
       if (this.scoreLeftToGrow === 0) {
         this.segments.pop();
-      } else { // entonces, si se comió la comida...
+      } else {
         this.scoreLeftToGrow--;
         this.eatFood = false;
-      } 
+      }
+      
+      // Actualizar targets para interpolación
+      this.updateTargets();
+    }
+    
+    // Nueva función para lógica de movimiento (servidor)
+    moveLogic() {
+      const head = { ...this.targetSegments[0] };
+      head.x += this.direction.x * this.segmentSize;
+      head.y += this.direction.y * this.segmentSize;
+      
+      this.targetSegments.unshift(head);
+  
+      if (this.scoreLeftToGrow === 0) {
+        this.targetSegments.pop();
+      } else {
+        this.scoreLeftToGrow--;
+        this.eatFood = false;
+      }
+      
+      // Actualizar segments para compatibilidad
+      this.segments = [...this.targetSegments];
+      this.lastMoveTime = Date.now();
+    }
+    
+    // Actualizar targets basado en segments actuales
+    updateTargets() {
+      this.targetSegments = this.segments.map(seg => ({ ...seg }));
+      this.lastMoveTime = Date.now();
+    }
+    
+    // Interpolación para renderizado suave (Fase 1)
+    updateRenderPosition(deltaTime = 16) {
+      if (this.gameover || this.targetSegments.length === 0) {
+        this.renderSegments = this.segments.map(seg => ({ ...seg }));
+        return;
+      }
+      
+      // Asegurar que renderSegments tenga el mismo tamaño que targetSegments
+      while (this.renderSegments.length < this.targetSegments.length) {
+        this.renderSegments.push({ ...this.targetSegments[this.renderSegments.length] });
+      }
+      while (this.renderSegments.length > this.targetSegments.length) {
+        this.renderSegments.pop();
+      }
+      
+      // Interpolar cada segmento hacia su target
+      this.renderSegments = this.renderSegments.map((renderSeg, index) => {
+        if (index >= this.targetSegments.length) return renderSeg;
+        
+        const target = this.targetSegments[index];
+        return {
+          x: this.lerp(renderSeg.x, target.x, this.interpolationSpeed),
+          y: this.lerp(renderSeg.y, target.y, this.interpolationSpeed)
+        };
+      });
+    }
+    
+    // Función de interpolación lineal
+    lerp(start, end, factor) {
+      return start + (end - start) * factor;
+    }
+    
+    // Obtener posiciones para renderizado
+    getRenderSegments() {
+      return this.renderSegments.length > 0 ? this.renderSegments : this.segments;
     }
     
     changeDirection(newDirection) {
@@ -76,6 +147,9 @@ class Snake {
         this.segments.pop();
       }
       
+      // Actualizar targets
+      this.updateTargets();
+      
       return projectile;
     }
     
@@ -86,14 +160,18 @@ class Snake {
       this.segments = [
         { x: 0, y: 0 }
       ];
+      this.targetSegments = [
+        { x: 0, y: 0 }
+      ];
+      this.renderSegments = [
+        { x: 0, y: 0 }
+      ];
     }
 }
 
 // Verificar si el código se está ejecutando en Node.js o en el navegador
 if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
-  // El código se está ejecutando en Node.js, exportamos la clase
   module.exports = Snake;
 } else {
-  // El código se está ejecutando en el navegador, definimos la clase en el ámbito global
   window.Snake = Snake;
 }
