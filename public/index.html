@@ -172,6 +172,16 @@
             cursor: not-allowed;
         }
         
+        .config-checkbox {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+        
+        .config-checkbox:disabled {
+            cursor: not-allowed;
+        }
+        
         .config-button {
             background: rgba(255, 255, 255, 0.2);
             color: white;
@@ -593,6 +603,10 @@
                             <span class="config-label">Countdown:</span>
                             <input type="number" id="countdownInput" class="config-input" min="1" max="10" value="3">
                         </div>
+                        <div class="config-row">
+                            <span class="config-label">Enable Attacks:</span>
+                            <input type="checkbox" id="attacksEnabledInput" class="config-checkbox">
+                        </div>
                         <button id="saveConfigButton" class="config-button">💾 Save Settings</button>
                     </div>
                 </div>
@@ -601,7 +615,8 @@
                 <button id="startGameButton" class="hidden">🚀 Start Game</button>
                 <div class="controls-hint">
                     <strong>Controls:</strong><br>
-                    ⬆️⬇️⬅️➡️ Arrow Keys
+                    ⬆️⬇️⬅️➡️ Arrow Keys<br>
+                    <span id="attackControls" class="hidden">🎯 Spacebar - Attack</span>
                 </div>
             </div>
             

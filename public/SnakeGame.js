@@ -20,6 +20,7 @@ document.addEventListener("DOMContentLoaded", function() {
   const roundInfo = document.getElementById('roundInfo');
   const gameStatus = document.getElementById('gameStatus');
   const roomInfo = document.getElementById('roomInfo');
+  const attackControls = document.getElementById('attackControls');
 
   // Configuration elements
   const configPanel = document.getElementById('configPanel');
@@ -33,6 +34,7 @@ document.addEventListener("DOMContentLoaded", function() {
   const canvasSizeInput = document.getElementById('canvasSizeInput');
   const segmentSizeInput = document.getElementById('segmentSizeInput');
   const countdownInput = document.getElementById('countdownInput');
+  const attacksEnabledInput = document.getElementById('attacksEnabledInput');
 
   // Initialize socket connection
   const socket = io();
@@ -40,6 +42,7 @@ document.addEventListener("DOMContentLoaded", function() {
   let segmentSize = 20;
   let snakes = [];
   let foods = {};
+  let projectiles = [];
   let isConnected = false;
   let isHost = false;
   let currentRoomId = null;
@@ -119,6 +122,65 @@ document.addEventListener("DOMContentLoaded", function() {
       drawRoundedRect(ctx, x + padding + 2, y + padding + 2, innerSize - 4, innerSize - 4, radius - 1);
       ctx.fill();
     }
+  }
+
+  function drawProjectile(ctx, projectile, segmentSize) {
+    const centerX = projectile.x + segmentSize / 2;
+    const centerY = projectile.y + segmentSize / 2;
+    const arrowLength = segmentSize * 0.8;
+    const arrowWidth = segmentSize * 0.4;
+    
+    ctx.save();
+    ctx.translate(centerX, centerY);
+    
+    // Rotate based on direction
+    let angle = 0;
+    if (projectile.direction.x === 1) angle = 0;
+    else if (projectile.direction.x === -1) angle = Math.PI;
+    else if (projectile.direction.y === -1) angle = -Math.PI / 2;
+    else if (projectile.direction.y === 1) angle = Math.PI / 2;
+    
+    ctx.rotate(angle);
+    
+    // Draw arrow body
+    ctx.fillStyle = projectile.color;
+    ctx.beginPath();
+    ctx.moveTo(-arrowLength / 2, -arrowWidth / 4);
+    ctx.lineTo(arrowLength / 4, -arrowWidth / 4);
+    ctx.lineTo(arrowLength / 4, -arrowWidth / 2);
+    ctx.lineTo(arrowLength / 2, 0);
+    ctx.lineTo(arrowLength / 4, arrowWidth / 2);
+    ctx.lineTo(arrowLength / 4, arrowWidth / 4);
+    ctx.lineTo(-arrowLength / 2, arrowWidth / 4);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Add shadow effect
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+    ctx.shadowBlur = 3;
+    ctx.shadowOffsetX = 2;
+    ctx.shadowOffsetY = 2;
+    ctx.fill();
+    
+    // Add highlight
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+    
+    ctx.fillStyle = lightenColor(projectile.color, 30);
+    ctx.beginPath();
+    ctx.moveTo(-arrowLength / 2 + 2, -arrowWidth / 4 + 1);
+    ctx.lineTo(arrowLength / 4 - 2, -arrowWidth / 4 + 1);
+    ctx.lineTo(arrowLength / 4 - 2, -arrowWidth / 2 + 2);
+    ctx.lineTo(arrowLength / 2 - 3, 0);
+    ctx.lineTo(arrowLength / 4 - 2, arrowWidth / 2 - 2);
+    ctx.lineTo(arrowLength / 4 - 2, arrowWidth / 4 - 1);
+    ctx.lineTo(-arrowLength / 2 + 2, arrowWidth / 4 - 1);
+    ctx.closePath();
+    ctx.fill();
+    
+    ctx.restore();
   }
 
   function drawEyes(ctx, x, y, size, direction) {
@@ -246,6 +308,9 @@ document.addEventListener("DOMContentLoaded", function() {
     if (key >= 37 && key <= 40 && isConnected && gameState.playing) {
       event.preventDefault();
       socket.emit('newMove', { key });
+    } else if (key === 32 && isConnected && gameState.playing && roomConfig.attacksEnabled) { // Spacebar
+      event.preventDefault();
+      socket.emit('attack');
     }
   }
 
@@ -271,6 +336,7 @@ document.addEventListener("DOMContentLoaded", function() {
     roomConfig = data.config;
     showGameInterface();
     updateConfigPanel();
+    updateAttackControls();
     showStatus(`Room ${data.roomId} created!`, 'success');
   });
 
@@ -280,6 +346,7 @@ document.addEventListener("DOMContentLoaded", function() {
     roomConfig = data.config;
     showGameInterface();
     updateConfigPanel();
+    updateAttackControls();
     showStatus(`Joined room ${data.roomId}!`, 'success');
   });
 
@@ -305,6 +372,7 @@ document.addEventListener("DOMContentLoaded", function() {
     updateRoomInfo(roomData);
     updateHostControls();
     updateConfigPanel();
+    updateAttackControls();
     
     if (players.length >= config.minPlayers && !state.playing && isHost) {
       showElement(startGameButton);
@@ -324,6 +392,7 @@ document.addEventListener("DOMContentLoaded", function() {
     roomConfig = newConfig;
     updateConfigInputs(newConfig);
     updateCanvasSize(newConfig);
+    updateAttackControls();
     showStatus('Room settings updated!', 'success');
   });
 
@@ -338,6 +407,7 @@ document.addEventListener("DOMContentLoaded", function() {
     segmentSize = data.config.segmentSize;
     snakes = data.players;
     foods = data.food;
+    projectiles = data.projectiles || [];
     gameState = data.gameState;
     roomConfig = data.config;
     
@@ -357,10 +427,11 @@ document.addEventListener("DOMContentLoaded", function() {
     updateGameInfo(state);
   });
 
-  socket.on('gameFrame', (players, food, state) => {
+  socket.on('gameFrame', (players, food, state, projectilesData) => {
     snakes = players;
     foods = food;
     gameState = state;
+    projectiles = projectilesData || [];
     // Render only when we receive new data from server
     gameLoop();
   });
@@ -439,6 +510,7 @@ document.addEventListener("DOMContentLoaded", function() {
     canvasSizeInput.disabled = !enabled;
     segmentSizeInput.disabled = !enabled;
     countdownInput.disabled = !enabled;
+    attacksEnabledInput.disabled = !enabled;
   }
 
   function updateConfigInputs(config) {
@@ -448,6 +520,7 @@ document.addEventListener("DOMContentLoaded", function() {
     gameSpeedInput.value = config.gameSpeed;
     segmentSizeInput.value = config.segmentSize;
     countdownInput.value = config.countdownTime;
+    attacksEnabledInput.checked = config.attacksEnabled || false;
     
     const canvasSize = `${config.canvasWidth}x${config.canvasHeight}`;
     canvasSizeInput.value = canvasSize;
@@ -458,6 +531,14 @@ document.addEventListener("DOMContentLoaded", function() {
     canvas.height = config.canvasHeight;
     segmentSize = config.segmentSize;
     handleResize();
+  }
+
+  function updateAttackControls() {
+    if (roomConfig.attacksEnabled) {
+      showElement(attackControls);
+    } else {
+      hideElement(attackControls);
+    }
   }
 
   function saveConfiguration() {
@@ -475,7 +556,8 @@ document.addEventListener("DOMContentLoaded", function() {
       canvasWidth: parseInt(canvasSize[0]),
       canvasHeight: parseInt(canvasSize[1]),
       segmentSize: parseInt(segmentSizeInput.value),
-      countdownTime: parseInt(countdownInput.value)
+      countdownTime: parseInt(countdownInput.value),
+      attacksEnabled: attacksEnabledInput.checked
     };
 
     if (newConfig.minPlayers > newConfig.maxPlayers) {
@@ -514,9 +596,10 @@ document.addEventListener("DOMContentLoaded", function() {
     rooms.forEach(room => {
       const roomItem = document.createElement('li');
       roomItem.className = 'room-item';
+      const attacksStatus = room.config.attacksEnabled ? '⚔️' : '';
       roomItem.innerHTML = `
         <div class="room-info">
-          <strong>Room: ${room.id}</strong><br>
+          <strong>Room: ${room.id}</strong> ${attacksStatus}<br>
           Host: ${room.hostName}<br>
           Players: ${room.players}/${room.maxPlayers}
           <div class="room-config">
@@ -605,6 +688,13 @@ document.addEventListener("DOMContentLoaded", function() {
 
     if (foods) {
       drawEnhancedFood(ctx, foods, segmentSize);
+    }
+
+    // Draw projectiles
+    if (projectiles && projectiles.length > 0) {
+      projectiles.forEach(projectile => {
+        drawProjectile(ctx, projectile, segmentSize);
+      });
     }
   }
 

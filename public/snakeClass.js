@@ -53,6 +53,32 @@ class Snake {
         this.eatFood = true;
     }
     
+    canAttack() {
+      return this.segments.length >= 3 && !this.gameover;
+    }
+    
+    attack() {
+      if (!this.canAttack()) {
+        return null;
+      }
+      
+      const head = this.segments[0];
+      const projectile = {
+        x: head.x + (this.direction.x * this.segmentSize),
+        y: head.y + (this.direction.y * this.segmentSize),
+        direction: { ...this.direction },
+        playerId: this.id
+      };
+      
+      // Remove two segments
+      this.segments.pop();
+      if (this.segments.length > 1) {
+        this.segments.pop();
+      }
+      
+      return projectile;
+    }
+    
     GameOver() {
       this.gameover = true;
       this.direction.x = 0;

@@ -30,7 +30,8 @@ function validateRoomConfig(config) {
     canvasWidth: Math.max(400, Math.min(1600, parseInt(config.canvasWidth) || 1000)),
     canvasHeight: Math.max(300, Math.min(1000, parseInt(config.canvasHeight) || 600)),
     segmentSize: Math.max(5, Math.min(25, parseInt(config.segmentSize) || 10)),
-    countdownTime: Math.max(1, Math.min(10, parseInt(config.countdownTime) || 3))
+    countdownTime: Math.max(1, Math.min(10, parseInt(config.countdownTime) || 3)),
+    attacksEnabled: Boolean(config.attacksEnabled) || false
   };
 }
 
@@ -54,6 +55,7 @@ function createRoom(hostId, hostName) {
     config: defaultConfig,
     gameboard: [],
     food: { x: 0, y: 0, score: 1 },
+    projectiles: [],
     roundScores: {}
   });
   
@@ -168,6 +170,85 @@ function generateFood(room) {
   room.food = { x: foodX, y: foodY, score: scoreFood };
 }
 
+function createProjectile(room, player) {
+  if (!room.config.attacksEnabled || player.segments.length < 3) {
+    return false;
+  }
+  
+  // Check if player already has an active projectile
+  const existingProjectile = room.projectiles.find(p => p.playerId === player.id);
+  if (existingProjectile) {
+    return false;
+  }
+  
+  const head = player.segments[0];
+  const { segmentSize } = room.config;
+  
+  // Get player color
+  const playerColors = [
+    '#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', 
+    '#feca57', '#ff9ff3', '#54a0ff', '#fd79a8'
+  ];
+  const playerIndex = room.players.findIndex(p => p.id === player.id);
+  const color = playerColors[playerIndex % playerColors.length];
+  
+  // Create projectile
+  const projectile = {
+    id: Math.random().toString(36).substring(2, 9),
+    playerId: player.id,
+    x: head.x + (player.direction.x * segmentSize),
+    y: head.y + (player.direction.y * segmentSize),
+    direction: { ...player.direction },
+    color: color
+  };
+  
+  // Remove two segments from player
+  player.segments.pop();
+  if (player.segments.length > 1) {
+    player.segments.pop();
+  }
+  
+  room.projectiles.push(projectile);
+  return true;
+}
+
+function moveProjectiles(room) {
+  const { segmentSize, canvasWidth, canvasHeight } = room.config;
+  
+  room.projectiles = room.projectiles.filter(projectile => {
+    // Move projectile
+    projectile.x += projectile.direction.x * segmentSize;
+    projectile.y += projectile.direction.y * segmentSize;
+    
+    // Check boundaries
+    if (projectile.x < 0 || projectile.x >= canvasWidth || 
+        projectile.y < 0 || projectile.y >= canvasHeight) {
+      return false; // Remove projectile
+    }
+    
+    // Check collision with snakes
+    for (let player of room.players) {
+      if (!player.gameover && player.segments) {
+        for (let i = 0; i < player.segments.length; i++) {
+          const segment = player.segments[i];
+          if (segment.x === projectile.x && segment.y === projectile.y) {
+            if (i === 0) {
+              // Hit head - player dies
+              player.GameOver();
+            } else {
+              // Hit body - cut snake at impact point
+              player.segments = player.segments.slice(0, i);
+            }
+            return false; // Remove projectile
+          }
+        }
+      }
+    }
+    
+    return true; // Keep projectile
+  });
+}
+
 function initializeRoundScores(room) {
   room.players.forEach(player => {
     if (!room.roundScores[player.id]) {
@@ -234,6 +315,7 @@ function endGame(room) {
 
 function startNewRound(room) {
   room.gameState.downCounter = room.config.countdownTime;
+  room.projectiles = []; // Clear projectiles
   
   room.players.forEach((player, index) => {
     const spawnPos = getPlayerSpawnPosition(room, index);
@@ -265,6 +347,7 @@ function startGame(room) {
     io.to(room.id).emit('gameStart', {
       players: room.players,
       food: room.food,
+      projectiles: room.projectiles,
       config: room.config,
       gameState: room.gameState
     });
@@ -285,6 +368,11 @@ function gameLoop(room) {
   
   if (!room.gameboard || room.gameboard.length === 0) {
     resetGameBoard(room);
+  }
+  
+  // Move projectiles first
+  if (room.config.attacksEnabled) {
+    moveProjectiles(room);
   }
   
   room.players.forEach((player) => {
@@ -322,7 +410,7 @@ function gameLoop(room) {
   updateGameBoard(room);
   
   // Only emit if there are alive players to avoid unnecessary renders
-  io.to(room.id).emit('gameFrame', room.players, room.food, room.gameState);
+  io.to(room.id).emit('gameFrame', room.players, room.food, room.gameState, room.projectiles);
   
   // Check end conditions
   if (alivePlayers <= 1 && room.players.length > 1) {
@@ -479,6 +567,18 @@ io.on('connection', (socket) => {
     room.gameState.timeoutIdStartGame = setTimeout(() => startGame(room), 1000);
   });
 
+  socket.on('attack', () => {
+    if (!currentRoom) return;
+    
+    const room = getRoom(currentRoom);
+    if (!room || !room.gameState.playing || !room.config.attacksEnabled) return;
+    
+    const player = room.players.find(p => p.id === socket.id);
+    if (!player || player.gameover) return;
+    
+    createProjectile(room, player);
+  });
+
   socket.on('getRooms', () => {
     const availableRooms = Array.from(rooms.values())
       .filter(room => !room.gameState.playing && !room.finished && room.players.length < room.config.maxPlayers)
@@ -491,7 +591,8 @@ io.on('connection', (socket) => {
           maxRounds: room.config.maxRounds,
           gameSpeed: room.config.gameSpeed,
           canvasWidth: room.config.canvasWidth,
-          canvasHeight: room.config.canvasHeight
+          canvasHeight: room.config.canvasHeight,
+          attacksEnabled: room.config.attacksEnabled
         }
       }));
     socket.emit('roomsList', availableRooms);
@@ -538,6 +639,9 @@ io.on('connection', (socket) => {
       const playerName = room.players[playerIndex].name;
       room.players.splice(playerIndex, 1);
       console.log(`Player "${playerName}" disconnected from room ${currentRoom}`);
+      
+      // Remove player's projectiles
+      room.projectiles = room.projectiles.filter(p => p.playerId !== socket.id);
       
       delete room.roundScores[socket.id];
       
