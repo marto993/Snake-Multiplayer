@@ -21,6 +21,19 @@ document.addEventListener("DOMContentLoaded", function() {
   const gameStatus = document.getElementById('gameStatus');
   const roomInfo = document.getElementById('roomInfo');
 
+  // Configuration elements
+  const configPanel = document.getElementById('configPanel');
+  const toggleConfigButton = document.getElementById('toggleConfigButton');
+  const configSettings = document.getElementById('configSettings');
+  const saveConfigButton = document.getElementById('saveConfigButton');
+  const maxPlayersInput = document.getElementById('maxPlayersInput');
+  const minPlayersInput = document.getElementById('minPlayersInput');
+  const maxRoundsInput = document.getElementById('maxRoundsInput');
+  const gameSpeedInput = document.getElementById('gameSpeedInput');
+  const canvasSizeInput = document.getElementById('canvasSizeInput');
+  const segmentSizeInput = document.getElementById('segmentSizeInput');
+  const countdownInput = document.getElementById('countdownInput');
+
   document.addEventListener('keydown', handleKeyPress);
 
   const socket = io();
@@ -31,6 +44,8 @@ document.addEventListener("DOMContentLoaded", function() {
   let isConnected = false;
   let isHost = false;
   let currentRoomId = null;
+  let roomConfig = {};
+  let roomScores = {};
 
   // Socket events
   socket.on('connect', () => {
@@ -51,14 +66,18 @@ document.addEventListener("DOMContentLoaded", function() {
   socket.on('roomCreated', (data) => {
     currentRoomId = data.roomId;
     isHost = data.isHost;
+    roomConfig = data.config;
     showGameInterface();
+    updateConfigPanel();
     showStatus(`Room ${data.roomId} created!`, 'success');
   });
 
   socket.on('roomJoined', (data) => {
     currentRoomId = data.roomId;
     isHost = data.isHost;
+    roomConfig = data.config;
     showGameInterface();
+    updateConfigPanel();
     showStatus(`Joined room ${data.roomId}!`, 'success');
   });
 
@@ -72,42 +91,59 @@ document.addEventListener("DOMContentLoaded", function() {
       showStatus('You are now the host!', 'info');
     }
     updateHostControls();
+    updateConfigPanel();
   });
 
-  socket.on('updatePlayers', (players, state, roomData) => {
+  socket.on('updatePlayers', (players, state, config, roomData) => {
     snakes = players;
     gameState = state;
+    roomConfig = config;
     updatePlayerList(players);
     updateGameInfo(state);
     updateRoomInfo(roomData);
     updateHostControls();
+    updateConfigPanel();
     
-    if (players.length >= state.minPlayers && !state.playing && isHost) {
+    if (players.length >= config.minPlayers && !state.playing && isHost) {
       showElement(startGameButton);
     } else {
       hideElement(startGameButton);
     }
     
-    if (players.length < state.minPlayers) {
+    if (players.length < config.minPlayers) {
       showElement(waitingSpan);
-      showStatus(`Need ${state.minPlayers - players.length} more players`, 'info');
+      showStatus(`Need ${config.minPlayers - players.length} more players`, 'info');
     } else {
       hideElement(waitingSpan);
     }
   });
 
-  socket.on('gameStart', (players, food, canvasWidth, canvasHeight, segSize, state) => {
-    canvas.width = canvasWidth;
-    canvas.height = canvasHeight;
-    segmentSize = segSize;
-    snakes = players;
-    foods = food;
-    gameState = state;
+  socket.on('configUpdated', (newConfig) => {
+    roomConfig = newConfig;
+    updateConfigInputs(newConfig);
+    updateCanvasSize(newConfig);
+    showStatus('Room settings updated!', 'success');
+  });
+
+  socket.on('updateScores', (scores) => {
+    roomScores = scores;
+    updatePlayerList(snakes);
+  });
+
+  socket.on('gameStart', (data) => {
+    canvas.width = data.config.canvasWidth;
+    canvas.height = data.config.canvasHeight;
+    segmentSize = data.config.segmentSize;
+    snakes = data.players;
+    foods = data.food;
+    gameState = data.gameState;
+    roomConfig = data.config;
     
     hideElement(gameOverScreen);
     hideElement(startGameButton);
-    showStatus(`Round ${state.round} - Fight!`, 'success');
-    console.log(`Round ${state.round} started!`);
+    hideElement(configPanel);
+    showStatus(`Round ${data.gameState.round} - Fight!`, 'success');
+    console.log(`Round ${data.gameState.round} started!`);
   });
 
   socket.on('countdown', (count, state) => {
@@ -124,19 +160,26 @@ document.addEventListener("DOMContentLoaded", function() {
   });
 
   socket.on('roundEnd', (data) => {
+    roomScores = data.scores; // Update room scores
     showStatus(`Round ${data.round} finished!`, 'info');
     if (data.winner) {
       showStatus(`Round winner: ${data.winner.name}`, 'success');
     }
     
+    // Update round info and player list with total scores
+    updateGameInfo({ round: data.round + 1, maxRounds: roomConfig.maxRounds });
+    updatePlayerList(snakes); // This will now show total scores between rounds
+    
     if (data.nextRound) {
       setTimeout(() => {
         showStatus(`Preparing round ${data.round + 1}...`, 'info');
+        updateGameInfo({ round: data.round + 1, maxRounds: roomConfig.maxRounds });
       }, 2000);
     }
     
     if (isHost && data.nextRound) {
       showElement(startGameButton);
+      updateConfigPanel();
     }
   });
 
@@ -148,6 +191,7 @@ document.addEventListener("DOMContentLoaded", function() {
       showGameOverScreen(`Champion: ${data.winner.name}`, data.finalScores);
       if (isHost) {
         showElement(startGameButton);
+        updateConfigPanel();
       }
     }
   });
@@ -159,9 +203,85 @@ document.addEventListener("DOMContentLoaded", function() {
   socket.on('backToMenuSuccess', () => {
     currentRoomId = null;
     isHost = false;
+    roomConfig = {};
     showRoomSelection();
     showStatus('Returned to menu', 'info');
   });
+
+  // Configuration functions
+  function updateConfigPanel() {
+    if (currentRoomId && !gameState.playing) {
+      showElement(configPanel);
+      // Show/hide save button and disable inputs for non-hosts
+      if (isHost) {
+        showElement(saveConfigButton);
+        setConfigInputsEnabled(true);
+        toggleConfigButton.textContent = '⚙️ Room Settings';
+      } else {
+        hideElement(saveConfigButton);
+        setConfigInputsEnabled(false);
+        toggleConfigButton.textContent = '👁️ View Settings';
+      }
+    } else {
+      hideElement(configPanel);
+    }
+  }
+
+  function setConfigInputsEnabled(enabled) {
+    maxPlayersInput.disabled = !enabled;
+    minPlayersInput.disabled = !enabled;
+    maxRoundsInput.disabled = !enabled;
+    gameSpeedInput.disabled = !enabled;
+    canvasSizeInput.disabled = !enabled;
+    segmentSizeInput.disabled = !enabled;
+    countdownInput.disabled = !enabled;
+  }
+
+  function updateConfigInputs(config) {
+    maxPlayersInput.value = config.maxPlayers;
+    minPlayersInput.value = config.minPlayers;
+    maxRoundsInput.value = config.maxRounds;
+    gameSpeedInput.value = config.gameSpeed;
+    segmentSizeInput.value = config.segmentSize;
+    countdownInput.value = config.countdownTime;
+    
+    // Set canvas size
+    const canvasSize = `${config.canvasWidth}x${config.canvasHeight}`;
+    canvasSizeInput.value = canvasSize;
+  }
+
+  function updateCanvasSize(config) {
+    canvas.width = config.canvasWidth;
+    canvas.height = config.canvasHeight;
+    segmentSize = config.segmentSize;
+  }
+
+  function saveConfiguration() {
+    if (!isHost) {
+      showStatus('Only the host can modify settings', 'error');
+      return;
+    }
+
+    const canvasSize = canvasSizeInput.value.split('x');
+    const newConfig = {
+      maxPlayers: parseInt(maxPlayersInput.value),
+      minPlayers: parseInt(minPlayersInput.value),
+      maxRounds: parseInt(maxRoundsInput.value),
+      gameSpeed: parseInt(gameSpeedInput.value),
+      canvasWidth: parseInt(canvasSize[0]),
+      canvasHeight: parseInt(canvasSize[1]),
+      segmentSize: parseInt(segmentSizeInput.value),
+      countdownTime: parseInt(countdownInput.value)
+    };
+
+    // Validation
+    if (newConfig.minPlayers > newConfig.maxPlayers) {
+      showStatus('Min players cannot exceed max players', 'error');
+      return;
+    }
+
+    socket.emit('updateRoomConfig', newConfig);
+  }
 
   // UI Functions
   function showRoomSelection() {
@@ -196,6 +316,9 @@ document.addEventListener("DOMContentLoaded", function() {
           <strong>Room: ${room.id}</strong><br>
           Host: ${room.hostName}<br>
           Players: ${room.players}/${room.maxPlayers}
+          <div class="room-config">
+            ${room.config.maxRounds} rounds • ${room.config.canvasWidth}x${room.config.canvasHeight} • Speed: ${room.config.gameSpeed}ms
+          </div>
         </div>
         <button onclick="joinSpecificRoom('${room.id}')" class="join-room-btn">Join</button>
       `;
@@ -224,7 +347,7 @@ document.addEventListener("DOMContentLoaded", function() {
     socket.emit('getRooms');
   }
 
-  // Game functions (same as before)
+  // Game functions
   function drawGrid() {
     ctx.strokeStyle = '#e0e0e0';
     ctx.lineWidth = 0.5;
@@ -263,9 +386,9 @@ document.addEventListener("DOMContentLoaded", function() {
             
             if (isCurrentPlayer) {
               ctx.fillStyle = '#2f3640';
-              const eyeSize = 3;
+              const eyeSize = Math.max(2, segmentSize / 4);
               ctx.fillRect(segment.x + 3, segment.y + 3, eyeSize, eyeSize);
-              ctx.fillRect(segment.x + segmentSize - 6, segment.y + 3, eyeSize, eyeSize);
+              ctx.fillRect(segment.x + segmentSize - 3 - eyeSize, segment.y + 3, eyeSize, eyeSize);
             }
           } else {
             ctx.fillStyle = lightenColor(playerColor, 20);
@@ -289,7 +412,7 @@ document.addEventListener("DOMContentLoaded", function() {
       ctx.fill();
       
       ctx.fillStyle = '#fff';
-      ctx.font = 'bold 10px Arial';
+      ctx.font = `bold ${Math.max(8, segmentSize/2)}px Arial`;
       ctx.textAlign = 'center';
       ctx.fillText(foods.score, foods.x + segmentSize/2, foods.y + segmentSize/2 + 3);
     }
@@ -305,7 +428,19 @@ document.addEventListener("DOMContentLoaded", function() {
   function updatePlayerList(players) {
     playerList.innerHTML = '';
     
-    players.sort((a, b) => b.score - a.score).forEach((player, index) => {
+    // Sort by current score during game, or total score between rounds
+    const sortedPlayers = players.sort((a, b) => {
+      if (gameState.playing) {
+        return b.score - a.score;
+      } else {
+        // Show total scores between rounds
+        const aTotal = (roomScores && roomScores[a.id]) ? roomScores[a.id].totalScore : 0;
+        const bTotal = (roomScores && roomScores[b.id]) ? roomScores[b.id].totalScore : 0;
+        return bTotal - aTotal;
+      }
+    });
+    
+    sortedPlayers.forEach((player, index) => {
       const listItem = document.createElement('li');
       listItem.className = `player-item ${player.gameover ? 'eliminated' : ''} ${player.id === socket.id ? 'current-player' : ''}`;
       
@@ -319,7 +454,15 @@ document.addEventListener("DOMContentLoaded", function() {
       
       const score = document.createElement('span');
       score.className = 'player-score';
-      score.textContent = player.score;
+      
+      // Show current score during game, total score between rounds
+      if (gameState.playing) {
+        score.textContent = player.score;
+      } else {
+        const totalScore = (roomScores && roomScores[player.id]) ? roomScores[player.id].totalScore : 0;
+        const roundWins = (roomScores && roomScores[player.id]) ? roomScores[player.id].roundWins : 0;
+        score.innerHTML = `${totalScore}<br><small>${roundWins}W</small>`;
+      }
       
       const status = document.createElement('span');
       status.className = 'player-status';
@@ -335,8 +478,8 @@ document.addEventListener("DOMContentLoaded", function() {
   }
 
   function updateGameInfo(state) {
-    if (roundInfo) {
-      roundInfo.textContent = `Round ${state.round}/${state.maxRounds}`;
+    if (roundInfo && roomConfig.maxRounds) {
+      roundInfo.textContent = `Round ${state.round}/${roomConfig.maxRounds}`;
     }
   }
 
@@ -354,7 +497,6 @@ document.addEventListener("DOMContentLoaded", function() {
       finalMessage.textContent = winner ? `Champion: ${winner.name}` : 'Game finished';
     }
     
-    // Show final scores
     finalScoresList.innerHTML = '';
     const sortedScores = Object.values(finalScores).sort((a, b) => b.totalScore - a.totalScore);
     
@@ -435,6 +577,38 @@ document.addEventListener("DOMContentLoaded", function() {
     }
     socket.emit('joinRoom', { roomId, username });
   };
+
+  // Configuration event listeners
+  toggleConfigButton.addEventListener('click', () => {
+    if (configSettings.classList.contains('hidden')) {
+      showElement(configSettings);
+      toggleConfigButton.textContent = '▼ Room Settings';
+    } else {
+      hideElement(configSettings);
+      toggleConfigButton.textContent = '⚙️ Room Settings';
+    }
+  });
+
+  saveConfigButton.addEventListener('click', () => {
+    saveConfiguration();
+  });
+
+  // Validation event listeners
+  maxPlayersInput.addEventListener('change', () => {
+    const maxVal = parseInt(maxPlayersInput.value);
+    const minVal = parseInt(minPlayersInput.value);
+    if (minVal > maxVal) {
+      minPlayersInput.value = maxVal;
+    }
+  });
+
+  minPlayersInput.addEventListener('change', () => {
+    const maxVal = parseInt(maxPlayersInput.value);
+    const minVal = parseInt(minPlayersInput.value);
+    if (minVal > maxVal) {
+      minPlayersInput.value = maxVal;
+    }
+  });
 
   // Event listeners
   restartButton.addEventListener('click', () => {
