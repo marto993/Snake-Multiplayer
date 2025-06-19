@@ -408,7 +408,7 @@ document.addEventListener("DOMContentLoaded", function() {
       
       ctx.fillStyle = gradient;
       ctx.beginPath();
-      ctx.arc(foods.x + segmentSize/2, foods.y + segmentSize/2, foods.score * 1.5, 0, 2 * Math.PI);
+      ctx.arc(foods.x + segmentSize/2, foods.y + segmentSize/2, foods.score * 1.1, 0, 2 * Math.PI);
       ctx.fill();
       
       ctx.fillStyle = '#fff';
