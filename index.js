@@ -60,7 +60,7 @@ function createRoom(hostId, hostName) {
   room.food = {
     x: getRandomCoordinate(room.config.canvasWidth, room.config.segmentSize),
     y: getRandomCoordinate(room.config.canvasHeight, room.config.segmentSize),
-    score: Math.floor(Math.random() * 9) + 1
+    score: Math.floor(Math.random() * 9) + 3
   };
   
   return roomId;
@@ -171,7 +171,7 @@ function generateFood(room) {
     attempts++;
   } while (!verifyCoordinate(room, foodX, foodY) && attempts < maxAttempts);
   
-  const scoreFood = Math.floor(Math.random() * 9) + 1;
+  const scoreFood = Math.floor(Math.random() * 9) + 3;
   room.food = { x: foodX, y: foodY, score: scoreFood };
 }
 
