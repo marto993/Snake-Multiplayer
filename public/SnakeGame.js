@@ -720,10 +720,6 @@ document.addEventListener("DOMContentLoaded", function() {
 
   // Game functions with retro style
   function drawGrid() {
-    // Almost imperceptible retro grid
-    //ctx.strokeStyle = '#001100';
-    //ctx.lineWidth = 1;
-    
     for (let x = 0; x <= canvas.width; x += segmentSize) {
       ctx.beginPath();
       ctx.moveTo(x, 0);
