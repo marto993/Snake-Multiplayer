@@ -40,7 +40,7 @@ function serializePlayers(players) {
   return players.map(player => ({
     id: player.id,
     name: player.name,
-	color: player.color,
+    color: player.color,
     segments: [...player.segments],
     direction: { ...player.direction },
     score: player.score,
@@ -67,7 +67,8 @@ function validateRoomConfig(config) {
     canvasHeight: Math.max(300, Math.min(1000, parseInt(config.canvasHeight) || 600)),
     segmentSize: Math.max(5, Math.min(25, parseInt(config.segmentSize) || 10)),
     countdownTime: Math.max(1, Math.min(10, parseInt(config.countdownTime) || 3)),
-    attacksEnabled: Boolean(config.attacksEnabled)
+    attacksEnabled: Boolean(config.attacksEnabled),
+    roundTime: parseInt(config.roundTime) || 45 // Nuevo: tiempo de ronda en segundos
   };
 }
 
@@ -87,6 +88,8 @@ function createRoom(hostId, hostName) {
       timeoutIdStartGame: null,
       downCounter: defaultConfig.countdownTime,
       intervalId: null,
+      roundTimeLeft: defaultConfig.roundTime,
+      roundTimerId: null
     },
     config: defaultConfig,
     gameboard: [],
@@ -113,6 +116,7 @@ function deleteRoom(roomId) {
   if (room) {
     if (room.gameState.intervalId) clearInterval(room.gameState.intervalId);
     if (room.gameState.timeoutIdStartGame) clearTimeout(room.gameState.timeoutIdStartGame);
+    if (room.gameState.roundTimerId) clearInterval(room.gameState.roundTimerId);
     rooms.delete(roomId);
     console.log(`Room ${roomId} deleted`);
   }
@@ -186,7 +190,7 @@ function verifyCoordinate(room, x, y) {
 function generateFoods(room) {
   const { canvasWidth, canvasHeight, segmentSize } = room.config;
   const playerCount = room.players.length;
-  const foodCount = playerCount === 2 ? 5 : playerCount + 3;
+  const foodCount = playerCount === 2 ? 8 : playerCount + 6; // Más comida para partidas por tiempo
   
   room.foods = [];
   
@@ -231,13 +235,6 @@ function createProjectile(room, player) {
   const head = player.segments[0];
   const { segmentSize } = room.config;
   
-  const playerColors = [
-    '#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', 
-    '#feca57', '#ff9ff3', '#54a0ff', '#fd79a8'
-  ];
-  const playerIndex = room.players.findIndex(p => p.id === player.id);
-  const color = playerColors[playerIndex % playerColors.length];
-  
   const projectile = {
     id: Math.random().toString(36).substring(2, 9),
     playerId: player.id,
@@ -275,12 +272,20 @@ function moveProjectiles(room) {
         for (let i = 0; i < player.segments.length; i++) {
           const segment = player.segments[i];
           if (segment.x === projectile.x && segment.y === projectile.y) {
+            // Modificado: ya no mata, solo corta la snake
             if (i === 0) {
-              player.GameOver();
+              // Si golpea la cabeza, corta 3 segmentos
+              const segmentsToRemove = Math.min(3, player.segments.length - 1);
+              for (let j = 0; j < segmentsToRemove; j++) {
+                if (player.segments.length > 1) {
+                  player.segments.pop();
+                }
+              }
             } else {
+              // Si golpea el cuerpo, corta desde ese punto
               player.segments = player.segments.slice(0, i);
-              player.updateTargets();
             }
+            player.updateTargets();
             return false;
           }
         }
@@ -303,15 +308,50 @@ function initializeRoundScores(room) {
   });
 }
 
+function startRoundTimer(room) {
+  room.gameState.roundTimeLeft = room.config.roundTime;
+  
+  room.gameState.roundTimerId = setInterval(() => {
+    room.gameState.roundTimeLeft--;
+    
+    // Enviar tiempo restante a los clientes cada segundo
+    io.to(room.id).emit('roundTimeUpdate', room.gameState.roundTimeLeft);
+    
+    if (room.gameState.roundTimeLeft <= 0) {
+      clearInterval(room.gameState.roundTimerId);
+      room.gameState.roundTimerId = null;
+      endRound(room);
+    }
+  }, 1000);
+}
+
 function endRound(room) {
-  const alivePlayers = room.players.filter(p => !p.gameover);
-  const roundWinner = alivePlayers.length > 0 ? 
-    alivePlayers.reduce((prev, current) => (prev.score > current.score) ? prev : current) : null;
+  // Limpiar timers
+  if (room.gameState.intervalId) {
+    clearInterval(room.gameState.intervalId);
+    room.gameState.intervalId = null;
+  }
+  if (room.gameState.roundTimerId) {
+    clearInterval(room.gameState.roundTimerId);
+    room.gameState.roundTimerId = null;
+  }
+  
+  // Calcular puntajes basados en el tamaño de la snake
+  let roundWinner = null;
+  let maxSize = 0;
   
   room.players.forEach(player => {
+    const snakeSize = player.segments.length;
+    player.score = snakeSize; // El puntaje es el tamaño de la snake
+    
+    if (snakeSize > maxSize) {
+      maxSize = snakeSize;
+      roundWinner = player;
+    }
+    
     if (room.roundScores[player.id]) {
-      room.roundScores[player.id].totalScore += player.score;
-      if (player.id === roundWinner?.id) {
+      room.roundScores[player.id].totalScore += snakeSize;
+      if (player === roundWinner) {
         room.roundScores[player.id].roundWins++;
       }
     }
@@ -340,6 +380,11 @@ function endGame(room) {
     clearInterval(room.gameState.intervalId);
     room.gameState.intervalId = null;
   }
+  
+  if (room.gameState.roundTimerId) {
+    clearInterval(room.gameState.roundTimerId);
+    room.gameState.roundTimerId = null;
+  }
     
   const finalWinner = Object.values(room.roundScores).reduce((prev, current) => 
     (prev.totalScore > current.totalScore) ? prev : current
@@ -357,6 +402,7 @@ function endGame(room) {
 
 function startNewRound(room) {
   room.gameState.downCounter = room.config.countdownTime;
+  room.gameState.roundTimeLeft = room.config.roundTime;
   room.projectiles = [];
   
   room.players.forEach((player, index) => {
@@ -364,11 +410,11 @@ function startNewRound(room) {
     
     player.segments = [{ x: spawnPos.x, y: spawnPos.y }];
     player.direction = { x: 1, y: 0 };
-    player.score = 0;
+    player.score = 1; // Inicia con puntaje 1 (tamaño inicial)
     player.gameover = false;
     player.scoreLeftToGrow = 0;
     player.moveQueue = [];
-	player.updateInterpolationSpeed(room.config.gameSpeed);
+    player.updateInterpolationSpeed(room.config.gameSpeed);
     player.updateTargets();
   });
   
@@ -396,11 +442,15 @@ function startGame(room) {
       config: room.config,
       gameState: {
         playing: room.gameState.playing,
-        round: room.gameState.round
+        round: room.gameState.round,
+        roundTimeLeft: room.gameState.roundTimeLeft
       }
     });
     
-    room.gameState.intervalId = setInterval(() => gameLogicLoop(room), room.config.gameSpeed); //LOGIC_INTERVAL);
+    room.gameState.intervalId = setInterval(() => gameLogicLoop(room), room.config.gameSpeed);
+    
+    // Iniciar timer de ronda
+    startRoundTimer(room);
     
   } else {
     io.to(room.id).emit('countdown', room.gameState.downCounter, 
@@ -414,8 +464,7 @@ function gameLogicLoop(room) {
   if (!room.gameState.playing) return;
   
   const { canvasWidth, canvasHeight, segmentSize } = room.config;
-  let alivePlayers = 0;
-  let portalEvents = []; // Nuevo: tracking de portales
+  let portalEvents = [];
   
   if (!room.gameboard || room.gameboard.length === 0) {
     resetGameBoard(room);
@@ -427,13 +476,12 @@ function gameLogicLoop(room) {
   
   room.players.forEach((player) => {
     if (!player.gameover) {
-		player.processNextMove(); // Procesar siguiente movimiento de la cola
-      const prevHead = { ...player.segments[0] }; // Guardar posición anterior
+      player.processNextMove();
+      const prevHead = { ...player.segments[0] };
       player.moveLogic();
       const head = player.segments[0];
       
       if (!head) {
-        player.GameOver();
         return;
       }
       
@@ -470,11 +518,8 @@ function gameLogicLoop(room) {
         portalEvents.push({ playerId: player.id, type: 'vertical', from: 'bottom', to: 'top' });
       }
       
-      // Resto de la lógica de colisiones...
-      if (room.gameboard[headX] && room.gameboard[headX][headY] === 1) {
-        player.GameOver();
-      }
-      else if (room.gameboard[headX] && room.gameboard[headX][headY] === 2) {
+      // Modificado: Los jugadores pueden atravesarse - no hay restricción por colisión
+      if (room.gameboard[headX] && room.gameboard[headX][headY] === 2) {
         const eatenFoodIndex = room.foods.findIndex(food => 
           Math.floor(food.x / segmentSize) === headX && 
           Math.floor(food.y / segmentSize) === headY
@@ -505,7 +550,8 @@ function gameLogicLoop(room) {
         }
       }
       
-      if (!player.gameover) alivePlayers++;
+      // Actualizar puntaje basado en el tamaño actual
+      player.score = player.segments.length;
     }
   });
   
@@ -515,19 +561,14 @@ function gameLogicLoop(room) {
     players: serializePlayers(room.players),
     foods: [...room.foods],
     projectiles: [...room.projectiles],
-    portals: portalEvents, // Nuevo: enviar eventos de portal
+    portals: portalEvents,
     gameState: {
       playing: room.gameState.playing,
-      round: room.gameState.round
+      round: room.gameState.round,
+      roundTimeLeft: room.gameState.roundTimeLeft
     },
     timestamp: Date.now()
   });
-  
-  if (alivePlayers <= 1 && room.players.length > 1) {
-    clearInterval(room.gameState.intervalId);
-    room.gameState.intervalId = null;
-    setTimeout(() => endRound(room), 1000);
-  }
 }
 
 io.on('connection', (socket) => {
@@ -552,10 +593,10 @@ io.on('connection', (socket) => {
     
     const { canvasWidth, canvasHeight, segmentSize } = room.config;
     const spawnPos = getPlayerSpawnPosition(room, 0);
-	const playerColor = getPlayerColor(0);
+    const playerColor = getPlayerColor(0);
     const player = new Snake(socket.id, data.username.trim(), segmentSize, canvasWidth, canvasHeight, spawnPos.x, spawnPos.y, 1, 0, playerColor, room.config.gameSpeed);
-	player.moveQueue = []; 
-	room.players.push(player);
+    player.moveQueue = []; 
+    room.players.push(player);
     
     socket.emit('roomCreated', { 
       roomId, 
@@ -605,12 +646,11 @@ io.on('connection', (socket) => {
     const { canvasWidth, canvasHeight, segmentSize } = room.config;
     const playerIndex = room.players.length;
     const spawnPos = getPlayerSpawnPosition(room, playerIndex);
-	const playerColor = getPlayerColor(playerIndex);
+    const playerColor = getPlayerColor(playerIndex);
     
     const player = new Snake(socket.id, data.username.trim(), segmentSize, canvasWidth, canvasHeight, spawnPos.x, spawnPos.y, 1, 0, playerColor, room.config.gameSpeed);
-	player.moveQueue = []; // Asegurar que la cola esté inicializada
-	room.players.push(player);
-	
+    player.moveQueue = [];
+    room.players.push(player);
     
     initializeRoundScores(room);
     socket.emit('roomJoined', { 
@@ -641,6 +681,7 @@ io.on('connection', (socket) => {
     
     room.config = validConfig;
     room.gameState.downCounter = validConfig.countdownTime;
+    room.gameState.roundTimeLeft = validConfig.roundTime;
     
     room.players.forEach((player, index) => {
       const spawnPos = getPlayerSpawnPosition(room, index);
@@ -710,7 +751,8 @@ io.on('connection', (socket) => {
           gameSpeed: room.config.gameSpeed,
           canvasWidth: room.config.canvasWidth,
           canvasHeight: room.config.canvasHeight,
-          attacksEnabled: room.config.attacksEnabled
+          attacksEnabled: room.config.attacksEnabled,
+          roundTime: room.config.roundTime
         }
       }));
     socket.emit('roomsList', availableRooms);
@@ -781,6 +823,10 @@ io.on('connection', (socket) => {
         if (room.gameState.intervalId) {
           clearInterval(room.gameState.intervalId);
           room.gameState.intervalId = null;
+        }
+        if (room.gameState.roundTimerId) {
+          clearInterval(room.gameState.roundTimerId);
+          room.gameState.roundTimerId = null;
         }
         io.to(currentRoom).emit('gameError', 'Not enough players to continue');
       }

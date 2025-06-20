@@ -13,7 +13,7 @@ class Snake {
       ];
       this.direction = { x: directionX, y: directionY };
       this.eatFood = false;
-      this.score = 0;
+      this.score = 1; // Modificado: iniciar con puntaje 1 (tamaño inicial)
       this.gameover = false;
       this.scoreLeftToGrow = 0;
       
@@ -77,6 +77,9 @@ class Snake {
 		this.eatFood = false;
 	  }
 	  
+      // Modificado: Actualizar puntaje basado en el tamaño
+      this.score = this.segments.length;
+      
 	  // Actualizar targets para interpolación
 	  this.updateTargets();
 	}
@@ -95,6 +98,9 @@ class Snake {
         this.scoreLeftToGrow--;
         this.eatFood = false;
       }
+      
+      // Modificado: Actualizar puntaje basado en el tamaño
+      this.score = this.targetSegments.length;
       
       // Actualizar segments para compatibilidad
       this.segments = [...this.targetSegments];
@@ -190,9 +196,9 @@ class Snake {
 	}
   
     EatFood(scoreFood) {
-        this.score += scoreFood;
-        this.scoreLeftToGrow = scoreFood;
+        this.scoreLeftToGrow += scoreFood; // Modificado: acumular crecimiento
         this.eatFood = true;
+        // El puntaje se actualiza automáticamente en el método move()
     }
     
     canAttack() {
@@ -209,7 +215,8 @@ class Snake {
         x: head.x + (this.direction.x * this.segmentSize),
         y: head.y + (this.direction.y * this.segmentSize),
         direction: { ...this.direction },
-        playerId: this.id
+        playerId: this.id,
+        color: this.color
       };
       
       // Remove two segments
@@ -218,13 +225,19 @@ class Snake {
         this.segments.pop();
       }
       
+      // Modificado: Actualizar puntaje después del ataque
+      this.score = this.segments.length;
+      
       // Actualizar targets
       this.updateTargets();
       
       return projectile;
     }
     
+    // Modificado: GameOver ya no se usa en el nuevo sistema basado en tiempo
     GameOver() {
+      // Este método se mantiene por compatibilidad pero ya no se usa
+      // en el nuevo sistema donde las rondas terminan por tiempo
       this.gameover = true;
       this.direction.x = 0;
       this.direction.y = 0;
@@ -238,6 +251,25 @@ class Snake {
       this.renderSegments = [
         { x: 0, y: 0 }
       ];
+      this.score = 0;
+    }
+    
+    // Nuevo método para reiniciar la snake sin "morir"
+    reset(startX, startY, directionX = 1, directionY = 0) {
+      this.segments = [{ x: startX, y: startY }];
+      this.targetSegments = [{ x: startX, y: startY }];
+      this.renderSegments = [{ x: startX, y: startY }];
+      this.direction = { x: directionX, y: directionY };
+      this.score = 1;
+      this.gameover = false;
+      this.scoreLeftToGrow = 0;
+      this.moveQueue = [];
+      this.eatFood = false;
+    }
+    
+    // Método para obtener el puntaje actual (tamaño de la snake)
+    getCurrentScore() {
+      return this.segments.length;
     }
 }
 

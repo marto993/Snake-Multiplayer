@@ -402,6 +402,14 @@
             margin-bottom: 10px;
             text-transform: uppercase;
         }
+
+        #roundTimer {
+            font-size: 1.1em;
+            font-weight: bold;
+            color: #ff4040;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
         
         .controls-hint {
             background: #333;
@@ -604,6 +612,7 @@
                 <h2>🐍 Jugadores</h2>
                 <div id="roomInfo"></div>
                 <div id="roundInfo">Ronda 1/3</div>
+                <div id="roundTimer" class="hidden">Tiempo: 45s</div>
                 
                 <div id="configPanel" class="config-panel hidden">
                     <button id="toggleConfigButton" class="config-button">⚙️ Configuración</button>
@@ -619,6 +628,14 @@
                         <div class="config-row">
                             <span class="config-label">Rondas:</span>
                             <input type="number" id="maxRoundsInput" class="config-input" min="1" max="10" value="3">
+                        </div>
+                        <div class="config-row">
+                            <span class="config-label">Tiempo Ronda:</span>
+                            <select id="roundTimeInput" class="config-select">
+                                <option value="30">30s</option>
+                                <option value="45" selected>45s</option>
+                                <option value="60">60s</option>
+                            </select>
                         </div>
                         <div class="config-row">
                             <span class="config-label">Velocidad (ms):</span>
@@ -713,9 +730,9 @@
     </div>
 
     <div id="gameOverScreen" class="game-over-screen hidden">
-        <h1>🏆 JUEGO TERMINADO</h1>
+        <h1>🏆 RONDA TERMINADA</h1>
         <p id="scoreDisplay"></p>
-        <button id="restartButton">Jugar de Nuevo</button>
+        <button id="restartButton">Continuar</button>
     </div>
 
     <div id="finalScreen" class="final-screen hidden">

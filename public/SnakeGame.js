@@ -21,6 +21,7 @@ document.addEventListener("DOMContentLoaded", function() {
   const waitingSpan = document.getElementById('waitingSpan');
   const playerList = document.getElementById('playerList');
   const roundInfo = document.getElementById('roundInfo');
+  const roundTimer = document.getElementById('roundTimer');
   const gameStatus = document.getElementById('gameStatus');
   const roomInfo = document.getElementById('roomInfo');
   const attackControls = document.getElementById('attackControls');
@@ -32,6 +33,7 @@ document.addEventListener("DOMContentLoaded", function() {
   const maxPlayersInput = document.getElementById('maxPlayersInput');
   const minPlayersInput = document.getElementById('minPlayersInput');
   const maxRoundsInput = document.getElementById('maxRoundsInput');
+  const roundTimeInput = document.getElementById('roundTimeInput');
   const gameSpeedInput = document.getElementById('gameSpeedInput');
   const canvasSizeInput = document.getElementById('canvasSizeInput');
   const segmentSizeInput = document.getElementById('segmentSizeInput');
@@ -50,6 +52,7 @@ document.addEventListener("DOMContentLoaded", function() {
   let currentRoomId = null;
   let roomConfig = {};
   let roomScores = {};
+  let roundTimeLeft = 0;
 
   function lerp(start, end, factor) {
     return start + (end - start) * factor;
@@ -393,6 +396,7 @@ document.addEventListener("DOMContentLoaded", function() {
     projectiles = data.projectiles || [];
     gameState = data.gameState;
     roomConfig = data.config;
+    roundTimeLeft = data.gameState.roundTimeLeft || roomConfig.roundTime;
     
     isGameRunning = true;
     startRenderLoop();
@@ -400,7 +404,9 @@ document.addEventListener("DOMContentLoaded", function() {
     hideElement(gameOverScreen);
     hideElement(startGameButton);
     hideElement(configPanel);
-    showStatus(`Ronda ${data.gameState.round} - ¡Batalla!`, 'success');
+    showElement(roundTimer);
+    updateRoundTimer(roundTimeLeft);
+    showStatus(`Ronda ${data.gameState.round} - ¡Batalla por tiempo!`, 'success');
     console.log(`¡Ronda ${data.gameState.round} iniciada!`);
     
     gameLoop();
@@ -412,18 +418,22 @@ document.addEventListener("DOMContentLoaded", function() {
     updateGameInfo(state);
   });
 
-  socket.on('gameLogicFrame', (data) => {
-	// Detectar si mi jugador murió
-	const mySnake = snakes.find(s => s.id === socket.id);
-	const myNewSnake = data.players.find(p => p.id === socket.id);
+  // Nuevo: evento para actualizar tiempo de ronda
+  socket.on('roundTimeUpdate', (timeLeft) => {
+    roundTimeLeft = timeLeft;
+    updateRoundTimer(timeLeft);
+    
+    // Cambiar color del timer cuando queda poco tiempo
+    if (timeLeft <= 10) {
+      roundTimer.style.color = '#ff4040';
+      if (timeLeft <= 5) {
+        roundTimer.style.animation = 'shake 0.5s infinite';
+      }
+    }
+  });
 
-	if (mySnake && myNewSnake && !mySnake.gameover && myNewSnake.gameover) {
-		// Mi jugador acaba de morir
-		canvas.style.animation = 'shake 0.5s';
-		showStatus('💀 ¡HAS MUERTO!', 'error');
-		setTimeout(() => canvas.style.animation = '', 500);
-	}
-	
+  socket.on('gameLogicFrame', (data) => {
+	// Ya no detectamos muerte por colisión - las rondas terminan por tiempo
 	snakes.forEach(localSnake => {
 	const serverSnake = data.players.find(p => p.id === localSnake.id);
 		if (serverSnake) {
@@ -469,14 +479,24 @@ document.addEventListener("DOMContentLoaded", function() {
     foods = data.foods || [];
     gameState = data.gameState;
     projectiles = data.projectiles || [];
+    
+    // Actualizar tiempo de ronda si está disponible
+    if (data.gameState.roundTimeLeft !== undefined) {
+      roundTimeLeft = data.gameState.roundTimeLeft;
+      updateRoundTimer(roundTimeLeft);
+    }
   });
 
   socket.on('roundEnd', (data) => {
     stopRenderLoop();
     roomScores = data.scores;
-    showStatus(`¡Ronda ${data.round} terminada!`, 'info');
+    hideElement(roundTimer);
+    roundTimer.style.color = '#ff4040';
+    roundTimer.style.animation = '';
+    
+    showStatus(`¡Tiempo agotado! Ronda ${data.round} terminada`, 'info');
     if (data.winner) {
-      showStatus(`Ganador de la ronda: ${data.winner.name}`, 'success');
+      showStatus(`Ganador de la ronda: ${data.winner.name} (${data.winner.score} segmentos)`, 'success');
     }
     
     updateGameInfo({ round: data.round + 1, maxRounds: roomConfig.maxRounds });
@@ -497,6 +517,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
   socket.on('gameEnd', (data) => {
     stopRenderLoop();
+    hideElement(roundTimer);
     showStatus(`¡Juego Terminado! Campeón: ${data.winner.name}`, 'success');
     if (data.roomFinished) {
       showFinalScreen(data.winner, data.finalScores);
@@ -511,6 +532,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
   socket.on('roomFinished', (data) => {
     stopRenderLoop();
+    hideElement(roundTimer);
     showFinalScreen(null, data.finalScores, data.reason);
   });
 
@@ -519,9 +541,16 @@ document.addEventListener("DOMContentLoaded", function() {
     currentRoomId = null;
     isHost = false;
     roomConfig = {};
+    hideElement(roundTimer);
     showRoomSelection();
     showStatus('Regresaste al menú', 'info');
   });
+
+  function updateRoundTimer(timeLeft) {
+    if (roundTimer) {
+      roundTimer.textContent = `Tiempo: ${timeLeft}s`;
+    }
+  }
 
   function updateConfigPanel() {
     if (currentRoomId && !gameState.playing) {
@@ -544,6 +573,7 @@ document.addEventListener("DOMContentLoaded", function() {
     maxPlayersInput.disabled = !enabled;
     minPlayersInput.disabled = !enabled;
     maxRoundsInput.disabled = !enabled;
+    roundTimeInput.disabled = !enabled;
     gameSpeedInput.disabled = !enabled;
     canvasSizeInput.disabled = !enabled;
     segmentSizeInput.disabled = !enabled;
@@ -555,6 +585,7 @@ document.addEventListener("DOMContentLoaded", function() {
     maxPlayersInput.value = config.maxPlayers;
     minPlayersInput.value = config.minPlayers;
     maxRoundsInput.value = config.maxRounds;
+    roundTimeInput.value = config.roundTime || 45;
     gameSpeedInput.value = config.gameSpeed;
     segmentSizeInput.value = config.segmentSize;
     countdownInput.value = config.countdownTime;
@@ -590,6 +621,7 @@ document.addEventListener("DOMContentLoaded", function() {
       maxPlayers: parseInt(maxPlayersInput.value),
       minPlayers: parseInt(minPlayersInput.value),
       maxRounds: parseInt(maxRoundsInput.value),
+      roundTime: parseInt(roundTimeInput.value),
       gameSpeed: parseInt(gameSpeedInput.value),
       canvasWidth: parseInt(canvasSize[0]),
       canvasHeight: parseInt(canvasSize[1]),
@@ -640,7 +672,7 @@ document.addEventListener("DOMContentLoaded", function() {
           Anfitrión: ${room.hostName}<br>
           Jugadores: ${room.players}/${room.maxPlayers}
           <div class="room-config">
-            ${room.config.maxRounds} rondas • ${room.config.canvasWidth}x${room.config.canvasHeight} • Velocidad: ${room.config.gameSpeed}ms
+            ${room.config.maxRounds} rondas • ${room.config.roundTime}s • ${room.config.canvasWidth}x${room.config.canvasHeight} • Velocidad: ${room.config.gameSpeed}ms
           </div>
         </div>
         <button onclick="joinSpecificRoom('${room.id}')" class="join-room-btn">Unirse</button>
@@ -735,9 +767,10 @@ document.addEventListener("DOMContentLoaded", function() {
   function updatePlayerList(players) {
     playerList.innerHTML = '';
     
+    // Modificado: Ordenar por puntaje actual (tamaño de snake) durante el juego
     const sortedPlayers = players.sort((a, b) => {
       if (gameState.playing) {
-        return b.score - a.score;
+        return b.score - a.score; // Puntaje = tamaño de la snake
       } else {
         const aTotal = (roomScores && roomScores[a.id]) ? roomScores[a.id].totalScore : 0;
         const bTotal = (roomScores && roomScores[b.id]) ? roomScores[b.id].totalScore : 0;
@@ -761,7 +794,7 @@ document.addEventListener("DOMContentLoaded", function() {
       score.className = 'player-score';
       
       if (gameState.playing) {
-        score.textContent = player.score;
+        score.textContent = player.score + ' segs'; // Mostrar tamaño de snake
       } else {
         const totalScore = (roomScores && roomScores[player.id]) ? roomScores[player.id].totalScore : 0;
         const roundWins = (roomScores && roomScores[player.id]) ? roomScores[player.id].roundWins : 0;
