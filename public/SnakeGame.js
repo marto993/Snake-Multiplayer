@@ -228,7 +228,8 @@ document.addEventListener("DOMContentLoaded", function() {
       serverSnake.segments[0].x,
       serverSnake.segments[0].y,
       serverSnake.direction.x,
-      serverSnake.direction.y
+      serverSnake.direction.y,
+	  serverSnake.color
     );
     
     snake.segments = serverSnake.segments.map(seg => ({ ...seg }));
@@ -335,6 +336,7 @@ document.addEventListener("DOMContentLoaded", function() {
         existingSnake.score = serverPlayer.score;
         existingSnake.gameover = serverPlayer.gameover;
         existingSnake.scoreLeftToGrow = serverPlayer.scoreLeftToGrow;
+		existingSnake.color = serverPlayer.color;
         return existingSnake;
       } else {
         return createLocalSnake(serverPlayer);
@@ -427,6 +429,7 @@ document.addEventListener("DOMContentLoaded", function() {
 			localSnake.score = serverSnake.score;
 			localSnake.gameover = serverSnake.gameover;
 			localSnake.scoreLeftToGrow = serverSnake.scoreLeftToGrow;
+			localSnake.color = serverSnake.color;
 		}
 	});    
     const serverProjectiles = data.projectiles || [];
@@ -676,7 +679,7 @@ document.addEventListener("DOMContentLoaded", function() {
     snakes.forEach((snake, index) => {
       if (!snake.gameover && snake.getRenderSegments) {
         const isCurrentPlayer = snake.id === socket.id;
-        const baseColor = retroColors.snake[index % retroColors.snake.length];
+        const baseColor = snake.color;
         const renderSegments = snake.getRenderSegments();
         
         renderSegments.forEach((segment, segIndex) => {

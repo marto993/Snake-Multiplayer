@@ -1,7 +1,8 @@
 class Snake {
-    constructor(ID, playerName, segmentSize, canvasWidht, canvasHeight, startX, startY, directionX, directionY) {
+    constructor(ID, playerName, segmentSize, canvasWidht, canvasHeight, startX, startY, directionX, directionY, playerColor = '#00ff41') {
       this.id = ID;
       this.name = playerName;
+	  this.color = playerColor;
       this.canvaswidht = canvasWidht;
       this.canvasheight = canvasHeight;
 

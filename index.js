@@ -8,6 +8,30 @@ const server = http.createServer(app);
 const io = socketIO(server);
 const port = process.env.PORT || 3000;
 
+// Colores fijos para jugadores
+const PLAYER_COLORS = [
+  '#00ff41', // Verde brillante
+  '#ff0080', // Rosa/magenta
+  '#00ffff', // Cian
+  '#ffff00', // Amarillo
+  '#ff4040', // Rojo
+  '#8040ff', // Púrpura
+  '#40ff80', // Verde claro
+  '#ff8040', // Naranja
+  '#4080ff', // Azul
+  '#ff40ff', // Magenta claro
+  '#80ff40', // Lima
+  '#ff4080', // Rosa fuerte
+  '#4040ff', // Azul profundo
+  '#ffff80', // Amarillo claro
+  '#80ffff', // Cian claro
+  '#ff8080'  // Rosa claro
+];
+
+function getPlayerColor(playerIndex) {
+  return PLAYER_COLORS[playerIndex % PLAYER_COLORS.length];
+}
+
 app.use(express.static('public'));
 
 let rooms = new Map();
@@ -19,6 +43,7 @@ function serializePlayers(players) {
   return players.map(player => ({
     id: player.id,
     name: player.name,
+	color: player.color,
     segments: [...player.segments],
     direction: { ...player.direction },
     score: player.score,
@@ -224,7 +249,7 @@ function createProjectile(room, player) {
     x: head.x + (player.direction.x * segmentSize),
     y: head.y + (player.direction.y * segmentSize),
     direction: { ...player.direction },
-    color: color
+    color: player.color
   };
   
   player.segments.pop();
@@ -547,9 +572,9 @@ io.on('connection', (socket) => {
     
     const { canvasWidth, canvasHeight, segmentSize } = room.config;
     const spawnPos = getPlayerSpawnPosition(room, 0);
-    const player = new Snake(socket.id, data.username.trim(), segmentSize, canvasWidth, canvasHeight, 
-      spawnPos.x, spawnPos.y, 1, 0);
-    room.players.push(player);
+	const playerColor = getPlayerColor(0);
+    const player = new Snake(socket.id, data.username.trim(), segmentSize, canvasWidth, canvasHeight, spawnPos.x, spawnPos.y, 1, 0, playerColor);
+	room.players.push(player);
     
     socket.emit('roomCreated', { 
       roomId, 
@@ -599,10 +624,10 @@ io.on('connection', (socket) => {
     const { canvasWidth, canvasHeight, segmentSize } = room.config;
     const playerIndex = room.players.length;
     const spawnPos = getPlayerSpawnPosition(room, playerIndex);
+	const playerColor = getPlayerColor(playerIndex);
     
-    const player = new Snake(socket.id, data.username.trim(), segmentSize, canvasWidth, canvasHeight, 
-      spawnPos.x, spawnPos.y, 1, 0);
-    room.players.push(player);
+    const player = new Snake(socket.id, data.username.trim(), segmentSize, canvasWidth, canvasHeight, spawnPos.x, spawnPos.y, 1, 0, playerColor);
+	room.players.push(player);
     
     initializeRoundScores(room);
     socket.emit('roomJoined', { 
