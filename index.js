@@ -36,8 +36,8 @@ app.use(express.static('public'));
 
 let rooms = new Map();
 
-const LOGIC_INTERVAL = 83; // ~12 FPS
-const SYNC_INTERVAL = 33;  // ~30 FPS
+const LOGIC_INTERVAL = 33//83; // ~12 FPS
+const SYNC_INTERVAL = 33//33;  // ~30 FPS
 
 function serializePlayers(players) {
   return players.map(player => ({
