@@ -407,18 +407,28 @@ document.addEventListener("DOMContentLoaded", function() {
   });
 
   socket.on('gameLogicFrame', (data) => {
-    snakes.forEach(localSnake => {
-      const serverSnake = data.players.find(p => p.id === localSnake.id);
-      if (serverSnake) {
-        localSnake.targetSegments = serverSnake.segments.map(seg => ({ ...seg }));
-        localSnake.segments = serverSnake.segments.map(seg => ({ ...seg }));
-        localSnake.direction = { ...serverSnake.direction };
-        localSnake.score = serverSnake.score;
-        localSnake.gameover = serverSnake.gameover;
-        localSnake.scoreLeftToGrow = serverSnake.scoreLeftToGrow;
-      }
-    });
-    
+	snakes.forEach(localSnake => {
+	const serverSnake = data.players.find(p => p.id === localSnake.id);
+		if (serverSnake) {
+			// Verificar si hubo portal para esta serpiente
+			const portalEvent = data.portals && data.portals.find(p => p.playerId === localSnake.id);
+
+			if (portalEvent) {
+				// Portal detectado - saltar directamente sin interpolación
+				localSnake.targetSegments = serverSnake.segments.map(seg => ({ ...seg }));
+				localSnake.segments = serverSnake.segments.map(seg => ({ ...seg }));
+				localSnake.renderSegments = serverSnake.segments.map(seg => ({ ...seg }));
+			} else {
+				// Movimiento normal con interpolación
+				localSnake.targetSegments = serverSnake.segments.map(seg => ({ ...seg }));
+				localSnake.segments = serverSnake.segments.map(seg => ({ ...seg }));
+			}
+			localSnake.direction = { ...serverSnake.direction };
+			localSnake.score = serverSnake.score;
+			localSnake.gameover = serverSnake.gameover;
+			localSnake.scoreLeftToGrow = serverSnake.scoreLeftToGrow;
+		}
+	});    
     const serverProjectiles = data.projectiles || [];
     
     clientProjectiles.forEach(clientProjectile => {

@@ -400,6 +400,7 @@ function gameLogicLoop(room) {
   
   const { canvasWidth, canvasHeight, segmentSize } = room.config;
   let alivePlayers = 0;
+  let portalEvents = []; // Nuevo: tracking de portales
   
   if (!room.gameboard || room.gameboard.length === 0) {
     resetGameBoard(room);
@@ -411,6 +412,7 @@ function gameLogicLoop(room) {
   
   room.players.forEach((player) => {
     if (!player.gameover) {
+      const prevHead = { ...player.segments[0] }; // Guardar posición anterior
       player.moveLogic();
       const head = player.segments[0];
       
@@ -419,18 +421,44 @@ function gameLogicLoop(room) {
         return;
       }
       
-      const headX = Math.floor(head.x / segmentSize);
-      const headY = Math.floor(head.y / segmentSize);
+      const gridWidth = Math.floor(canvasWidth / segmentSize);
+      const gridHeight = Math.floor(canvasHeight / segmentSize);
       
-      if (headX < 0 || headX >= Math.floor(canvasWidth/segmentSize) || 
-          headY < 0 || headY >= Math.floor(canvasHeight/segmentSize)) {
-        player.GameOver();
+      let headX = Math.floor(head.x / segmentSize);
+      let headY = Math.floor(head.y / segmentSize);
+      let portalOccurred = false;
+      
+      // Portal horizontal (izquierda/derecha)
+      if (headX < 0) {
+        headX = gridWidth - 1;
+        head.x = headX * segmentSize;
+        portalOccurred = true;
+        portalEvents.push({ playerId: player.id, type: 'horizontal', from: 'left', to: 'right' });
+      } else if (headX >= gridWidth) {
+        headX = 0;
+        head.x = headX * segmentSize;
+        portalOccurred = true;
+        portalEvents.push({ playerId: player.id, type: 'horizontal', from: 'right', to: 'left' });
       }
-      else if (room.gameboard[headX] && room.gameboard[headX][headY] === 1) {
+      
+      // Portal vertical (arriba/abajo)
+      if (headY < 0) {
+        headY = gridHeight - 1;
+        head.y = headY * segmentSize;
+        portalOccurred = true;
+        portalEvents.push({ playerId: player.id, type: 'vertical', from: 'top', to: 'bottom' });
+      } else if (headY >= gridHeight) {
+        headY = 0;
+        head.y = headY * segmentSize;
+        portalOccurred = true;
+        portalEvents.push({ playerId: player.id, type: 'vertical', from: 'bottom', to: 'top' });
+      }
+      
+      // Resto de la lógica de colisiones...
+      if (room.gameboard[headX] && room.gameboard[headX][headY] === 1) {
         player.GameOver();
       }
       else if (room.gameboard[headX] && room.gameboard[headX][headY] === 2) {
-        // Check which food was eaten
         const eatenFoodIndex = room.foods.findIndex(food => 
           Math.floor(food.x / segmentSize) === headX && 
           Math.floor(food.y / segmentSize) === headY
@@ -439,11 +467,8 @@ function gameLogicLoop(room) {
         if (eatenFoodIndex !== -1) {
           const eatenFood = room.foods[eatenFoodIndex];
           player.EatFood(eatenFood.score);
-          
-          // Remove eaten food and generate new one
           room.foods.splice(eatenFoodIndex, 1);
           
-          // Generate replacement food
           let foodX, foodY;
           let attempts = 0;
           const maxAttempts = 100;
@@ -474,6 +499,7 @@ function gameLogicLoop(room) {
     players: serializePlayers(room.players),
     foods: [...room.foods],
     projectiles: [...room.projectiles],
+    portals: portalEvents, // Nuevo: enviar eventos de portal
     gameState: {
       playing: room.gameState.playing,
       round: room.gameState.round

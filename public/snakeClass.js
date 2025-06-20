@@ -23,22 +23,40 @@ class Snake {
     }
     
     move() {
-      const head = { ...this.segments[0] };
-      head.x += this.direction.x * this.segmentSize;
-      head.y += this.direction.y * this.segmentSize;
-      
-      this.segments.unshift(head);
-  
-      if (this.scoreLeftToGrow === 0) {
-        this.segments.pop();
-      } else {
-        this.scoreLeftToGrow--;
-        this.eatFood = false;
-      }
-      
-      // Actualizar targets para interpolación
-      this.updateTargets();
-    }
+	  const head = { ...this.segments[0] };
+	  head.x += this.direction.x * this.segmentSize;
+	  head.y += this.direction.y * this.segmentSize;
+	  
+	  // *** LÓGICA DE PORTALES PARA EL CLIENTE ***
+	  const gridWidth = Math.floor(this.canvaswidht / this.segmentSize);
+	  const gridHeight = Math.floor(this.canvasheight / this.segmentSize);
+	  
+	  // Portal horizontal (izquierda/derecha)
+	  if (head.x < 0) {
+		head.x = (gridWidth - 1) * this.segmentSize;
+	  } else if (head.x >= this.canvaswidht) {
+		head.x = 0;
+	  }
+	  
+	  // Portal vertical (arriba/abajo)
+	  if (head.y < 0) {
+		head.y = (gridHeight - 1) * this.segmentSize;
+	  } else if (head.y >= this.canvasheight) {
+		head.y = 0;
+	  }
+	  
+	  this.segments.unshift(head);
+
+	  if (this.scoreLeftToGrow === 0) {
+		this.segments.pop();
+	  } else {
+		this.scoreLeftToGrow--;
+		this.eatFood = false;
+	  }
+	  
+	  // Actualizar targets para interpolación
+	  this.updateTargets();
+	}
     
     // Nueva función para lógica de movimiento (servidor)
     moveLogic() {
@@ -67,31 +85,43 @@ class Snake {
     }
     
     // Interpolación para renderizado suave (Fase 1)
-    updateRenderPosition(deltaTime = 16) {
-      if (this.gameover || this.targetSegments.length === 0) {
-        this.renderSegments = this.segments.map(seg => ({ ...seg }));
-        return;
-      }
-      
-      // Asegurar que renderSegments tenga el mismo tamaño que targetSegments
-      while (this.renderSegments.length < this.targetSegments.length) {
-        this.renderSegments.push({ ...this.targetSegments[this.renderSegments.length] });
-      }
-      while (this.renderSegments.length > this.targetSegments.length) {
-        this.renderSegments.pop();
-      }
-      
-      // Interpolar cada segmento hacia su target
-      this.renderSegments = this.renderSegments.map((renderSeg, index) => {
-        if (index >= this.targetSegments.length) return renderSeg;
-        
-        const target = this.targetSegments[index];
-        return {
-          x: this.lerp(renderSeg.x, target.x, this.interpolationSpeed),
-          y: this.lerp(renderSeg.y, target.y, this.interpolationSpeed)
-        };
-      });
-    }
+	updateRenderPosition(deltaTime = 16) {
+		if (this.gameover || this.targetSegments.length === 0) {
+		this.renderSegments = this.segments.map(seg => ({ ...seg }));
+		return;
+		}
+
+		// Asegurar que renderSegments tenga el mismo tamaño que targetSegments
+		while (this.renderSegments.length < this.targetSegments.length) {
+		this.renderSegments.push({ ...this.targetSegments[this.renderSegments.length] });
+		}
+		while (this.renderSegments.length > this.targetSegments.length) {
+		this.renderSegments.pop();
+		}
+
+		// Detectar portales y manejar interpolación especial
+		this.renderSegments = this.renderSegments.map((renderSeg, index) => {
+		if (index >= this.targetSegments.length) return renderSeg;
+
+		const target = this.targetSegments[index];
+
+		// Detectar salto de portal (diferencia grande en posición)
+		const deltaX = Math.abs(target.x - renderSeg.x);
+		const deltaY = Math.abs(target.y - renderSeg.y);
+		const maxNormalMove = this.segmentSize * 2; // Máximo movimiento normal
+
+		// Si detectamos un portal, saltar directamente sin interpolación
+		if (deltaX > maxNormalMove || deltaY > maxNormalMove) {
+		  return { x: target.x, y: target.y };
+		}
+
+		// Interpolación normal
+		return {
+		  x: this.lerp(renderSeg.x, target.x, this.interpolationSpeed),
+		  y: this.lerp(renderSeg.y, target.y, this.interpolationSpeed)
+		};
+		});
+	}
     
     // Función de interpolación lineal
     lerp(start, end, factor) {
