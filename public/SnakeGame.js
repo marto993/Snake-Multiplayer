@@ -1,8 +1,5 @@
 document.addEventListener("DOMContentLoaded", function() {
-  // Variables de renderizado - DECLARADAS PRIMERO
   let renderLoop = null;
-  let lastLogicUpdate = 0;
-  let lastFrameTime = 0;
   let isGameRunning = false;
 
   const canvas = document.getElementById("game");
@@ -28,7 +25,6 @@ document.addEventListener("DOMContentLoaded", function() {
   const roomInfo = document.getElementById('roomInfo');
   const attackControls = document.getElementById('attackControls');
 
-  // Configuration elements
   const configPanel = document.getElementById('configPanel');
   const toggleConfigButton = document.getElementById('toggleConfigButton');
   const configSettings = document.getElementById('configSettings');
@@ -42,37 +38,32 @@ document.addEventListener("DOMContentLoaded", function() {
   const countdownInput = document.getElementById('countdownInput');
   const attacksEnabledInput = document.getElementById('attacksEnabledInput');
 
-  // Initialize socket connection
   const socket = io();
   let gameState = { playing: false, round: 1 };
   let segmentSize = 20;
   let snakes = [];
-  let foods = {};
+  let foods = [];
   let projectiles = [];
-  let clientProjectiles = []; // Array de proyectiles interpolados
+  let clientProjectiles = [];
   let isConnected = false;
   let isHost = false;
   let currentRoomId = null;
   let roomConfig = {};
   let roomScores = {};
 
-  // Función lerp (linear interpolation)
   function lerp(start, end, factor) {
     return start + (end - start) * factor;
   }
 
-  // Clase Projectile para interpolación (similar a Snake)
   function ClientProjectile(serverProjectile) {
     this.id = serverProjectile.id;
     this.playerId = serverProjectile.playerId;
     this.color = serverProjectile.color;
     this.direction = { ...serverProjectile.direction };
     
-    // Posiciones target (del servidor)
     this.targetX = serverProjectile.x;
     this.targetY = serverProjectile.y;
     
-    // Posiciones de renderizado (interpoladas)
     this.renderX = serverProjectile.prevX || serverProjectile.x;
     this.renderY = serverProjectile.prevY || serverProjectile.y;
     
@@ -90,9 +81,7 @@ document.addEventListener("DOMContentLoaded", function() {
     this.direction = { ...serverProjectile.direction };
     this.color = serverProjectile.color;
   };
-  let interpolatedProjectiles = []; // Para interpolación de proyectiles
 
-  // Retro color palette
   const retroColors = {
     snake: ['#00ff41', '#ff0080', '#00ffff', '#ffff00', '#ff4040', '#8040ff', '#40ff80', '#ff8040'],
     background: '#000000',
@@ -102,7 +91,6 @@ document.addEventListener("DOMContentLoaded", function() {
     projectile: '#ffff00'
   };
 
-  // Enhanced rendering functions with retro style
   function drawRetroRect(ctx, x, y, width, height, color, glowColor = null) {
     ctx.fillStyle = color;
     ctx.fillRect(x, y, width, height);
@@ -120,23 +108,18 @@ document.addEventListener("DOMContentLoaded", function() {
     const padding = 1;
     const innerSize = size - (padding * 2);
     
-    // Main segment
     drawRetroRect(ctx, x + padding, y + padding, innerSize, innerSize, color);
     
-    // Head specific features
     if (isHead) {
-      // Border for head
       ctx.strokeStyle = isCurrentPlayer ? '#ffffff' : '#000000';
       ctx.lineWidth = 1;
       ctx.strokeRect(x + padding, y + padding, innerSize, innerSize);
       
-      // Simple dot eyes for retro style
       if (direction) {
         drawRetroEyes(ctx, x, y, size, direction);
       }
     }
     
-    // Simple border
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 1;
     ctx.strokeRect(x + padding, y + padding, innerSize, innerSize);
@@ -147,10 +130,9 @@ document.addEventListener("DOMContentLoaded", function() {
     const centerY = projectile.renderY + segmentSize / 2;
     const size = segmentSize * 0.6;
     
-    // Simple diamond shape for projectiles
     ctx.save();
     ctx.translate(centerX, centerY);
-    ctx.rotate(Math.PI / 4); // 45 degree rotation for diamond
+    ctx.rotate(Math.PI / 4);
     
     drawRetroRect(ctx, -size/2, -size/2, size, size, projectile.color || retroColors.projectile, '#ffff80');
     
@@ -161,32 +143,30 @@ document.addEventListener("DOMContentLoaded", function() {
     const eyeSize = Math.max(2, size * 0.2);
     const eyeOffset = size * 0.3;
     
-    // Eye positions based on direction
     let leftEyeX, leftEyeY, rightEyeX, rightEyeY;
     
-    if (direction.x === 1) { // Moving right
+    if (direction.x === 1) {
       leftEyeX = x + size - eyeOffset;
       leftEyeY = y + eyeOffset;
       rightEyeX = x + size - eyeOffset;
       rightEyeY = y + size - eyeOffset;
-    } else if (direction.x === -1) { // Moving left
+    } else if (direction.x === -1) {
       leftEyeX = x + eyeOffset;
       leftEyeY = y + eyeOffset;
       rightEyeX = x + eyeOffset;
       rightEyeY = y + size - eyeOffset;
-    } else if (direction.y === -1) { // Moving up
+    } else if (direction.y === -1) {
       leftEyeX = x + eyeOffset;
       leftEyeY = y + eyeOffset;
       rightEyeX = x + size - eyeOffset;
       rightEyeY = y + eyeOffset;
-    } else { // Moving down
+    } else {
       leftEyeX = x + eyeOffset;
       leftEyeY = y + size - eyeOffset;
       rightEyeX = x + size - eyeOffset;
       rightEyeY = y + size - eyeOffset;
     }
     
-    // Draw simple square eyes
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(leftEyeX - eyeSize/2, leftEyeY - eyeSize/2, eyeSize, eyeSize);
     ctx.fillRect(rightEyeX - eyeSize/2, rightEyeY - eyeSize/2, eyeSize, eyeSize);
@@ -196,12 +176,10 @@ document.addEventListener("DOMContentLoaded", function() {
     const padding = 2;
     const size = segmentSize - (padding * 2);
     
-    // Pulsing effect
     const pulse = Math.sin(Date.now() * 0.01) * 0.1 + 1;
     const pulseSize = size * pulse;
     const offset = (size - pulseSize) / 2;
     
-    // Main food body with glow
     drawRetroRect(
       ctx, 
       food.x + padding + offset, 
@@ -212,7 +190,6 @@ document.addEventListener("DOMContentLoaded", function() {
       retroColors.foodGlow
     );
     
-    // Score text
     ctx.fillStyle = '#ffffff';
     ctx.font = `bold ${Math.max(8, segmentSize * 0.4)}px monospace`;
     ctx.textAlign = 'center';
@@ -221,14 +198,12 @@ document.addEventListener("DOMContentLoaded", function() {
     const centerX = food.x + segmentSize / 2;
     const centerY = food.y + segmentSize / 2;
     
-    // Text outline
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 2;
     ctx.strokeText(food.score, centerX, centerY);
     ctx.fillText(food.score, centerX, centerY);
   }
 
-  // Keyboard handling
   document.addEventListener('keydown', handleKeyPress);
 
   function handleKeyPress(event) {
@@ -237,13 +212,12 @@ document.addEventListener("DOMContentLoaded", function() {
     if (key >= 37 && key <= 40 && isConnected && gameState.playing) {
       event.preventDefault();
       socket.emit('newMove', { key });
-    } else if (key === 32 && isConnected && gameState.playing && roomConfig.attacksEnabled) { // Spacebar
+    } else if (key === 32 && isConnected && gameState.playing && roomConfig.attacksEnabled) {
       event.preventDefault();
       socket.emit('attack');
     }
   }
 
-  // Fase 1: Crear instancias Snake locales para interpolación
   function createLocalSnake(serverSnake) {
     const snake = new Snake(
       serverSnake.id,
@@ -257,7 +231,6 @@ document.addEventListener("DOMContentLoaded", function() {
       serverSnake.direction.y
     );
     
-    // Copiar estado del servidor
     snake.segments = serverSnake.segments.map(seg => ({ ...seg }));
     snake.targetSegments = serverSnake.segments.map(seg => ({ ...seg }));
     snake.renderSegments = serverSnake.segments.map(seg => ({ ...seg }));
@@ -269,28 +242,21 @@ document.addEventListener("DOMContentLoaded", function() {
     return snake;
   }
 
-  // Fase 1: Loop de renderizado a 60 FPS
   function startRenderLoop() {
-    if (renderLoop) return; // Ya está ejecutándose
+    if (renderLoop) return;
     
-    function render(currentTime) {
-      const deltaTime = currentTime - lastFrameTime;
-      lastFrameTime = currentTime;
-      
+    function render() {
       if (isGameRunning && gameState.playing) {
-        // Interpolar posiciones de todas las serpientes
         snakes.forEach(snake => {
           if (snake.updateRenderPosition) {
-            snake.updateRenderPosition(deltaTime);
+            snake.updateRenderPosition();
           }
         });
         
-        // Interpolar proyectiles (igual que snakes)
         clientProjectiles.forEach(projectile => {
           projectile.updateRenderPosition();
         });
         
-        // Renderizar frame
         gameLoop();
       }
       
@@ -302,7 +268,6 @@ document.addEventListener("DOMContentLoaded", function() {
     renderLoop = requestAnimationFrame(render);
   }
 
-  // Detener render loop
   function stopRenderLoop() {
     if (renderLoop) {
       cancelAnimationFrame(renderLoop);
@@ -311,7 +276,6 @@ document.addEventListener("DOMContentLoaded", function() {
     isGameRunning = false;
   }
 
-  // Socket events
   socket.on('connect', () => {
     console.log('Conectado al servidor:', socket.id);
     isConnected = true;
@@ -365,7 +329,6 @@ document.addEventListener("DOMContentLoaded", function() {
     snakes = players.map(serverPlayer => {
       const existingSnake = snakes.find(s => s.id === serverPlayer.id);
       if (existingSnake) {
-        // Actualizar snake existente
         existingSnake.segments = serverPlayer.segments.map(seg => ({ ...seg }));
         existingSnake.targetSegments = serverPlayer.segments.map(seg => ({ ...seg }));
         existingSnake.direction = { ...serverPlayer.direction };
@@ -419,14 +382,12 @@ document.addEventListener("DOMContentLoaded", function() {
     canvas.height = data.config.canvasHeight;
     segmentSize = data.config.segmentSize;
     
-    // Crear snakes locales para interpolación
     snakes = data.players.map(serverPlayer => createLocalSnake(serverPlayer));
-    foods = data.food;
+    foods = data.foods || [];
     projectiles = data.projectiles || [];
     gameState = data.gameState;
     roomConfig = data.config;
     
-    // Fase 1: Iniciar render loop
     isGameRunning = true;
     startRenderLoop();
     
@@ -436,7 +397,6 @@ document.addEventListener("DOMContentLoaded", function() {
     showStatus(`Ronda ${data.gameState.round} - ¡Batalla!`, 'success');
     console.log(`¡Ronda ${data.gameState.round} iniciada!`);
     
-    // Initial render
     gameLoop();
   });
 
@@ -446,14 +406,12 @@ document.addEventListener("DOMContentLoaded", function() {
     updateGameInfo(state);
   });
 
-  // Fase 1: Nuevo evento para updates de lógica
   socket.on('gameLogicFrame', (data) => {
-    // Actualizar targets de las serpientes existentes
     snakes.forEach(localSnake => {
       const serverSnake = data.players.find(p => p.id === localSnake.id);
       if (serverSnake) {
         localSnake.targetSegments = serverSnake.segments.map(seg => ({ ...seg }));
-        localSnake.segments = serverSnake.segments.map(seg => ({ ...seg })); // Para lógica
+        localSnake.segments = serverSnake.segments.map(seg => ({ ...seg }));
         localSnake.direction = { ...serverSnake.direction };
         localSnake.score = serverSnake.score;
         localSnake.gameover = serverSnake.gameover;
@@ -461,10 +419,8 @@ document.addEventListener("DOMContentLoaded", function() {
       }
     });
     
-    // Actualizar proyectiles (igual que snakes)
     const serverProjectiles = data.projectiles || [];
     
-    // Actualizar proyectiles existentes
     clientProjectiles.forEach(clientProjectile => {
       const serverProjectile = serverProjectiles.find(p => p.id === clientProjectile.id);
       if (serverProjectile) {
@@ -472,49 +428,23 @@ document.addEventListener("DOMContentLoaded", function() {
       }
     });
     
-    // Remover proyectiles que ya no existen
     clientProjectiles = clientProjectiles.filter(clientProjectile => 
       serverProjectiles.some(p => p.id === clientProjectile.id)
     );
     
-    // Agregar nuevos proyectiles
     serverProjectiles.forEach(serverProjectile => {
       if (!clientProjectiles.find(cp => cp.id === serverProjectile.id)) {
         clientProjectiles.push(new ClientProjectile(serverProjectile));
       }
     });
     
-    foods = data.food;
+    foods = data.foods || [];
     gameState = data.gameState;
-    projectiles = data.projectiles || []; // Mantener para compatibilidad
-    lastLogicUpdate = data.timestamp;
+    projectiles = data.projectiles || [];
   });
 
-  // Fase 1: Evento de sincronización para interpolación
   socket.on('syncFrame', (data) => {
-    // Este evento se usa para mantener sincronizado el renderizado
-    // No actualiza lógica, solo indica que debe continuar interpolando
-  });
-
-  // Legacy event para compatibilidad
-  socket.on('gameFrame', (players, food, state, projectilesData) => {
-    // Actualizar como antes si no hay dual-loop
-    snakes.forEach(localSnake => {
-      const serverSnake = players.find(p => p.id === localSnake.id);
-      if (serverSnake) {
-        localSnake.segments = serverSnake.segments.map(seg => ({ ...seg }));
-        localSnake.targetSegments = serverSnake.segments.map(seg => ({ ...seg }));
-        localSnake.renderSegments = serverSnake.segments.map(seg => ({ ...seg }));
-        localSnake.direction = { ...serverSnake.direction };
-        localSnake.score = serverSnake.score;
-        localSnake.gameover = serverSnake.gameover;
-      }
-    });
-    
-    foods = food;
-    gameState = state;
-    projectiles = projectilesData || [];
-    gameLoop();
+    // Mantener sincronización de interpolación
   });
 
   socket.on('roundEnd', (data) => {
@@ -569,7 +499,6 @@ document.addEventListener("DOMContentLoaded", function() {
     showStatus('Regresaste al menú', 'info');
   });
 
-  // Configuration functions
   function updateConfigPanel() {
     if (currentRoomId && !gameState.playing) {
       showElement(configPanel);
@@ -653,7 +582,6 @@ document.addEventListener("DOMContentLoaded", function() {
     socket.emit('updateRoomConfig', newConfig);
   }
 
-  // UI Functions
   function showRoomSelection() {
     hideElement(joinForm);
     showElement(roomSelection);
@@ -718,7 +646,6 @@ document.addEventListener("DOMContentLoaded", function() {
     socket.emit('getRooms');
   }
 
-  // Game functions with retro style
   function drawGrid() {
     for (let x = 0; x <= canvas.width; x += segmentSize) {
       ctx.beginPath();
@@ -759,11 +686,12 @@ document.addEventListener("DOMContentLoaded", function() {
       }
     });
 
-    if (foods) {
-      drawRetroFood(ctx, foods, segmentSize);
+    if (foods && foods.length > 0) {
+      foods.forEach(food => {
+        drawRetroFood(ctx, food, segmentSize);
+      });
     }
 
-    // Draw projectiles usando posiciones interpoladas (igual que snakes)
     if (clientProjectiles && clientProjectiles.length > 0) {
       clientProjectiles.forEach(projectile => {
         drawRetroProjectile(ctx, projectile, segmentSize);
@@ -772,7 +700,6 @@ document.addEventListener("DOMContentLoaded", function() {
   }
 
   function gameLoop() {
-    // Clear with black background
     ctx.fillStyle = retroColors.background;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
@@ -901,7 +828,6 @@ document.addEventListener("DOMContentLoaded", function() {
     if (element) element.classList.add('hidden');
   }
 
-  // Canvas resize handling
   function handleResize() {
     const container = canvas.parentElement;
     const maxWidth = container.clientWidth - 40;
@@ -918,7 +844,6 @@ document.addEventListener("DOMContentLoaded", function() {
 
   window.addEventListener('resize', handleResize);
 
-  // Global functions for button clicks
   window.joinSpecificRoom = function(roomId) {
     const username = usernameInput.value.trim();
     if (!username || username.length < 2 || username.length > 20) {
@@ -929,7 +854,6 @@ document.addEventListener("DOMContentLoaded", function() {
     socket.emit('joinRoom', { roomId, username });
   };
 
-  // Configuration event listeners
   toggleConfigButton.addEventListener('click', () => {
     if (configSettings.classList.contains('hidden')) {
       showElement(configSettings);
@@ -944,7 +868,6 @@ document.addEventListener("DOMContentLoaded", function() {
     saveConfiguration();
   });
 
-  // Validation event listeners
   maxPlayersInput.addEventListener('change', () => {
     const maxVal = parseInt(maxPlayersInput.value);
     const minVal = parseInt(minPlayersInput.value);
@@ -961,7 +884,6 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   });
 
-  // Event listeners
   restartButton.addEventListener('click', () => {
     hideGameOverScreen();
   });
@@ -1013,12 +935,10 @@ document.addEventListener("DOMContentLoaded", function() {
     hideFinalScreen();
   });
 
-  // Auto-uppercase room ID input
   roomIdInput.addEventListener('input', (e) => {
     e.target.value = e.target.value.toUpperCase();
   });
 
-  // Initialize
   handleResize();
   showStatus('¡Conectado! Ingresa tu nombre para comenzar.', 'info');
 });

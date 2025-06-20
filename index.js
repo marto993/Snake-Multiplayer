@@ -10,30 +10,22 @@ const port = process.env.PORT || 3000;
 
 app.use(express.static('public'));
 
-// Game rooms management
 let rooms = new Map();
 
-// Función para serializar players y evitar referencias circulares
+const LOGIC_INTERVAL = 83; // ~12 FPS
+const SYNC_INTERVAL = 33;  // ~30 FPS
+
 function serializePlayers(players) {
   return players.map(player => ({
     id: player.id,
     name: player.name,
-    segments: player.segments ? [...player.segments] : [],
-    direction: player.direction ? { ...player.direction } : { x: 1, y: 0 },
-    score: player.score || 0,
-    gameover: player.gameover || false,
-    scoreLeftToGrow: player.scoreLeftToGrow || 0,
-    eatFood: player.eatFood || false
+    segments: [...player.segments],
+    direction: { ...player.direction },
+    score: player.score,
+    gameover: player.gameover,
+    scoreLeftToGrow: player.scoreLeftToGrow
   }));
 }
-
-// Fase 2: Configuración de dual-loop
-const GAME_CONFIG = {
-  LOGIC_FPS: 12,           // Lógica de juego a 12 FPS
-  SYNC_FPS: 30,            // Sincronización a 30 FPS
-  LOGIC_INTERVAL: 1000 / 12,  // ~83ms
-  SYNC_INTERVAL: 1000 / 30    // ~33ms
-};
 
 function generateRoomId() {
   let roomId;
@@ -53,7 +45,7 @@ function validateRoomConfig(config) {
     canvasHeight: Math.max(300, Math.min(1000, parseInt(config.canvasHeight) || 600)),
     segmentSize: Math.max(5, Math.min(25, parseInt(config.segmentSize) || 10)),
     countdownTime: Math.max(1, Math.min(10, parseInt(config.countdownTime) || 3)),
-    attacksEnabled: Boolean(config.attacksEnabled) || false
+    attacksEnabled: Boolean(config.attacksEnabled)
   };
 }
 
@@ -73,18 +65,18 @@ function createRoom(hostId, hostName) {
       timeoutIdStartGame: null,
       downCounter: defaultConfig.countdownTime,
       intervalId: null,
-      syncIntervalId: null  // Nuevo: interval para sincronización
+      syncIntervalId: null
     },
     config: defaultConfig,
     gameboard: [],
-    food: { x: 0, y: 0, score: 1 },
+    foods: [],
     projectiles: [],
     roundScores: {}
   });
   
   const room = rooms.get(roomId);
   resetGameBoard(room);
-  generateFood(room);
+  generateFoods(room);
   
   console.log(`Room ${roomId} created by ${hostName}`);
   return roomId;
@@ -120,7 +112,6 @@ function updateGameBoard(room) {
   const gridWidth = room.gameboard.length;
   const gridHeight = room.gameboard[0].length;
   
-  // Mark snake segments
   room.players.forEach((player) => {
     if (!player.gameover && player.segments) {
       player.segments.forEach((segment) => {
@@ -133,14 +124,13 @@ function updateGameBoard(room) {
     }
   });
   
-  // Mark food
-  if (room.food) {
-    const foodX = Math.floor(room.food.x / segmentSize);
-    const foodY = Math.floor(room.food.y / segmentSize);
+  room.foods.forEach(food => {
+    const foodX = Math.floor(food.x / segmentSize);
+    const foodY = Math.floor(food.y / segmentSize);
     if (foodX >= 0 && foodX < gridWidth && foodY >= 0 && foodY < gridHeight) {
       room.gameboard[foodX][foodY] = 2;
     }
-  }
+  });
 }
 
 function getRandomCoordinate(max, segmentSize) {
@@ -173,25 +163,39 @@ function verifyCoordinate(room, x, y) {
          room.gameboard[gridX][gridY] === 0;
 }
 
-function generateFood(room) {
+function generateFoods(room) {
   const { canvasWidth, canvasHeight, segmentSize } = room.config;
-  let foodX, foodY;
-  let attempts = 0;
-  const maxAttempts = 100;
+  const playerCount = room.players.length;
+  const foodCount = playerCount === 2 ? 5 : playerCount + 3;
   
-  do {
-    foodX = getRandomCoordinate(canvasWidth, segmentSize);
-    foodY = getRandomCoordinate(canvasHeight, segmentSize);
-    attempts++;
-  } while (!verifyCoordinate(room, foodX, foodY) && attempts < maxAttempts);
+  room.foods = [];
   
-  if (attempts >= maxAttempts) {
-    foodX = Math.floor(canvasWidth / 2 / segmentSize) * segmentSize;
-    foodY = Math.floor(canvasHeight / 2 / segmentSize) * segmentSize;
+  for (let i = 0; i < foodCount; i++) {
+    let foodX, foodY;
+    let attempts = 0;
+    const maxAttempts = 100;
+    
+    do {
+      foodX = getRandomCoordinate(canvasWidth, segmentSize);
+      foodY = getRandomCoordinate(canvasHeight, segmentSize);
+      attempts++;
+    } while (!verifyCoordinate(room, foodX, foodY) && attempts < maxAttempts);
+    
+    if (attempts >= maxAttempts) {
+      foodX = Math.floor(canvasWidth / 2 / segmentSize) * segmentSize + (i * segmentSize);
+      foodY = Math.floor(canvasHeight / 2 / segmentSize) * segmentSize;
+    }
+    
+    const scoreFood = Math.floor(Math.random() * 7) + 3;
+    room.foods.push({ x: foodX, y: foodY, score: scoreFood });
+    
+    // Update gameboard immediately for next food placement
+    const gridX = Math.floor(foodX / segmentSize);
+    const gridY = Math.floor(foodY / segmentSize);
+    if (room.gameboard[gridX] && room.gameboard[gridX][gridY] !== undefined) {
+      room.gameboard[gridX][gridY] = 2;
+    }
   }
-  
-  const scoreFood = Math.floor(Math.random() * 7) + 3;
-  room.food = { x: foodX, y: foodY, score: scoreFood };
 }
 
 function createProjectile(room, player) {
@@ -219,8 +223,6 @@ function createProjectile(room, player) {
     playerId: player.id,
     x: head.x + (player.direction.x * segmentSize),
     y: head.y + (player.direction.y * segmentSize),
-    prevX: head.x, // For interpolation
-    prevY: head.y, // For interpolation
     direction: { ...player.direction },
     color: color
   };
@@ -230,7 +232,6 @@ function createProjectile(room, player) {
     player.segments.pop();
   }
   
-  // Actualizar targets para interpolación
   player.updateTargets();
   
   room.projectiles.push(projectile);
@@ -352,16 +353,14 @@ function startNewRound(room) {
     player.gameover = false;
     player.scoreLeftToGrow = 0;
     
-    // Inicializar interpolación
     player.updateTargets();
   });
   
-  generateFood(room);
+  generateFoods(room);
   updateGameBoard(room);
   startGame(room);
 }
 
-// Fase 2: Dual-loop system
 function startGame(room) {
   if (room.gameState.downCounter === 0) {
     resetGameBoard(room);
@@ -376,7 +375,7 @@ function startGame(room) {
     console.log(`Starting round ${room.gameState.round} in room ${room.id}`);
     io.to(room.id).emit('gameStart', {
       players: serializePlayers(room.players),
-      food: { ...room.food },
+      foods: [...room.foods],
       projectiles: [...room.projectiles],
       config: room.config,
       gameState: {
@@ -385,11 +384,8 @@ function startGame(room) {
       }
     });
     
-    // Fase 2: Loop de lógica a 12 FPS
-    room.gameState.intervalId = setInterval(() => gameLogicLoop(room), GAME_CONFIG.LOGIC_INTERVAL);
-    
-    // Fase 2: Loop de sincronización a 30 FPS para interpolación
-    room.gameState.syncIntervalId = setInterval(() => syncLoop(room), GAME_CONFIG.SYNC_INTERVAL);
+    room.gameState.intervalId = setInterval(() => gameLogicLoop(room), LOGIC_INTERVAL);
+    room.gameState.syncIntervalId = setInterval(() => syncLoop(room), SYNC_INTERVAL);
     
   } else {
     io.to(room.id).emit('countdown', room.gameState.downCounter, 
@@ -399,7 +395,6 @@ function startGame(room) {
   }
 }
 
-// Fase 2: Lógica de juego (colisiones, movimiento, etc.)
 function gameLogicLoop(room) {
   if (!room.gameState.playing) return;
   
@@ -410,14 +405,12 @@ function gameLogicLoop(room) {
     resetGameBoard(room);
   }
   
-  // Move projectiles first
   if (room.config.attacksEnabled) {
     moveProjectiles(room);
   }
   
   room.players.forEach((player) => {
     if (!player.gameover) {
-      // Usar moveLogic() en lugar de move() para mejor interpolación
       player.moveLogic();
       const head = player.segments[0];
       
@@ -429,19 +422,46 @@ function gameLogicLoop(room) {
       const headX = Math.floor(head.x / segmentSize);
       const headY = Math.floor(head.y / segmentSize);
       
-      // Check bounds
       if (headX < 0 || headX >= Math.floor(canvasWidth/segmentSize) || 
           headY < 0 || headY >= Math.floor(canvasHeight/segmentSize)) {
         player.GameOver();
       }
-      // Check collisions
       else if (room.gameboard[headX] && room.gameboard[headX][headY] === 1) {
         player.GameOver();
       }
-      // Check food
       else if (room.gameboard[headX] && room.gameboard[headX][headY] === 2) {
-        player.EatFood(room.food.score);
-        generateFood(room);
+        // Check which food was eaten
+        const eatenFoodIndex = room.foods.findIndex(food => 
+          Math.floor(food.x / segmentSize) === headX && 
+          Math.floor(food.y / segmentSize) === headY
+        );
+        
+        if (eatenFoodIndex !== -1) {
+          const eatenFood = room.foods[eatenFoodIndex];
+          player.EatFood(eatenFood.score);
+          
+          // Remove eaten food and generate new one
+          room.foods.splice(eatenFoodIndex, 1);
+          
+          // Generate replacement food
+          let foodX, foodY;
+          let attempts = 0;
+          const maxAttempts = 100;
+          
+          do {
+            foodX = getRandomCoordinate(room.config.canvasWidth, segmentSize);
+            foodY = getRandomCoordinate(room.config.canvasHeight, segmentSize);
+            attempts++;
+          } while (!verifyCoordinate(room, foodX, foodY) && attempts < maxAttempts);
+          
+          if (attempts >= maxAttempts) {
+            foodX = Math.floor(room.config.canvasWidth / 2 / segmentSize) * segmentSize;
+            foodY = Math.floor(room.config.canvasHeight / 2 / segmentSize) * segmentSize;
+          }
+          
+          const newFoodScore = Math.floor(Math.random() * 7) + 3;
+          room.foods.push({ x: foodX, y: foodY, score: newFoodScore });
+        }
       }
       
       if (!player.gameover) alivePlayers++;
@@ -452,7 +472,7 @@ function gameLogicLoop(room) {
   
   io.to(room.id).emit('gameLogicFrame', {
     players: serializePlayers(room.players),
-    food: { ...room.food },
+    foods: [...room.foods],
     projectiles: [...room.projectiles],
     gameState: {
       playing: room.gameState.playing,
@@ -461,7 +481,6 @@ function gameLogicLoop(room) {
     timestamp: Date.now()
   });
   
-  // Check end conditions
   if (alivePlayers <= 1 && room.players.length > 1) {
     clearInterval(room.gameState.intervalId);
     clearInterval(room.gameState.syncIntervalId);
@@ -471,7 +490,6 @@ function gameLogicLoop(room) {
   }
 }
 
-// Fase 2: Loop de sincronización para interpolación suave
 function syncLoop(room) {
   if (!room.gameState.playing) return;
   
@@ -479,64 +497,6 @@ function syncLoop(room) {
     timestamp: Date.now(),
     playing: room.gameState.playing
   });
-}
-
-// Legacy gameLoop para compatibilidad (ya no se usa en dual-loop)
-function gameLoop(room) {
-  if (!room.gameState.playing) return;
-  
-  const { canvasWidth, canvasHeight, segmentSize } = room.config;
-  let alivePlayers = 0;
-  
-  if (!room.gameboard || room.gameboard.length === 0) {
-    resetGameBoard(room);
-  }
-  
-  if (room.config.attacksEnabled) {
-    moveProjectiles(room);
-  }
-  
-  room.players.forEach((player) => {
-    if (!player.gameover) {
-      player.move();
-      const head = player.segments[0];
-      
-      if (!head) {
-        player.GameOver();
-        return;
-      }
-      
-      const headX = Math.floor(head.x / segmentSize);
-      const headY = Math.floor(head.y / segmentSize);
-      
-      if (headX < 0 || headX >= Math.floor(canvasWidth/segmentSize) || 
-          headY < 0 || headY >= Math.floor(canvasHeight/segmentSize)) {
-        player.GameOver();
-      }
-      else if (room.gameboard[headX] && room.gameboard[headX][headY] === 1) {
-        player.GameOver();
-      }
-      else if (room.gameboard[headX] && room.gameboard[headX][headY] === 2) {
-        player.EatFood(room.food.score);
-        generateFood(room);
-      }
-      
-      if (!player.gameover) alivePlayers++;
-    }
-  });
-  
-  updateGameBoard(room);
-  
-  io.to(room.id).emit('gameFrame', serializePlayers(room.players), 
-    { ...room.food }, 
-    { playing: room.gameState.playing, round: room.gameState.round }, 
-    [...room.projectiles]);
-  
-  if (alivePlayers <= 1 && room.players.length > 1) {
-    clearInterval(room.gameState.intervalId);
-    room.gameState.intervalId = null;
-    setTimeout(() => endRound(room), 1000);
-  }
 }
 
 io.on('connection', (socket) => {
@@ -654,12 +614,11 @@ io.on('connection', (socket) => {
       player.direction = { x: 1, y: 0 };
       player.segmentSize = validConfig.segmentSize;
       
-      // Actualizar interpolación
       player.updateTargets();
     });
     
     resetGameBoard(room);
-    generateFood(room);
+    generateFoods(room);
     updateGameBoard(room);
     
     io.to(currentRoom).emit('configUpdated', validConfig);
@@ -733,10 +692,10 @@ io.on('connection', (socket) => {
     if (!playerToMove || playerToMove.gameover) return;
     
     const directions = {
-      37: { x: -1, y: 0 }, // Left
-      39: { x: 1, y: 0 },  // Right
-      38: { x: 0, y: -1 }, // Up
-      40: { x: 0, y: 1 }   // Down
+      37: { x: -1, y: 0 },
+      39: { x: 1, y: 0 },
+      38: { x: 0, y: -1 },
+      40: { x: 0, y: 1 }
     };
     
     const newDirection = directions[data.key];
