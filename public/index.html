@@ -11,6 +11,11 @@
             font-family: 'Share Tech Mono', monospace; 
             box-sizing: border-box;
         }
+		@keyframes shake {
+		  0%, 100% { transform: translate(0); }
+		  25% { transform: translate(-3px, 2px); }
+		  75% { transform: translate(3px, -2px); }
+		}
         
         body {
             display: flex;

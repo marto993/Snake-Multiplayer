@@ -413,6 +413,17 @@ document.addEventListener("DOMContentLoaded", function() {
   });
 
   socket.on('gameLogicFrame', (data) => {
+	// Detectar si mi jugador murió
+	const mySnake = snakes.find(s => s.id === socket.id);
+	const myNewSnake = data.players.find(p => p.id === socket.id);
+
+	if (mySnake && myNewSnake && !mySnake.gameover && myNewSnake.gameover) {
+		// Mi jugador acaba de morir
+		canvas.style.animation = 'shake 0.5s';
+		showStatus('💀 ¡HAS MUERTO!', 'error');
+		setTimeout(() => canvas.style.animation = '', 500);
+	}
+	
 	snakes.forEach(localSnake => {
 	const serverSnake = data.players.find(p => p.id === localSnake.id);
 		if (serverSnake) {
