@@ -368,7 +368,7 @@ function startNewRound(room) {
     player.gameover = false;
     player.scoreLeftToGrow = 0;
     player.moveQueue = [];
-	
+	player.updateInterpolationSpeed(room.config.gameSpeed);
     player.updateTargets();
   });
   
@@ -553,7 +553,7 @@ io.on('connection', (socket) => {
     const { canvasWidth, canvasHeight, segmentSize } = room.config;
     const spawnPos = getPlayerSpawnPosition(room, 0);
 	const playerColor = getPlayerColor(0);
-    const player = new Snake(socket.id, data.username.trim(), segmentSize, canvasWidth, canvasHeight, spawnPos.x, spawnPos.y, 1, 0, playerColor);
+    const player = new Snake(socket.id, data.username.trim(), segmentSize, canvasWidth, canvasHeight, spawnPos.x, spawnPos.y, 1, 0, playerColor, room.config.gameSpeed);
 	player.moveQueue = []; 
 	room.players.push(player);
     
@@ -607,7 +607,7 @@ io.on('connection', (socket) => {
     const spawnPos = getPlayerSpawnPosition(room, playerIndex);
 	const playerColor = getPlayerColor(playerIndex);
     
-    const player = new Snake(socket.id, data.username.trim(), segmentSize, canvasWidth, canvasHeight, spawnPos.x, spawnPos.y, 1, 0, playerColor);
+    const player = new Snake(socket.id, data.username.trim(), segmentSize, canvasWidth, canvasHeight, spawnPos.x, spawnPos.y, 1, 0, playerColor, room.config.gameSpeed);
 	player.moveQueue = []; // Asegurar que la cola esté inicializada
 	room.players.push(player);
 	
@@ -647,7 +647,7 @@ io.on('connection', (socket) => {
       player.segments = [{ x: spawnPos.x, y: spawnPos.y }];
       player.direction = { x: 1, y: 0 };
       player.segmentSize = validConfig.segmentSize;
-      
+      player.updateInterpolationSpeed(validConfig.gameSpeed);
       player.updateTargets();
     });
     

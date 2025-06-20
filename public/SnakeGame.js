@@ -229,7 +229,8 @@ document.addEventListener("DOMContentLoaded", function() {
       serverSnake.segments[0].y,
       serverSnake.direction.x,
       serverSnake.direction.y,
-	  serverSnake.color
+	  serverSnake.color,
+	  roomConfig.gameSpeed || 91
     );
     
     snake.segments = serverSnake.segments.map(seg => ({ ...seg }));
@@ -371,6 +372,9 @@ document.addEventListener("DOMContentLoaded", function() {
     updateConfigInputs(newConfig);
     updateCanvasSize(newConfig);
     updateAttackControls();
+	snakes.forEach(snake => {
+		snake.updateInterpolationSpeed(newConfig.gameSpeed);
+	});
     showStatus('¡Configuración actualizada!', 'success');
   });
 

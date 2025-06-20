@@ -1,5 +1,5 @@
 class Snake {
-    constructor(ID, playerName, segmentSize, canvasWidht, canvasHeight, startX, startY, directionX, directionY, playerColor = '#00ff41') {
+    constructor(ID, playerName, segmentSize, canvasWidht, canvasHeight, startX, startY, directionX, directionY, playerColor = '#00ff41', gameSpeed = 91) {
       this.id = ID;
       this.name = playerName;
 	  this.color = playerColor;
@@ -17,11 +17,32 @@ class Snake {
       this.gameover = false;
       this.scoreLeftToGrow = 0;
       
-      // Nuevas propiedades para interpolación (Fase 1)
+      // Calcular interpolationSpeed basado en gameSpeed
+      this.interpolationSpeed = this.calculateInterpolationSpeed(gameSpeed);
       this.targetSegments = [{ x: startX, y: startY }];
       this.renderSegments = [{ x: startX, y: startY }];
-      this.interpolationSpeed = 0.12; // Velocidad de interpolación
       this.lastMoveTime = Date.now();
+    }
+    
+    // Calcular interpolación óptima según velocidad del juego
+    calculateInterpolationSpeed(gameSpeed) {
+      // Mapeo: gameSpeed 25-200ms -> interpolationSpeed 0.3-0.08
+      const minSpeed = 25;
+      const maxSpeed = 200;
+      const minInterpolation = 0.08;
+      const maxInterpolation = 0.3;
+      
+      // Clamp gameSpeed al rango válido
+      const clampedSpeed = Math.max(minSpeed, Math.min(maxSpeed, gameSpeed));
+      
+      // Interpolación inversa: juego más rápido = interpolación más alta
+      const normalizedSpeed = (clampedSpeed - minSpeed) / (maxSpeed - minSpeed);
+      return maxInterpolation - (normalizedSpeed * (maxInterpolation - minInterpolation));
+    }
+    
+    // Actualizar velocidad de interpolación
+    updateInterpolationSpeed(gameSpeed) {
+      this.interpolationSpeed = this.calculateInterpolationSpeed(gameSpeed);
     }
     
     move() {
@@ -117,7 +138,7 @@ class Snake {
 		  return { x: target.x, y: target.y };
 		}
 
-		// Interpolación normal
+		// Interpolación normal usando la velocidad calculada dinámicamente
 		return {
 		  x: this.lerp(renderSeg.x, target.x, this.interpolationSpeed),
 		  y: this.lerp(renderSeg.y, target.y, this.interpolationSpeed)
