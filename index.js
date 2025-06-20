@@ -36,9 +36,6 @@ app.use(express.static('public'));
 
 let rooms = new Map();
 
-const LOGIC_INTERVAL = 33//83; // ~12 FPS
-const SYNC_INTERVAL = 33//33;  // ~30 FPS
-
 function serializePlayers(players) {
   return players.map(player => ({
     id: player.id,
@@ -403,7 +400,7 @@ function startGame(room) {
       }
     });
     
-    room.gameState.intervalId = setInterval(() => gameLogicLoop(room), LOGIC_INTERVAL);
+    room.gameState.intervalId = setInterval(() => gameLogicLoop(room), room.config.gameSpeed); //LOGIC_INTERVAL);
     
   } else {
     io.to(room.id).emit('countdown', room.gameState.downCounter, 
