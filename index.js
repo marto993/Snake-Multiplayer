@@ -377,7 +377,8 @@ function startNewRound(room) {
     player.score = 0;
     player.gameover = false;
     player.scoreLeftToGrow = 0;
-    
+    player.moveQueue = [];
+	
     player.updateTargets();
   });
   
@@ -437,6 +438,7 @@ function gameLogicLoop(room) {
   
   room.players.forEach((player) => {
     if (!player.gameover) {
+		player.processNextMove(); // Procesar siguiente movimiento de la cola
       const prevHead = { ...player.segments[0] }; // Guardar posición anterior
       player.moveLogic();
       const head = player.segments[0];
@@ -574,6 +576,7 @@ io.on('connection', (socket) => {
     const spawnPos = getPlayerSpawnPosition(room, 0);
 	const playerColor = getPlayerColor(0);
     const player = new Snake(socket.id, data.username.trim(), segmentSize, canvasWidth, canvasHeight, spawnPos.x, spawnPos.y, 1, 0, playerColor);
+	player.moveQueue = []; 
 	room.players.push(player);
     
     socket.emit('roomCreated', { 
@@ -627,7 +630,9 @@ io.on('connection', (socket) => {
 	const playerColor = getPlayerColor(playerIndex);
     
     const player = new Snake(socket.id, data.username.trim(), segmentSize, canvasWidth, canvasHeight, spawnPos.x, spawnPos.y, 1, 0, playerColor);
+	player.moveQueue = []; // Asegurar que la cola esté inicializada
 	room.players.push(player);
+	
     
     initializeRoundScores(room);
     socket.emit('roomJoined', { 

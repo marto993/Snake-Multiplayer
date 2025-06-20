@@ -5,6 +5,7 @@ class Snake {
 	  this.color = playerColor;
       this.canvaswidht = canvasWidht;
       this.canvasheight = canvasHeight;
+	  this.moveQueue = []; // Cola de movimientos pendientes
 
       this.segmentSize = segmentSize;
       this.segments = [
@@ -135,19 +136,37 @@ class Snake {
     }
     
     changeDirection(newDirection) {
-      // Evitar cambiar la dirección opuesta
-      if (
-        (newDirection.x === 1 && this.direction.x === -1) ||
-        (newDirection.x === -1 && this.direction.x === 1) ||
-        (newDirection.y === 1 && this.direction.y === -1) ||
-        (newDirection.y === -1 && this.direction.y === 1)
-      ) {
-        return false;
-      }
-  
-      this.direction = newDirection;
-      return true;
-    }
+	// Evitar cambiar la dirección opuesta
+	if ((newDirection.x === 1 && this.direction.x === -1) ||
+	(newDirection.x === -1 && this.direction.x === 1) ||
+	(newDirection.y === 1 && this.direction.y === -1) ||
+	(newDirection.y === -1 && this.direction.y === 1)) {
+		return false;
+	}
+
+	// Si la cola está vacía o el movimiento es diferente al último en cola
+	if (this.moveQueue.length === 0 || 
+	  (this.moveQueue[this.moveQueue.length - 1].x !== newDirection.x || 
+	   this.moveQueue[this.moveQueue.length - 1].y !== newDirection.y)) {
+
+		// Limitar cola a máximo 3 movimientos
+		if (this.moveQueue.length < 3) {
+			this.moveQueue.push({ ...newDirection });
+		}
+	}
+
+	return true;
+	}
+
+	// Agregar nuevo método para procesar la cola:
+	processNextMove() {
+		if (this.moveQueue.length > 0) {
+			const nextMove = this.moveQueue.shift();
+			this.direction = nextMove;
+			return true;
+		}
+			return false;
+	}
   
     EatFood(scoreFood) {
         this.score += scoreFood;
@@ -188,6 +207,7 @@ class Snake {
       this.gameover = true;
       this.direction.x = 0;
       this.direction.y = 0;
+	  this.moveQueue = [];
       this.segments = [
         { x: 0, y: 0 }
       ];
