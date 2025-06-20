@@ -456,10 +456,6 @@ document.addEventListener("DOMContentLoaded", function() {
     projectiles = data.projectiles || [];
   });
 
-  socket.on('syncFrame', (data) => {
-    // Mantener sincronización de interpolación
-  });
-
   socket.on('roundEnd', (data) => {
     stopRenderLoop();
     roomScores = data.scores;

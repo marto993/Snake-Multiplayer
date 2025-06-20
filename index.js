@@ -90,7 +90,6 @@ function createRoom(hostId, hostName) {
       timeoutIdStartGame: null,
       downCounter: defaultConfig.countdownTime,
       intervalId: null,
-      syncIntervalId: null
     },
     config: defaultConfig,
     gameboard: [],
@@ -116,7 +115,6 @@ function deleteRoom(roomId) {
   const room = rooms.get(roomId);
   if (room) {
     if (room.gameState.intervalId) clearInterval(room.gameState.intervalId);
-    if (room.gameState.syncIntervalId) clearInterval(room.gameState.syncIntervalId);
     if (room.gameState.timeoutIdStartGame) clearTimeout(room.gameState.timeoutIdStartGame);
     rooms.delete(roomId);
     console.log(`Room ${roomId} deleted`);
@@ -345,12 +343,7 @@ function endGame(room) {
     clearInterval(room.gameState.intervalId);
     room.gameState.intervalId = null;
   }
-  
-  if (room.gameState.syncIntervalId) {
-    clearInterval(room.gameState.syncIntervalId);
-    room.gameState.syncIntervalId = null;
-  }
-  
+    
   const finalWinner = Object.values(room.roundScores).reduce((prev, current) => 
     (prev.totalScore > current.totalScore) ? prev : current
   );
@@ -411,7 +404,6 @@ function startGame(room) {
     });
     
     room.gameState.intervalId = setInterval(() => gameLogicLoop(room), LOGIC_INTERVAL);
-    room.gameState.syncIntervalId = setInterval(() => syncLoop(room), SYNC_INTERVAL);
     
   } else {
     io.to(room.id).emit('countdown', room.gameState.downCounter, 
@@ -536,20 +528,9 @@ function gameLogicLoop(room) {
   
   if (alivePlayers <= 1 && room.players.length > 1) {
     clearInterval(room.gameState.intervalId);
-    clearInterval(room.gameState.syncIntervalId);
     room.gameState.intervalId = null;
-    room.gameState.syncIntervalId = null;
     setTimeout(() => endRound(room), 1000);
   }
-}
-
-function syncLoop(room) {
-  if (!room.gameState.playing) return;
-  
-  io.to(room.id).emit('syncFrame', {
-    timestamp: Date.now(),
-    playing: room.gameState.playing
-  });
 }
 
 io.on('connection', (socket) => {
@@ -803,10 +784,6 @@ io.on('connection', (socket) => {
         if (room.gameState.intervalId) {
           clearInterval(room.gameState.intervalId);
           room.gameState.intervalId = null;
-        }
-        if (room.gameState.syncIntervalId) {
-          clearInterval(room.gameState.syncIntervalId);
-          room.gameState.syncIntervalId = null;
         }
         io.to(currentRoom).emit('gameError', 'Not enough players to continue');
       }
