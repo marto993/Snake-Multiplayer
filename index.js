@@ -2,39 +2,174 @@ const http = require('http');
 const express = require('express');
 const socketIO = require('socket.io');
 const Snake = require('./public/snakeClass.js');
+const sqlite3 = require('sqlite3').verbose();
+const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
 const io = socketIO(server);
 const port = process.env.PORT || 3000;
 
+// SQLite Database - Use /data volume in production
+const dbPath = process.env.NODE_ENV === 'production' 
+  ? '/app/data/game_stats.db' 
+  : path.join(__dirname, 'game_stats.db');
+const db = new sqlite3.Database(dbPath);
+
+// Initialize database
+db.serialize(() => {
+  db.run(`CREATE TABLE IF NOT EXISTS players (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    games_played INTEGER DEFAULT 0,
+    wins INTEGER DEFAULT 0,
+    total_score INTEGER DEFAULT 0,
+    best_score INTEGER DEFAULT 0,
+    rounds_won INTEGER DEFAULT 0,
+    current_streak INTEGER DEFAULT 0,
+    best_streak INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_played DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+});
+
 // Colores fijos para jugadores
 const PLAYER_COLORS = [
-  '#00ff41', // Verde brillante
-  '#ff0080', // Rosa/magenta
-  '#00ffff', // Cian
-  '#ffff00', // Amarillo
-  '#ff4040', // Rojo
-  '#8040ff', // Púrpura
-  '#40ff80', // Verde claro
-  '#ff8040', // Naranja
-  '#4080ff', // Azul
-  '#ff40ff', // Magenta claro
-  '#80ff40', // Lima
-  '#ff4080', // Rosa fuerte
-  '#4040ff', // Azul profundo
-  '#ffff80', // Amarillo claro
-  '#80ffff', // Cian claro
-  '#ff8080'  // Rosa claro
+  '#00ff41', '#ff0080', '#00ffff', '#ffff00', '#ff4040', '#8040ff', 
+  '#40ff80', '#ff8040', '#4080ff', '#ff40ff', '#80ff40', '#ff4080', 
+  '#4040ff', '#ffff80', '#80ffff', '#ff8080'
 ];
 
-function getPlayerColor(playerIndex) {
-  return PLAYER_COLORS[playerIndex % PLAYER_COLORS.length];
+function getNextAvailableColor(room) {
+  const usedColors = room.players.map(player => player.color);
+  for (let i = 0; i < PLAYER_COLORS.length; i++) {
+    const color = PLAYER_COLORS[i];
+    if (!usedColors.includes(color)) {
+      return color;
+    }
+  }
+  // Si todos están en uso, usar el próximo en la lista
+  return PLAYER_COLORS[room.players.length % PLAYER_COLORS.length];
+}
+
+// Database functions
+function generatePlayerId(playerName) {
+  return `${playerName.toLowerCase().replace(/[^a-z0-9]/g, '')}_${Date.now().toString(36)}`;
+}
+
+function getOrCreatePlayer(playerName, playerId = null) {
+  return new Promise((resolve, reject) => {
+    if (playerId) {
+      db.get('SELECT * FROM players WHERE id = ?', [playerId], (err, row) => {
+        if (err) return reject(err);
+        if (row) return resolve({ playerId, stats: row });
+        searchByName();
+      });
+    } else {
+      searchByName();
+    }
+    
+    function searchByName() {
+      db.get('SELECT * FROM players WHERE LOWER(name) = LOWER(?)', [playerName], (err, row) => {
+        if (err) return reject(err);
+        if (row) return resolve({ playerId: row.id, stats: row });
+        createNewPlayer();
+      });
+    }
+    
+    function createNewPlayer() {
+      const newPlayerId = generatePlayerId(playerName);
+      const newPlayer = {
+        id: newPlayerId,
+        name: playerName,
+        games_played: 0,
+        wins: 0,
+        total_score: 0,
+        best_score: 0,
+        rounds_won: 0,
+        current_streak: 0,
+        best_streak: 0
+      };
+      
+      db.run(`INSERT INTO players (id, name) VALUES (?, ?)`, 
+        [newPlayerId, playerName], 
+        function(err) {
+          if (err) return reject(err);
+          resolve({ playerId: newPlayerId, stats: newPlayer });
+        }
+      );
+    }
+  });
+}
+
+function updatePlayerStats(playerId, gameData) {
+  return new Promise((resolve, reject) => {
+    db.get('SELECT * FROM players WHERE id = ?', [playerId], (err, row) => {
+      if (err) return reject(err);
+      if (!row) return reject(new Error('Player not found'));
+      
+      const newGamesPlayed = row.games_played + 1;
+      const newTotalScore = row.total_score + (gameData.finalScore || 0);
+      const newBestScore = Math.max(row.best_score, gameData.finalScore || 0);
+      const newRoundsWon = row.rounds_won + (gameData.roundsWon || 0);
+      
+      let newWins = row.wins;
+      let newCurrentStreak = row.current_streak;
+      let newBestStreak = row.best_streak;
+      
+      if (gameData.won) {
+        newWins++;
+        newCurrentStreak++;
+        newBestStreak = Math.max(newBestStreak, newCurrentStreak);
+      } else {
+        newCurrentStreak = 0;
+      }
+      
+      db.run(`UPDATE players SET 
+        games_played = ?,
+        wins = ?,
+        total_score = ?,
+        best_score = ?,
+        rounds_won = ?,
+        current_streak = ?,
+        best_streak = ?,
+        last_played = CURRENT_TIMESTAMP
+        WHERE id = ?`,
+        [newGamesPlayed, newWins, newTotalScore, newBestScore, 
+         newRoundsWon, newCurrentStreak, newBestStreak, playerId],
+        function(err) {
+          if (err) return reject(err);
+          resolve();
+        }
+      );
+    });
+  });
+}
+
+function getLeaderboard(limit = 10) {
+  return new Promise((resolve, reject) => {
+    db.all(`SELECT * FROM players 
+            ORDER BY wins DESC, best_score DESC 
+            LIMIT ?`, [limit], (err, rows) => {
+      if (err) return reject(err);
+      resolve(rows);
+    });
+  });
+}
+
+function getPlayerStats(playerId) {
+  return new Promise((resolve, reject) => {
+    db.get('SELECT * FROM players WHERE id = ?', [playerId], (err, row) => {
+      if (err) return reject(err);
+      resolve(row);
+    });
+  });
 }
 
 app.use(express.static('public'));
 
 let rooms = new Map();
+let connectedUsers = new Map(); // socketId -> playerName
 
 function serializePlayers(players) {
   return players.map(player => ({
@@ -68,7 +203,7 @@ function validateRoomConfig(config) {
     segmentSize: Math.max(5, Math.min(25, parseInt(config.segmentSize) || 10)),
     countdownTime: Math.max(1, Math.min(10, parseInt(config.countdownTime) || 3)),
     attacksEnabled: Boolean(config.attacksEnabled),
-    roundTime: parseInt(config.roundTime) || 45 // Nuevo: tiempo de ronda en segundos
+    roundTime: parseInt(config.roundTime) || 45
   };
 }
 
@@ -190,7 +325,7 @@ function verifyCoordinate(room, x, y) {
 function generateFoods(room) {
   const { canvasWidth, canvasHeight, segmentSize } = room.config;
   const playerCount = room.players.length;
-  const foodCount = playerCount === 2 ? 8 : playerCount + 6; // Más comida para partidas por tiempo
+  const foodCount = playerCount === 2 ? 8 : playerCount + 6;
   
   room.foods = [];
   
@@ -213,7 +348,6 @@ function generateFoods(room) {
     const scoreFood = Math.floor(Math.random() * 7) + 3;
     room.foods.push({ x: foodX, y: foodY, score: scoreFood });
     
-    // Update gameboard immediately for next food placement
     const gridX = Math.floor(foodX / segmentSize);
     const gridY = Math.floor(foodY / segmentSize);
     if (room.gameboard[gridX] && room.gameboard[gridX][gridY] !== undefined) {
@@ -272,9 +406,7 @@ function moveProjectiles(room) {
         for (let i = 0; i < player.segments.length; i++) {
           const segment = player.segments[i];
           if (segment.x === projectile.x && segment.y === projectile.y) {
-            // Modificado: ya no mata, solo corta la snake
             if (i === 0) {
-              // Si golpea la cabeza, corta 3 segmentos
               const segmentsToRemove = Math.min(3, player.segments.length - 1);
               for (let j = 0; j < segmentsToRemove; j++) {
                 if (player.segments.length > 1) {
@@ -282,7 +414,6 @@ function moveProjectiles(room) {
                 }
               }
             } else {
-              // Si golpea el cuerpo, corta desde ese punto
               player.segments = player.segments.slice(0, i);
             }
             player.updateTargets();
@@ -314,7 +445,6 @@ function startRoundTimer(room) {
   room.gameState.roundTimerId = setInterval(() => {
     room.gameState.roundTimeLeft--;
     
-    // Enviar tiempo restante a los clientes cada segundo
     io.to(room.id).emit('roundTimeUpdate', room.gameState.roundTimeLeft);
     
     if (room.gameState.roundTimeLeft <= 0) {
@@ -326,7 +456,6 @@ function startRoundTimer(room) {
 }
 
 function endRound(room) {
-  // Limpiar timers
   if (room.gameState.intervalId) {
     clearInterval(room.gameState.intervalId);
     room.gameState.intervalId = null;
@@ -336,13 +465,12 @@ function endRound(room) {
     room.gameState.roundTimerId = null;
   }
   
-  // Calcular puntajes basados en el tamaño de la snake
   let roundWinner = null;
   let maxSize = 0;
   
   room.players.forEach(player => {
     const snakeSize = player.segments.length;
-    player.score = snakeSize; // El puntaje es el tamaño de la snake
+    player.score = snakeSize;
     
     if (snakeSize > maxSize) {
       maxSize = snakeSize;
@@ -373,7 +501,7 @@ function endRound(room) {
   });
 }
 
-function endGame(room) {
+async function endGame(room) {
   room.gameState.playing = false;
   
   if (room.gameState.intervalId) {
@@ -389,6 +517,24 @@ function endGame(room) {
   const finalWinner = Object.values(room.roundScores).reduce((prev, current) => 
     (prev.totalScore > current.totalScore) ? prev : current
   );
+  
+  // Update player stats
+  const updatePromises = room.players.map(player => {
+    if (player.playerId) {
+      const gameData = {
+        finalScore: room.roundScores[player.id]?.totalScore || 0,
+        roundsWon: room.roundScores[player.id]?.roundWins || 0,
+        won: room.roundScores[player.id]?.totalScore === finalWinner.totalScore
+      };
+      return updatePlayerStats(player.playerId, gameData);
+    }
+  }).filter(Boolean);
+  
+  try {
+    await Promise.all(updatePromises);
+  } catch (error) {
+    console.error('Error updating player stats:', error);
+  }
   
   io.to(room.id).emit('gameEnd', {
     winner: finalWinner,
@@ -410,7 +556,7 @@ function startNewRound(room) {
     
     player.segments = [{ x: spawnPos.x, y: spawnPos.y }];
     player.direction = { x: 1, y: 0 };
-    player.score = 1; // Inicia con puntaje 1 (tamaño inicial)
+    player.score = 1;
     player.gameover = false;
     player.scoreLeftToGrow = 0;
     player.moveQueue = [];
@@ -448,8 +594,6 @@ function startGame(room) {
     });
     
     room.gameState.intervalId = setInterval(() => gameLogicLoop(room), room.config.gameSpeed);
-    
-    // Iniciar timer de ronda
     startRoundTimer(room);
     
   } else {
@@ -492,7 +636,6 @@ function gameLogicLoop(room) {
       let headY = Math.floor(head.y / segmentSize);
       let portalOccurred = false;
       
-      // Portal horizontal (izquierda/derecha)
       if (headX < 0) {
         headX = gridWidth - 1;
         head.x = headX * segmentSize;
@@ -505,7 +648,6 @@ function gameLogicLoop(room) {
         portalEvents.push({ playerId: player.id, type: 'horizontal', from: 'right', to: 'left' });
       }
       
-      // Portal vertical (arriba/abajo)
       if (headY < 0) {
         headY = gridHeight - 1;
         head.y = headY * segmentSize;
@@ -518,7 +660,6 @@ function gameLogicLoop(room) {
         portalEvents.push({ playerId: player.id, type: 'vertical', from: 'bottom', to: 'top' });
       }
       
-      // Modificado: Los jugadores pueden atravesarse - no hay restricción por colisión
       if (room.gameboard[headX] && room.gameboard[headX][headY] === 2) {
         const eatenFoodIndex = room.foods.findIndex(food => 
           Math.floor(food.x / segmentSize) === headX && 
@@ -550,7 +691,6 @@ function gameLogicLoop(room) {
         }
       }
       
-      // Actualizar puntaje basado en el tamaño actual
       player.score = player.segments.length;
     }
   });
@@ -575,92 +715,111 @@ io.on('connection', (socket) => {
   console.log('New player connected:', socket.id);
   let currentRoom = null;
 
-  socket.on('createRoom', (data) => {
-    if (!data.username || data.username.length < 2 || data.username.length > 20) {
-      socket.emit('gameError', 'Username must be 2-20 characters');
-      return;
+  socket.on('createRoom', async (data) => {
+    try {
+      if (!data.username || data.username.length < 2 || data.username.length > 20) {
+        socket.emit('gameError', 'Username must be 2-20 characters');
+        return;
+      }
+      
+      const playerProfile = await getOrCreatePlayer(data.username.trim(), data.playerId);
+      
+      const roomId = createRoom(socket.id, playerProfile.stats.name);
+      currentRoom = roomId;
+      socket.join(roomId);
+      
+      const room = getRoom(roomId);
+      if (!room) {
+        socket.emit('gameError', 'Failed to create room');
+        return;
+      }
+      
+      const { canvasWidth, canvasHeight, segmentSize } = room.config;
+      const spawnPos = getPlayerSpawnPosition(room, 0);
+      const playerColor = getNextAvailableColor(room);
+      const player = new Snake(socket.id, playerProfile.stats.name, segmentSize, canvasWidth, canvasHeight, spawnPos.x, spawnPos.y, 1, 0, playerColor, room.config.gameSpeed);
+      player.moveQueue = []; 
+      player.playerId = playerProfile.playerId;
+      room.players.push(player);
+      
+      socket.emit('roomCreated', { 
+        roomId, 
+        isHost: true,
+        config: room.config,
+        playerProfile: playerProfile
+      });
+      io.to(roomId).emit('updatePlayers', serializePlayers(room.players), 
+        { playing: room.gameState.playing, round: room.gameState.round }, 
+        room.config, { host: room.host, roomId });
+    } catch (error) {
+      console.error('Error creating room:', error);
+      socket.emit('gameError', 'Error creating room');
     }
-    
-    const roomId = createRoom(socket.id, data.username.trim());
-    currentRoom = roomId;
-    socket.join(roomId);
-    
-    const room = getRoom(roomId);
-    if (!room) {
-      socket.emit('gameError', 'Failed to create room');
-      return;
-    }
-    
-    const { canvasWidth, canvasHeight, segmentSize } = room.config;
-    const spawnPos = getPlayerSpawnPosition(room, 0);
-    const playerColor = getPlayerColor(0);
-    const player = new Snake(socket.id, data.username.trim(), segmentSize, canvasWidth, canvasHeight, spawnPos.x, spawnPos.y, 1, 0, playerColor, room.config.gameSpeed);
-    player.moveQueue = []; 
-    room.players.push(player);
-    
-    socket.emit('roomCreated', { 
-      roomId, 
-      isHost: true,
-      config: room.config
-    });
-    io.to(roomId).emit('updatePlayers', serializePlayers(room.players), 
-      { playing: room.gameState.playing, round: room.gameState.round }, 
-      room.config, { host: room.host, roomId });
   });
 
-  socket.on('joinRoom', (data) => {
-    if (!data.username || data.username.length < 2 || data.username.length > 20) {
-      socket.emit('gameError', 'Username must be 2-20 characters');
-      return;
+  socket.on('joinRoom', async (data) => {
+    try {
+      if (!data.username || data.username.length < 2 || data.username.length > 20) {
+        socket.emit('gameError', 'Username must be 2-20 characters');
+        return;
+      }
+      
+      if (!data.roomId || data.roomId.length !== 6) {
+        socket.emit('gameError', 'Invalid room ID');
+        return;
+      }
+      
+      const room = getRoom(data.roomId);
+      if (!room) {
+        socket.emit('gameError', 'Room not found or has ended');
+        return;
+      }
+      
+      if (room.players.length >= room.config.maxPlayers) {
+        socket.emit('gameError', 'Room is full');
+        return;
+      }
+      
+      if (room.gameState.playing) {
+        socket.emit('gameError', 'Game already in progress');
+        return;
+      }
+      
+      const playerProfile = await getOrCreatePlayer(data.username.trim(), data.playerId);
+      
+      if (room.players.some(p => p.name === playerProfile.stats.name)) {
+        socket.emit('gameError', 'Username already taken in this room');
+        return;
+      }
+      
+      currentRoom = data.roomId;
+      socket.join(data.roomId);
+      
+      const { canvasWidth, canvasHeight, segmentSize } = room.config;
+      const playerIndex = room.players.length;
+      const spawnPos = getPlayerSpawnPosition(room, playerIndex);
+      const playerColor = getNextAvailableColor(room);
+      
+      const player = new Snake(socket.id, playerProfile.stats.name, segmentSize, canvasWidth, canvasHeight, spawnPos.x, spawnPos.y, 1, 0, playerColor, room.config.gameSpeed);
+      player.moveQueue = [];
+      player.playerId = playerProfile.playerId;
+      room.players.push(player);
+      
+      initializeRoundScores(room);
+      socket.emit('roomJoined', { 
+        roomId: data.roomId, 
+        isHost: false,
+        config: room.config,
+        playerProfile: playerProfile
+      });
+      
+      io.to(data.roomId).emit('updatePlayers', serializePlayers(room.players), 
+        { playing: room.gameState.playing, round: room.gameState.round }, 
+        room.config, { host: room.host, roomId: data.roomId });
+    } catch (error) {
+      console.error('Error joining room:', error);
+      socket.emit('gameError', 'Error joining room');
     }
-    
-    if (!data.roomId || data.roomId.length !== 6) {
-      socket.emit('gameError', 'Invalid room ID');
-      return;
-    }
-    
-    const room = getRoom(data.roomId);
-    if (!room) {
-      socket.emit('gameError', 'Room not found or has ended');
-      return;
-    }
-    
-    if (room.players.length >= room.config.maxPlayers) {
-      socket.emit('gameError', 'Room is full');
-      return;
-    }
-    
-    if (room.gameState.playing) {
-      socket.emit('gameError', 'Game already in progress');
-      return;
-    }
-    
-    if (room.players.some(p => p.name === data.username.trim())) {
-      socket.emit('gameError', 'Username already taken in this room');
-      return;
-    }
-    
-    currentRoom = data.roomId;
-    socket.join(data.roomId);
-    
-    const { canvasWidth, canvasHeight, segmentSize } = room.config;
-    const playerIndex = room.players.length;
-    const spawnPos = getPlayerSpawnPosition(room, playerIndex);
-    const playerColor = getPlayerColor(playerIndex);
-    
-    const player = new Snake(socket.id, data.username.trim(), segmentSize, canvasWidth, canvasHeight, spawnPos.x, spawnPos.y, 1, 0, playerColor, room.config.gameSpeed);
-    player.moveQueue = [];
-    room.players.push(player);
-    
-    initializeRoundScores(room);
-    socket.emit('roomJoined', { 
-      roomId: data.roomId, 
-      isHost: false,
-      config: room.config
-    });
-    io.to(data.roomId).emit('updatePlayers', serializePlayers(room.players), 
-      { playing: room.gameState.playing, round: room.gameState.round }, 
-      room.config, { host: room.host, roomId: data.roomId });
   });
 
   socket.on('updateRoomConfig', (newConfig) => {
@@ -780,25 +939,69 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('backToMenu', () => {
-    if (currentRoom) {
-      socket.leave(currentRoom);
-      currentRoom = null;
+  socket.on('getPlayerStats', async (playerId) => {
+    try {
+      const stats = await getPlayerStats(playerId);
+      if (stats) {
+        socket.emit('playerStats', { playerId, stats });
+      }
+    } catch (error) {
+      console.error('Error getting stats:', error);
     }
-    socket.emit('backToMenuSuccess');
   });
 
-  socket.on('disconnect', () => {
-    if (!currentRoom) return;
+  socket.on('getOrCreateProfile', async (data) => {
+    try {
+      if (!data.username || data.username.length < 2 || data.username.length > 20) {
+        socket.emit('profileError', 'Username must be 2-20 characters');
+        return;
+      }
+      
+      const username = data.username.trim();
+      
+      // Verificar si el usuario ya está conectado
+      const isUserConnected = Array.from(connectedUsers.values()).some(connectedName => 
+        connectedName.toLowerCase() === username.toLowerCase()
+      );
+      
+      if (isUserConnected) {
+        socket.emit('profileError', `El usuario "${username}" ya está conectado. Intenta con otro nombre.`);
+        return;
+      }
+      
+      const playerProfile = await getOrCreatePlayer(username, data.playerId);
+      
+      // Registrar usuario como conectado
+      connectedUsers.set(socket.id, playerProfile.stats.name);
+      
+      socket.emit('profileLoaded', playerProfile);
+    } catch (error) {
+      console.error('Error getting profile:', error);
+      socket.emit('profileError', 'Error loading profile');
+    }
+  });
+
+  socket.on('logout', (data) => {
+    // Limpiar usuario de la lista de conectados
+    connectedUsers.delete(socket.id);
     
-    const room = getRoom(currentRoom);
+    // Si estaba en una sala, manejar la salida usando la variable del socket
+    if (currentRoom) {
+      handlePlayerLeaveRoom(socket, currentRoom);
+      currentRoom = null; // Limpiar la variable del socket
+    }
+  });
+
+  // Función para manejar salida de sala (reutilizable para disconnect y logout)
+  function handlePlayerLeaveRoom(socket, roomId) {
+    const room = getRoom(roomId);
     if (!room) return;
     
     const playerIndex = room.players.findIndex(player => player.id === socket.id);
     if (playerIndex !== -1) {
       const playerName = room.players[playerIndex].name;
       room.players.splice(playerIndex, 1);
-      console.log(`Player "${playerName}" disconnected from room ${currentRoom}`);
+      console.log(`Player "${playerName}" left room ${roomId}`);
       
       room.projectiles = room.projectiles.filter(p => p.playerId !== socket.id);
       delete room.roundScores[socket.id];
@@ -807,16 +1010,16 @@ io.on('connection', (socket) => {
         if (room.players.length > 0) {
           room.host = room.players[0].id;
           room.hostName = room.players[0].name;
-          io.to(currentRoom).emit('newHost', { hostId: room.host, hostName: room.hostName });
+          io.to(roomId).emit('newHost', { hostId: room.host, hostName: room.hostName });
         } else {
-          deleteRoom(currentRoom);
+          deleteRoom(roomId);
           return;
         }
       }
       
-      io.to(currentRoom).emit('updatePlayers', serializePlayers(room.players), 
+      io.to(roomId).emit('updatePlayers', serializePlayers(room.players), 
         { playing: room.gameState.playing, round: room.gameState.round }, 
-        room.config, { host: room.host, roomId: currentRoom });
+        room.config, { host: room.host, roomId });
       
       if (room.players.length < room.config.minPlayers && room.gameState.playing) {
         room.gameState.playing = false;
@@ -828,7 +1031,7 @@ io.on('connection', (socket) => {
           clearInterval(room.gameState.roundTimerId);
           room.gameState.roundTimerId = null;
         }
-        io.to(currentRoom).emit('gameError', 'Not enough players to continue');
+        io.to(roomId).emit('gameError', 'Not enough players to continue');
       }
       
       if (room.players.length < room.config.minPlayers && room.gameState.timeoutIdStartGame) {
@@ -837,6 +1040,44 @@ io.on('connection', (socket) => {
         room.gameState.downCounter = room.config.countdownTime;
       }
     }
+    
+    socket.leave(roomId);
+  }
+
+  socket.on('getLeaderboard', async () => {
+    try {
+      const leaderboard = await getLeaderboard();
+      socket.emit('leaderboard', leaderboard);
+    } catch (error) {
+      console.error('Error getting leaderboard:', error);
+    }
+  });
+
+  socket.on('backToMenu', () => {
+    if (currentRoom) {
+      socket.leave(currentRoom);
+      currentRoom = null;
+    }
+    socket.emit('backToMenuSuccess');
+  });
+
+  socket.on('disconnect', () => {
+    // Limpiar usuario de la lista de conectados
+    connectedUsers.delete(socket.id);
+    
+    if (!currentRoom) return;
+    
+    // Usar la función reutilizable para manejar la salida
+    handlePlayerLeaveRoom(socket, currentRoom);
+  });
+});
+
+// Close database on exit
+process.on('SIGINT', () => {
+  db.close((err) => {
+    if (err) console.error(err.message);
+    console.log('Database connection closed.');
+    process.exit(0);
   });
 });
 

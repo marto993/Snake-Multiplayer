@@ -40,6 +40,10 @@ document.addEventListener("DOMContentLoaded", function() {
   const countdownInput = document.getElementById('countdownInput');
   const attacksEnabledInput = document.getElementById('attacksEnabledInput');
 
+  // Persistence variables
+  let playerProfile = null;
+  let currentPlayerId = null;
+
   const socket = io();
   let gameState = { playing: false, round: 1 };
   let segmentSize = 20;
@@ -53,6 +57,88 @@ document.addEventListener("DOMContentLoaded", function() {
   let roomConfig = {};
   let roomScores = {};
   let roundTimeLeft = 0;
+
+  // localStorage functions
+  function savePlayerProfile(profile) {
+    try {
+      localStorage.setItem('snakePlayerProfile', JSON.stringify(profile));
+      localStorage.setItem('snakePlayerId', profile.playerId);
+    } catch (error) {
+      console.log('Error saving profile:', error);
+    }
+  }
+
+  function loadPlayerProfile() {
+    try {
+      const savedProfile = localStorage.getItem('snakePlayerProfile');
+      const savedPlayerId = localStorage.getItem('snakePlayerId');
+      
+      if (savedProfile && savedPlayerId) {
+        const profile = JSON.parse(savedProfile);
+        return { ...profile, playerId: savedPlayerId };
+      }
+    } catch (error) {
+      console.log('Error loading profile:', error);
+    }
+    return null;
+  }
+
+  function clearPlayerProfile() {
+    localStorage.removeItem('snakePlayerProfile');
+    localStorage.removeItem('snakePlayerId');
+    playerProfile = null;
+    currentPlayerId = null;
+  }
+
+  function initializeUserInterface() {
+    const savedProfile = loadPlayerProfile();
+    if (savedProfile && savedProfile.stats) {
+      // Usuario tiene perfil guardado - validar si no está conectado
+      usernameInput.value = savedProfile.stats.name;
+      playerProfile = savedProfile;
+      currentPlayerId = savedProfile.playerId;
+      
+      // Validar con el servidor antes de proceder
+      showStatus('Verificando sesión...', 'info');
+      socket.emit('getOrCreateProfile', { 
+        username: savedProfile.stats.name, 
+        playerId: savedProfile.playerId 
+      });
+    } else {
+      // No hay perfil - mostrar formulario de login
+      showElement(document.getElementById('loginView'));
+      hideElement(document.getElementById('profileView'));
+      hideElement(document.getElementById('roomSelection'));
+      updateLogoutButtonVisibility();
+      showStatus('¡Conectado! Ingresa tu nombre para comenzar.', 'info');
+    }
+  }
+
+  function updateLogoutButtonVisibility() {
+    const logoutButton = document.getElementById('resetProfileButton');
+    if (logoutButton) {
+      if (playerProfile && currentPlayerId) {
+        showElement(logoutButton);
+      } else {
+        hideElement(logoutButton);
+      }
+    }
+  }
+
+  function updateProfileDisplay(stats) {
+    const profileInfo = document.getElementById('profileInfo');
+    if (profileInfo && stats) {
+      profileInfo.innerHTML = `
+        <div class="profile-stats">
+          <strong>📊 ${stats.name}</strong><br>
+          <span>🎮 ${stats.games_played} partidas</span><br>
+          <span>🏆 ${stats.wins} victorias</span><br>
+          <span>🔥 Racha: ${stats.current_streak}</span><br>
+          <span>⭐ Mejor: ${stats.best_score}</span>
+        </div>
+      `;
+    }
+  }
 
   function lerp(start, end, factor) {
     return start + (end - start) * factor;
@@ -301,6 +387,14 @@ document.addEventListener("DOMContentLoaded", function() {
     currentRoomId = data.roomId;
     isHost = data.isHost;
     roomConfig = data.config;
+    
+    if (data.playerProfile) {
+      playerProfile = data.playerProfile;
+      currentPlayerId = data.playerProfile.playerId;
+      savePlayerProfile(data.playerProfile);
+      updateProfileDisplay(data.playerProfile.stats);
+    }
+    
     showGameInterface();
     updateConfigPanel();
     updateAttackControls();
@@ -311,6 +405,14 @@ document.addEventListener("DOMContentLoaded", function() {
     currentRoomId = data.roomId;
     isHost = data.isHost;
     roomConfig = data.config;
+    
+    if (data.playerProfile) {
+      playerProfile = data.playerProfile;
+      currentPlayerId = data.playerProfile.playerId;
+      savePlayerProfile(data.playerProfile);
+      updateProfileDisplay(data.playerProfile.stats);
+    }
+    
     showGameInterface();
     updateConfigPanel();
     updateAttackControls();
@@ -418,12 +520,10 @@ document.addEventListener("DOMContentLoaded", function() {
     updateGameInfo(state);
   });
 
-  // Nuevo: evento para actualizar tiempo de ronda
   socket.on('roundTimeUpdate', (timeLeft) => {
     roundTimeLeft = timeLeft;
     updateRoundTimer(timeLeft);
     
-    // Cambiar color del timer cuando queda poco tiempo
     if (timeLeft <= 10) {
       roundTimer.style.color = '#ff4040';
       if (timeLeft <= 5) {
@@ -433,20 +533,16 @@ document.addEventListener("DOMContentLoaded", function() {
   });
 
   socket.on('gameLogicFrame', (data) => {
-	// Ya no detectamos muerte por colisión - las rondas terminan por tiempo
 	snakes.forEach(localSnake => {
 	const serverSnake = data.players.find(p => p.id === localSnake.id);
 		if (serverSnake) {
-			// Verificar si hubo portal para esta serpiente
 			const portalEvent = data.portals && data.portals.find(p => p.playerId === localSnake.id);
 
 			if (portalEvent) {
-				// Portal detectado - saltar directamente sin interpolación
 				localSnake.targetSegments = serverSnake.segments.map(seg => ({ ...seg }));
 				localSnake.segments = serverSnake.segments.map(seg => ({ ...seg }));
 				localSnake.renderSegments = serverSnake.segments.map(seg => ({ ...seg }));
 			} else {
-				// Movimiento normal con interpolación
 				localSnake.targetSegments = serverSnake.segments.map(seg => ({ ...seg }));
 				localSnake.segments = serverSnake.segments.map(seg => ({ ...seg }));
 			}
@@ -480,7 +576,6 @@ document.addEventListener("DOMContentLoaded", function() {
     gameState = data.gameState;
     projectiles = data.projectiles || [];
     
-    // Actualizar tiempo de ronda si está disponible
     if (data.gameState.roundTimeLeft !== undefined) {
       roundTimeLeft = data.gameState.roundTimeLeft;
       updateRoundTimer(roundTimeLeft);
@@ -519,6 +614,11 @@ document.addEventListener("DOMContentLoaded", function() {
     stopRenderLoop();
     hideElement(roundTimer);
     showStatus(`¡Juego Terminado! Campeón: ${data.winner.name}`, 'success');
+    
+    if (currentPlayerId) {
+      socket.emit('getPlayerStats', currentPlayerId);
+    }
+    
     if (data.roomFinished) {
       showFinalScreen(data.winner, data.finalScores);
     } else {
@@ -528,6 +628,45 @@ document.addEventListener("DOMContentLoaded", function() {
         updateConfigPanel();
       }
     }
+  });
+
+  socket.on('playerStats', (data) => {
+    if (data.playerId === currentPlayerId) {
+      playerProfile = data;
+      savePlayerProfile(data);
+      updateProfileDisplay(data.stats);
+    }
+  });
+
+  socket.on('profileLoaded', (profile) => {
+    playerProfile = profile;
+    currentPlayerId = profile.playerId;
+    savePlayerProfile(profile);
+    updateProfileDisplay(profile.stats);
+    
+    // Mostrar vista de perfil y selección de salas
+    hideElement(document.getElementById('loginView'));
+    showElement(document.getElementById('profileView'));
+    showElement(document.getElementById('roomSelection'));
+    hideElement(document.getElementById('gameInterface'));
+    updateLogoutButtonVisibility();
+    showStatus(`¡Bienvenido, ${profile.stats.name}!`, 'success');
+  });
+
+  socket.on('profileError', (message) => {
+    showStatus(message, 'error');
+    
+    // Si hay error, limpiar localStorage y mostrar login
+    clearPlayerProfile();
+    usernameInput.value = '';
+    showElement(document.getElementById('loginView'));
+    hideElement(document.getElementById('profileView'));
+    hideElement(document.getElementById('roomSelection'));
+    updateLogoutButtonVisibility();
+  });
+
+  socket.on('leaderboard', (leaderboard) => {
+    showLeaderboard(leaderboard);
   });
 
   socket.on('roomFinished', (data) => {
@@ -639,16 +778,8 @@ document.addEventListener("DOMContentLoaded", function() {
   }
 
   function showRoomSelection() {
-    hideElement(joinForm);
-    showElement(roomSelection);
-    hideElement(gameInterface);
-    refreshRooms();
-  }
-
-  function showGameInterface() {
-    hideElement(joinForm);
-    hideElement(roomSelection);
-    showElement(gameInterface);
+    showElement(document.getElementById('roomSelection'));
+    hideElement(document.getElementById('gameInterface'));
   }
 
   function updateRoomsList(rooms) {
@@ -767,10 +898,9 @@ document.addEventListener("DOMContentLoaded", function() {
   function updatePlayerList(players) {
     playerList.innerHTML = '';
     
-    // Modificado: Ordenar por puntaje actual (tamaño de snake) durante el juego
     const sortedPlayers = players.sort((a, b) => {
       if (gameState.playing) {
-        return b.score - a.score; // Puntaje = tamaño de la snake
+        return b.score - a.score;
       } else {
         const aTotal = (roomScores && roomScores[a.id]) ? roomScores[a.id].totalScore : 0;
         const bTotal = (roomScores && roomScores[b.id]) ? roomScores[b.id].totalScore : 0;
@@ -794,7 +924,7 @@ document.addEventListener("DOMContentLoaded", function() {
       score.className = 'player-score';
       
       if (gameState.playing) {
-        score.textContent = player.score + ' segs'; // Mostrar tamaño de snake
+        score.textContent = player.score + ' segs';
       } else {
         const totalScore = (roomScores && roomScores[player.id]) ? roomScores[player.id].totalScore : 0;
         const roundWins = (roomScores && roomScores[player.id]) ? roomScores[player.id].roundWins : 0;
@@ -899,6 +1029,59 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   }
 
+  function resetPlayerProfile() {
+    // Notificar al servidor para limpiar la sesión (incluye salir de sala si está en una)
+    socket.emit('logout', { currentRoomId });
+    
+    clearPlayerProfile();
+    usernameInput.value = '';
+    const profileInfo = document.getElementById('profileInfo');
+    if (profileInfo) {
+      profileInfo.innerHTML = '<div class="profile-stats"><span>Ingresa tu nombre para ver estadísticas</span></div>';
+    }
+    
+    // Mostrar vista de login
+    showElement(document.getElementById('loginView'));
+    hideElement(document.getElementById('profileView'));
+    hideElement(document.getElementById('roomSelection'));
+    hideElement(document.getElementById('gameInterface'));
+    updateLogoutButtonVisibility();
+    showStatus('Sesión cerrada.', 'info');
+  }
+
+  function showGameInterface() {
+    hideElement(document.getElementById('roomSelection'));
+    showElement(document.getElementById('gameInterface'));
+  }
+
+  function requestLeaderboard() {
+    socket.emit('getLeaderboard');
+  }
+
+  function showLeaderboard(leaderboard) {
+    const leaderboardModal = document.getElementById('leaderboardModal');
+    const leaderboardList = document.getElementById('leaderboardList');
+    
+    if (leaderboardModal && leaderboardList) {
+      leaderboardList.innerHTML = '';
+      
+      leaderboard.forEach((player, index) => {
+        const item = document.createElement('li');
+        item.className = 'leaderboard-item';
+        item.innerHTML = `
+          <span class="rank">#${index + 1}</span>
+          <span class="name">${player.name}</span>
+          <span class="wins">${player.wins}V</span>
+          <span class="games">${player.games_played}P</span>
+          <span class="winrate">${player.games_played > 0 ? Math.round((player.wins / player.games_played) * 100) : 0}%</span>
+        `;
+        leaderboardList.appendChild(item);
+      });
+      
+      showElement(leaderboardModal);
+    }
+  }
+
   window.addEventListener('resize', handleResize);
 
   window.joinSpecificRoom = function(roomId) {
@@ -908,8 +1091,18 @@ document.addEventListener("DOMContentLoaded", function() {
       usernameInput.focus();
       return;
     }
-    socket.emit('joinRoom', { roomId, username });
+    
+    const dataToSend = { roomId, username };
+    if (currentPlayerId && playerProfile && playerProfile.stats.name.toLowerCase() === username.toLowerCase()) {
+      dataToSend.playerId = currentPlayerId;
+    } else {
+      currentPlayerId = null;
+    }
+    
+    socket.emit('joinRoom', dataToSend);
   };
+
+  window.resetPlayerProfile = resetPlayerProfile;
 
   toggleConfigButton.addEventListener('click', () => {
     if (configSettings.classList.contains('hidden')) {
@@ -947,13 +1140,35 @@ document.addEventListener("DOMContentLoaded", function() {
 
   joinButton.addEventListener('click', (event) => {
     event.preventDefault();
-    showRoomSelection();
+    const username = usernameInput.value.trim();
+    if (username && username.length >= 2 && username.length <= 20) {
+      // Solicitar perfil del jugador al servidor
+      const dataToSend = { username };
+      if (currentPlayerId && playerProfile && playerProfile.stats.name.toLowerCase() === username.toLowerCase()) {
+        dataToSend.playerId = currentPlayerId;
+      } else {
+        currentPlayerId = null;
+      }
+      
+      showStatus('Cargando perfil...', 'info');
+      socket.emit('getOrCreateProfile', dataToSend);
+    } else {
+      showStatus('El nombre debe tener 2-20 caracteres', 'error');
+      usernameInput.focus();
+    }
   });
 
   createRoomButton.addEventListener('click', () => {
     const username = usernameInput.value.trim();
     if (username && username.length >= 2 && username.length <= 20) {
-      socket.emit('createRoom', { username });
+      const dataToSend = { username };
+      if (currentPlayerId && playerProfile && playerProfile.stats.name.toLowerCase() === username.toLowerCase()) {
+        dataToSend.playerId = currentPlayerId;
+      } else {
+        currentPlayerId = null;
+      }
+      
+      socket.emit('createRoom', dataToSend);
     } else {
       showStatus('El nombre debe tener 2-20 caracteres', 'error');
       usernameInput.focus();
@@ -976,7 +1191,14 @@ document.addEventListener("DOMContentLoaded", function() {
       return;
     }
     
-    socket.emit('joinRoom', { roomId, username });
+    const dataToSend = { roomId, username };
+    if (currentPlayerId && playerProfile && playerProfile.stats.name.toLowerCase() === username.toLowerCase()) {
+      dataToSend.playerId = currentPlayerId;
+    } else {
+      currentPlayerId = null;
+    }
+    
+    socket.emit('joinRoom', dataToSend);
   });
 
   startGameButton.addEventListener('click', () => {
@@ -992,10 +1214,22 @@ document.addEventListener("DOMContentLoaded", function() {
     hideFinalScreen();
   });
 
+  document.getElementById('leaderboardButton').addEventListener('click', () => {
+    requestLeaderboard();
+  });
+
+  document.getElementById('loginLeaderboardButton').addEventListener('click', () => {
+    requestLeaderboard();
+  });
+
+  document.getElementById('closeLeaderboardModal').addEventListener('click', () => {
+    hideElement(document.getElementById('leaderboardModal'));
+  });
+
   roomIdInput.addEventListener('input', (e) => {
     e.target.value = e.target.value.toUpperCase();
   });
 
+  initializeUserInterface();
   handleResize();
-  showStatus('¡Conectado! Ingresa tu nombre para comenzar.', 'info');
 });
