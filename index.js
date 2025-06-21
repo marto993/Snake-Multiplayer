@@ -345,7 +345,7 @@ function generateFoods(room) {
       foodY = Math.floor(canvasHeight / 2 / segmentSize) * segmentSize;
     }
     
-    const scoreFood = Math.floor(Math.random() * 7) + 3;
+    const scoreFood = Math.floor(Math.random() * 6) + 1;
     room.foods.push({ x: foodX, y: foodY, score: scoreFood });
     
     const gridX = Math.floor(foodX / segmentSize);
