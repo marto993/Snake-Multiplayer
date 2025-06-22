@@ -1063,22 +1063,59 @@ document.addEventListener("DOMContentLoaded", function() {
     const leaderboardList = document.getElementById('leaderboardList');
     
     if (leaderboardModal && leaderboardList) {
-      leaderboardList.innerHTML = '';
-      
-      leaderboard.forEach((player, index) => {
-        const item = document.createElement('li');
-        item.className = 'leaderboard-item';
-        item.innerHTML = `
-          <span class="rank">#${index + 1}</span>
-          <span class="name">${player.name}</span>
-          <span class="wins">${player.wins}V</span>
-          <span class="games">${player.games_played}P</span>
-          <span class="winrate">${player.games_played > 0 ? Math.round((player.wins / player.games_played) * 100) : 0}%</span>
-        `;
-        leaderboardList.appendChild(item);
-      });
-      
-      showElement(leaderboardModal);
+		  leaderboardList.innerHTML = '';
+		  
+		  // Ordenar el leaderboard según los nuevos criterios
+		  const sortedLeaderboard = leaderboard.sort((a, b) => {
+			const aHasMinGames = a.games_played >= 3;
+			const bHasMinGames = b.games_played >= 3;
+			
+			// Si ambos tienen >= 3 partidas, ordenar por porcentaje de victorias
+			if (aHasMinGames && bHasMinGames) {
+			  const aWinRate = a.games_played > 0 ? (a.wins / a.games_played) : 0;
+			  const bWinRate = b.games_played > 0 ? (b.wins / b.games_played) : 0;
+			  
+			  if (aWinRate !== bWinRate) {
+				return bWinRate - aWinRate; // Mayor porcentaje primero
+			  }
+			  // En caso de empate en porcentaje, ordenar por victorias totales
+			  return b.wins - a.wins;
+			}
+			
+			// Si ambos tienen < 3 partidas, ordenar por victorias
+			if (!aHasMinGames && !bHasMinGames) {
+			  if (a.wins !== b.wins) {
+				return b.wins - a.wins; // Más victorias primero
+			  }
+			  // En caso de empate en victorias, ordenar por partidas jugadas
+			  return b.games_played - a.games_played;
+			}
+			
+			// Priorizar jugadores con >= 3 partidas sobre los que tienen < 3
+			if (aHasMinGames && !bHasMinGames) {
+			  return -1; // a va primero
+			}
+			if (!aHasMinGames && bHasMinGames) {
+			  return 1; // b va primero
+			}
+			
+			return 0;
+		  });
+		  
+		  sortedLeaderboard.forEach((player, index) => {
+			const item = document.createElement('li');
+			item.className = 'leaderboard-item';
+			item.innerHTML = `
+			  <span class="rank">#${index + 1}</span>
+			  <span class="name">${player.name}</span>
+			  <span class="wins">${player.wins}V</span>
+			  <span class="games">${player.games_played}P</span>
+			  <span class="winrate">${player.games_played > 0 ? Math.round((player.wins / player.games_played) * 100) : 0}%</span>
+			`;
+			leaderboardList.appendChild(item);
+		  });
+		  
+		  showElement(leaderboardModal);
     }
   }
 
