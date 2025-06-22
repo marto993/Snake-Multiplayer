@@ -686,7 +686,7 @@ function gameLogicLoop(room) {
             foodY = Math.floor(room.config.canvasHeight / 2 / segmentSize) * segmentSize;
           }
           
-          const newFoodScore = Math.floor(Math.random() * 7) + 3;
+          const newFoodScore = Math.floor(Math.random() * 6) + 1;
           room.foods.push({ x: foodX, y: foodY, score: newFoodScore });
         }
       }
