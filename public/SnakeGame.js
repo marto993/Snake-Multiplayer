@@ -408,7 +408,7 @@ document.addEventListener("DOMContentLoaded", function() {
     // Ronda (más pequeña, arriba)
     infoCtx.font = 'bold 22px Share Tech Mono, monospace';
     infoCtx.fillStyle = '#00ffff';
-    infoCtx.fillText(`RONDA ${gameState.round}/3`, 20, 30);
+    infoCtx.fillText(`RONDA ${gameState.round}/3`, 20, 32);
     
     // Tiempo (más grande, destacado, abajo)
     infoCtx.font = 'bold 28px Share Tech Mono, monospace';
@@ -496,17 +496,28 @@ document.addEventListener("DOMContentLoaded", function() {
 
   document.addEventListener('keydown', handleKeyPress);
 
-  function handleKeyPress(event) {
-    const key = event.keyCode;
-    
-    if (key >= 37 && key <= 40 && isConnected && gameState.playing) {
-      event.preventDefault();
-      socket.emit('newMove', { key });
-    } else if (key === 32 && isConnected && gameState.playing) {
-      event.preventDefault();
-      socket.emit('attack');
-    }
-  }
+	function handleKeyPress(event) {
+	  const key = event.keyCode;
+	  
+	  // Flechas (37-40) o WASD (87,65,83,68)
+	  if ((key >= 37 && key <= 40) || key === 87 || key === 65 || key === 83 || key === 68) {
+		if (isConnected && gameState.playing) {
+		  event.preventDefault();
+		  
+		  // Convertir WASD a códigos de flechas para el servidor
+		  let keyToSend = key;
+		  if (key === 87) keyToSend = 38; // W -> ↑
+		  else if (key === 65) keyToSend = 37; // A -> ←
+		  else if (key === 83) keyToSend = 40; // S -> ↓
+		  else if (key === 68) keyToSend = 39; // D -> →
+		  
+		  socket.emit('newMove', { key: keyToSend });
+		}
+	  } else if (key === 32 && isConnected && gameState.playing) {
+		event.preventDefault();
+		socket.emit('attack');
+	  }
+	}
 
   function createLocalSnake(serverSnake) {
     const snake = new Snake(
@@ -1439,6 +1450,27 @@ document.addEventListener("DOMContentLoaded", function() {
   });
 
   startGameButton.addEventListener('click', () => {
+    // Guardar configuración antes de iniciar
+    if (isHost) {
+      const finalConfig = {
+        maxPlayers: parseInt(maxPlayersInput.value),
+        minPlayers: parseInt(minPlayersInput.value),
+        gameSpeed: parseInt(gameSpeedInput.value),
+        segmentSize: parseInt(segmentSizeInput.value),
+        consumables: {
+          immunity: {
+            enabled: immunityEnabledInput ? immunityEnabledInput.checked : true,
+            spawnInterval: immunityIntervalInput ? parseInt(immunityIntervalInput.value) : 13,
+            duration: immunityDurationInput ? parseInt(immunityDurationInput.value) : 5
+          }
+        }
+      };
+      
+      if (finalConfig.minPlayers <= finalConfig.maxPlayers) {
+        socket.emit('updateRoomConfig', finalConfig);
+      }
+    }
+    
     socket.emit('startGame');
   });
 
