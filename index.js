@@ -196,10 +196,10 @@ function generateRoomId() {
 // MODIFICADO: validateRoomConfig con nuevos valores por defecto
 function validateRoomConfig(config) {
   return {
-    maxPlayers: Math.max(2, Math.min(20, parseInt(config.maxPlayers) || 8)),
+    maxPlayers: Math.max(2, Math.min(16, parseInt(config.maxPlayers) || 8)),
     minPlayers: Math.max(2, Math.min(parseInt(config.maxPlayers) || 8, parseInt(config.minPlayers) || 2)),
     maxRounds: 3, // FIJO: siempre 3 rondas
-    gameSpeed: Math.max(25, Math.min(200, parseInt(config.gameSpeed) || 75)),
+    gameSpeed: Math.max(40, Math.min(200, parseInt(config.gameSpeed) || 83)),
     canvasWidth: 1200, // FIJO: siempre 1200x700
     canvasHeight: 700, // FIJO: siempre 1200x700
     segmentSize: Math.max(5, Math.min(25, parseInt(config.segmentSize) || 20)),
@@ -209,7 +209,7 @@ function validateRoomConfig(config) {
     consumables: {
       immunity: {
         enabled: Boolean(config.consumables?.immunity?.enabled !== false),
-        spawnInterval: Math.max(5, Math.min(30, parseInt(config.consumables?.immunity?.spawnInterval) || 13)),
+        spawnInterval: Math.max(3, Math.min(30, parseInt(config.consumables?.immunity?.spawnInterval) || 5)),
         duration: Math.max(3, Math.min(15, parseInt(config.consumables?.immunity?.duration) || 5))
       }
     }
@@ -411,12 +411,21 @@ function startConsumableTimer(room, consumableType) {
       spawnConsumable(room, consumableType);
     }
   };
+  
+  // NUEVO: Spawn inicial de TODOS los consumibles necesarios
+  const maxConsumables = getMaxConsumablesForType(room, consumableType);
+  const currentCount = room.consumables.filter(c => c.type === consumableType).length;
+  
+  for (let i = currentCount; i < maxConsumables; i++) {
+    if (room.gameState.playing) {
+      spawnConsumable(room, consumableType);
+    }
+  }
     
-  // Configurar timer
+  // Configurar timer para spawns posteriores
   room.consumableTimers[consumableType] = setInterval(checkAndSpawn, config.spawnInterval * 1000);
 }
 
-// NUEVO: Reiniciar timer específico de consumible
 function restartConsumableTimer(room, consumableType) {
   const config = room.config.consumables[consumableType];
   if (!config || !config.enabled || !room.gameState.playing) return;
@@ -426,7 +435,6 @@ function restartConsumableTimer(room, consumableType) {
     clearInterval(room.consumableTimers[consumableType]);
   }
   
-  // Reiniciar timer
   const checkAndSpawn = () => {
     if (!room || !room.gameState.playing) return;
     
@@ -438,6 +446,10 @@ function restartConsumableTimer(room, consumableType) {
     }
   };
   
+  // NUEVO: Spawn inmediato al reiniciar timer
+  //checkAndSpawn();
+  
+  // Reiniciar timer
   room.consumableTimers[consumableType] = setInterval(checkAndSpawn, config.spawnInterval * 1000);
 }
 
@@ -446,7 +458,7 @@ function getMaxConsumablesForType(room, consumableType) {
   
   switch(consumableType) {
     case 'immunity':
-      return Math.max(1, playerCount - 1); // N = jugadores - 1
+      return Math.max(3, playerCount+1);
     default:
       return 1;
   }
@@ -858,8 +870,8 @@ function gameLogicLoop(room) {
           consumableType: consumedConsumable.type
         });
         
-        // NUEVO: Reiniciar timer del tipo de consumible consumido
-        restartConsumableTimer(room, consumedConsumable.type);
+        // Reiniciar timer del tipo de consumible consumido
+        // restartConsumableTimer(room, consumedConsumable.type);
       }
       
       // Lógica de comida

@@ -207,17 +207,17 @@ document.addEventListener("DOMContentLoaded", function() {
     const innerSize = size - (padding * 2);
     
     if (hasImmunity) {
-      const pulseIntensity = (Math.sin(Date.now() * 0.008) + 1) * 0.5;
+      const pulseIntensity = (Math.sin(Date.now() * 0.008) + 1) * 0.6;
       const glowSize = 4 + (pulseIntensity * 3);
-      const glowAlpha = 0.3 + (pulseIntensity * 0.4);
+      const glowAlpha = 0.6 + (pulseIntensity * 0.4);
       
-      ctx.shadowColor = `rgba(100, 150, 255, ${glowAlpha})`;
+      ctx.shadowColor = `rgba(120, 170, 255, ${glowAlpha})`;
       ctx.shadowBlur = glowSize;
       ctx.fillStyle = color;
       ctx.fillRect(x + padding, y + padding, innerSize, innerSize);
       
-      ctx.shadowColor = `rgba(150, 200, 255, ${glowAlpha * 0.7})`;
-      ctx.shadowBlur = glowSize * 1.5;
+      ctx.shadowColor = `rgba(170, 220, 255, ${glowAlpha * 0.7})`;
+      ctx.shadowBlur = glowSize * 1.35;
       ctx.fillRect(x + padding, y + padding, innerSize, innerSize);
       
       ctx.shadowBlur = 0;
@@ -959,7 +959,7 @@ document.addEventListener("DOMContentLoaded", function() {
       consumables: {
         immunity: {
           enabled: immunityEnabledInput ? immunityEnabledInput.checked : true,
-          spawnInterval: immunityIntervalInput ? parseInt(immunityIntervalInput.value) : 13,
+          spawnInterval: immunityIntervalInput ? parseInt(immunityIntervalInput.value) : 5,
           duration: immunityDurationInput ? parseInt(immunityDurationInput.value) : 5
         }
       }
