@@ -4,6 +4,12 @@ document.addEventListener("DOMContentLoaded", function() {
 
   const canvas = document.getElementById("game");
   const ctx = canvas.getContext("2d");
+  
+  // Canvas de información
+  const infoCanvas = document.getElementById("infoCanvas");
+  const infoCtx = infoCanvas.getContext("2d");
+  const infoCanvasContainer = document.getElementById("infoCanvasContainer");
+  
   const gameOverScreen = document.getElementById('gameOverScreen');
   const scoreDisplay = document.getElementById('scoreDisplay');
   const restartButton = document.getElementById('restartButton');
@@ -20,26 +26,19 @@ document.addEventListener("DOMContentLoaded", function() {
   const roomsList = document.getElementById('roomsList');
   const waitingSpan = document.getElementById('waitingSpan');
   const playerList = document.getElementById('playerList');
-  const roundInfo = document.getElementById('roundInfo');
-  const roundTimer = document.getElementById('roundTimer');
   const gameStatus = document.getElementById('gameStatus');
   const roomInfo = document.getElementById('roomInfo');
-  const attackControls = document.getElementById('attackControls');
 
   const configPanel = document.getElementById('configPanel');
   const toggleConfigButton = document.getElementById('toggleConfigButton');
   const configSettings = document.getElementById('configSettings');
   const saveConfigButton = document.getElementById('saveConfigButton');
+  
   const maxPlayersInput = document.getElementById('maxPlayersInput');
   const minPlayersInput = document.getElementById('minPlayersInput');
-  const maxRoundsInput = document.getElementById('maxRoundsInput');
-  const roundTimeInput = document.getElementById('roundTimeInput');
   const gameSpeedInput = document.getElementById('gameSpeedInput');
-  const canvasSizeInput = document.getElementById('canvasSizeInput');
   const segmentSizeInput = document.getElementById('segmentSizeInput');
-  const attacksEnabledInput = document.getElementById('attacksEnabledInput');
   
-  // NUEVO: Inputs para configuración de consumibles modificados
   const immunityEnabledInput = document.getElementById('immunityEnabledInput');
   const immunityIntervalInput = document.getElementById('immunityIntervalInput');
   const immunityDurationInput = document.getElementById('immunityDurationInput');
@@ -50,7 +49,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
   const socket = io();
   let gameState = { playing: false, round: 1 };
-  let segmentSize = 20; // MODIFICADO: nuevo valor por defecto
+  let segmentSize = 20;
   let snakes = [];
   let foods = [];
   let consumables = [];
@@ -63,7 +62,6 @@ document.addEventListener("DOMContentLoaded", function() {
   let roomScores = {};
   let roundTimeLeft = 0;
 
-  // MODIFICADO: Colores y estilos para consumibles (sin símbolo, solo efecto visual)
   const consumableStyles = {
     immunity: {
       color: '#0101FF',
@@ -204,38 +202,32 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   }
 
-  // MODIFICADO: drawRetroSnakeSegment con efecto de inmunidad
   function drawRetroSnakeSegment(ctx, x, y, size, color, isHead = false, direction = null, isCurrentPlayer = false, hasImmunity = false) {
     const padding = 1;
     const innerSize = size - (padding * 2);
     
-    // NUEVO: Efecto de sombra azulada pulsante para inmunidad
     if (hasImmunity) {
-      const pulseIntensity = (Math.sin(Date.now() * 0.008) + 1) * 0.5; // Pulso lento pero notorio
+      const pulseIntensity = (Math.sin(Date.now() * 0.008) + 1) * 0.5;
       const glowSize = 4 + (pulseIntensity * 3);
       const glowAlpha = 0.3 + (pulseIntensity * 0.4);
       
-      // Sombra azulada exterior
       ctx.shadowColor = `rgba(100, 150, 255, ${glowAlpha})`;
       ctx.shadowBlur = glowSize;
       ctx.fillStyle = color;
       ctx.fillRect(x + padding, y + padding, innerSize, innerSize);
       
-      // Brillo sutil adicional
       ctx.shadowColor = `rgba(150, 200, 255, ${glowAlpha * 0.7})`;
       ctx.shadowBlur = glowSize * 1.5;
       ctx.fillRect(x + padding, y + padding, innerSize, innerSize);
       
-      // Limpiar sombra
       ctx.shadowBlur = 0;
       ctx.shadowColor = 'transparent';
     }
     
-    // Dibujar segmento normal
     drawRetroRect(ctx, x + padding, y + padding, innerSize, innerSize, color);
     
     if (isHead) {
-      ctx.strokeStyle = '#000000';//isCurrentPlayer ? '#ffffff' : '#000000';
+      ctx.strokeStyle = '#000000';
       ctx.lineWidth = 1;
       ctx.strokeRect(x + padding, y + padding, innerSize, innerSize);
       
@@ -328,177 +320,180 @@ document.addEventListener("DOMContentLoaded", function() {
     ctx.fillText(food.score, centerX, centerY);
   }
 
-  // Escudo con Path2D
-	function drawShield(ctx, centerX, centerY, size, color, glowColor) {
-	  const shield = new Path2D();
-	  const width = size * 1.2;
-	  const height = size * 1.5;
-	  
-	  // Contorno del escudo
-	  shield.moveTo(centerX, centerY - height/2);
-	  shield.quadraticCurveTo(centerX + width/2, centerY - height/2, centerX + width/2, centerY);
-	  shield.quadraticCurveTo(centerX + width/2, centerY + height/3, centerX, centerY + height/2);
-	  shield.quadraticCurveTo(centerX - width/2, centerY + height/3, centerX - width/2, centerY);
-	  shield.quadraticCurveTo(centerX - width/2, centerY - height/2, centerX, centerY - height/2);
-	  
-	  if (glowColor) {
-		ctx.shadowColor = glowColor;
-		ctx.shadowBlur = 8;
-	  }
-	  
-	  ctx.fillStyle = color;
-	  ctx.fill(shield);
-	  ctx.strokeStyle = '#ffffff';
-	  ctx.lineWidth = 2;
-	  ctx.stroke(shield);
-	  ctx.shadowBlur = 0;
-	  ctx.strokeStyle = '#000000';
-	  ctx.lineWidth = 0;
-	}
+  function drawHexagon(ctx, centerX, centerY, radius, color, glowColor) {
+    const sides = 6;
+    const angle = (Math.PI * 2) / sides;
+    
+    ctx.beginPath();
+    
+    for (let i = 0; i <= sides; i++) {
+      const x = centerX + Math.cos(i * angle) * radius;
+      const y = centerY + Math.sin(i * angle) * radius;
+      
+      if (i === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+    
+    ctx.closePath();
+    
+    if (glowColor) {
+      ctx.shadowColor = glowColor;
+      ctx.shadowBlur = 8;
+    }
+    
+    ctx.fillStyle = color;
+    ctx.fill();
+    
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = 'transparent';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 0;
+  }
 
-	// Rayo/Lightning
-	function drawLightning(ctx, centerX, centerY, size, color, glowColor) {
-	  const lightning = new Path2D();
-	  const width = size * 0.8;
-	  const height = size * 1.4;
-	  
-	  lightning.moveTo(centerX - width/3, centerY - height/2);
-	  lightning.lineTo(centerX + width/3, centerY - height/2);
-	  lightning.lineTo(centerX - width/6, centerY - height/6);
-	  lightning.lineTo(centerX + width/2, centerY - height/6);
-	  lightning.lineTo(centerX - width/4, centerY + height/6);
-	  lightning.lineTo(centerX + width/6, centerY + height/6);
-	  lightning.lineTo(centerX - width/3, centerY + height/2);
-	  lightning.lineTo(centerX - width/6, centerY + height/6);
-	  lightning.lineTo(centerX - width/2, centerY + height/6);
-	  lightning.lineTo(centerX + width/4, centerY - height/6);
-	  lightning.closePath();
-	  
-	  if (glowColor) {
-		ctx.shadowColor = glowColor;
-		ctx.shadowBlur = 10;
-	  }
-	  
-	  ctx.fillStyle = color;
-	  ctx.fill(lightning);
-	  ctx.shadowBlur = 0;
-	}
+  function drawLayeredConsumable(ctx, centerX, centerY, size, baseColor, accentColor, glowColor) {
+    const pulse = Math.sin(Date.now() * 0.01) * 0.2 + 1;
+    
+    ctx.globalAlpha = 0.3;
+    drawHexagon(ctx, centerX, centerY, size * pulse * 1.3, accentColor, glowColor);
+    
+    ctx.globalAlpha = 1;
+    drawHexagon(ctx, centerX, centerY, size * pulse, baseColor, glowColor);
+    
+    ctx.globalAlpha = 0.8;
+    drawHexagon(ctx, centerX, centerY, size * 0.4, '#ffffff', '#ffffff');
+    ctx.globalAlpha = 1;
+  }
 
-	// Corazón
-	function drawHeart(ctx, centerX, centerY, size, color, glowColor) {
-	  const heart = new Path2D();
-	  const width = size;
-	  const height = size;
-	  
-	  heart.moveTo(centerX, centerY + height/4);
-	  heart.bezierCurveTo(centerX, centerY, centerX - width/2, centerY - height/2, centerX - width/4, centerY - height/4);
-	  heart.bezierCurveTo(centerX - width/8, centerY - height/2, centerX + width/8, centerY - height/2, centerX + width/4, centerY - height/4);
-	  heart.bezierCurveTo(centerX + width/2, centerY - height/2, centerX, centerY, centerX, centerY + height/4);
-	  
-	  if (glowColor) {
-		ctx.shadowColor = glowColor;
-		ctx.shadowBlur = 8;
-	  }
-	  
-	  ctx.fillStyle = color;
-	  ctx.fill(heart);
-	  ctx.strokeStyle = '#ffffff';
-	  ctx.lineWidth = 1;
-	  ctx.stroke(heart);
-	  ctx.shadowBlur = 0;
-	  ctx.strokeStyle = '#000000';
-	  ctx.lineWidth = 0;
-	}
-	function drawHexagon(ctx, centerX, centerY, radius, color, glowColor) {
-	  const sides = 6;
-	  const angle = (Math.PI * 2) / sides;
-	  
-	  ctx.beginPath();
-	  
-	  for (let i = 0; i <= sides; i++) {
-		const x = centerX + Math.cos(i * angle) * radius;
-		const y = centerY + Math.sin(i * angle) * radius;
-		
-		if (i === 0) {
-		  ctx.moveTo(x, y);
-		} else {
-		  ctx.lineTo(x, y);
-		}
-	  }
-	  
-	  ctx.closePath();
-	  
-	  // Efecto de brillo
-	  if (glowColor) {
-		ctx.shadowColor = glowColor;
-		ctx.shadowBlur = 8;
-	  }
-	  
-	  ctx.fillStyle = color;
-	  ctx.fill();
-	  
-	  // Borde más marcado
-	  ctx.strokeStyle = '#ffffff';
-	  ctx.lineWidth = 2;
-	  ctx.stroke();
-	  
-	  // Limpiar sombra y borde
-	  ctx.shadowBlur = 0;
-	  ctx.shadowColor = 'transparent';
-	  ctx.strokeStyle = '#000000';
-	  ctx.lineWidth = 0;
-	}
-	// Función de doble capa para efectos visuales avanzados
-	function drawLayeredConsumable(ctx, centerX, centerY, size, baseColor, accentColor, glowColor) {
-	  const pulse = Math.sin(Date.now() * 0.01) * 0.2 + 1;
-	  
-	  // Capa exterior (más grande, transparente)
-	  ctx.globalAlpha = 0.3;
-	  drawHexagon(ctx, centerX, centerY, size * pulse * 1.3, accentColor, glowColor);
-	  
-	  // Capa interior (sólida)
-	  ctx.globalAlpha = 1;
-	  drawHexagon(ctx, centerX, centerY, size * pulse, baseColor, glowColor);
-	  
-	  // Núcleo brillante
-	  ctx.globalAlpha = 0.8;
-	  drawHexagon(ctx, centerX, centerY, size * 0.4, '#ffffff', '#ffffff');
-	  ctx.globalAlpha = 1;
-	}
+  function drawRetroConsumable(ctx, consumable, segmentSize) {
+    const style = consumableStyles[consumable.type];
+    if (!style) return;
+    
+    const centerX = consumable.x + segmentSize / 2;
+    const centerY = consumable.y + segmentSize / 2;
+    const pulse = Math.sin(Date.now() * 0.008) * 0.15 + 1;
+    const size = (segmentSize * 0.35) * pulse;
+    
+    switch(consumable.type) {
+      case 'immunity':
+        drawLayeredConsumable(ctx, centerX, centerY, size, style.color, '#c080ff', style.glowColor);
+        break;
+      default:
+        drawHexagon(ctx, centerX, centerY, size, style.color, style.glowColor);
+    }
+  }
 
-	// Versión actualizada con formas complejas
-	function drawRetroConsumable(ctx, consumable, segmentSize) {
-	  const style = consumableStyles[consumable.type];
-	  if (!style) return;
-	  
-	  const centerX = consumable.x + segmentSize / 2;
-	  const centerY = consumable.y + segmentSize / 2;
-	  const pulse = Math.sin(Date.now() * 0.008) * 0.15 + 1;
-	  const size = (segmentSize * 0.35) * pulse;
-	  
-	  switch(consumable.type) {
-		case 'immunity':
-			drawLayeredConsumable(ctx, centerX, centerY, size, style.color, '#c080ff', style.glowColor);
-			//drawShield(ctx, centerX, centerY, size, style.color, style.glowColor);
-			break;
-		  
-		case 'speed':
-		  drawLightning(ctx, centerX, centerY, size, '#ffff00', '#ffff80');
-		  break;
-		  
-		case 'health':
-		  drawHeart(ctx, centerX, centerY, size, '#ff4040', '#ff8080');
-		  break;
-		  
-		case 'power':
-		  drawLayeredConsumable(ctx, centerX, centerY, size, '#8040ff', '#c080ff', '#ff80ff');
-		  break;
-		  
-		default:
-		  drawHexagon(ctx, centerX, centerY, size, style.color, style.glowColor);
-	  }
-	}
-	
+  // REDISEÑADO: Canvas de información con layout de 2 columnas
+  function drawInfoCanvas() {
+    if (!infoCanvas) return;
+    
+    // Limpiar canvas
+    infoCtx.fillStyle = '#000000';
+    infoCtx.fillRect(0, 0, infoCanvas.width, infoCanvas.height);
+    
+    // Definir las dos secciones
+    const leftSectionWidth = 150;
+    const rightSectionX = leftSectionWidth + 20;
+    const rightSectionWidth = infoCanvas.width - rightSectionX - 20;
+    
+    // === SECCIÓN IZQUIERDA: RONDA Y TIEMPO ===
+    infoCtx.textAlign = 'left';
+    
+    // Ronda (más pequeña, arriba)
+    infoCtx.font = 'bold 22px Share Tech Mono, monospace';
+    infoCtx.fillStyle = '#00ffff';
+    infoCtx.fillText(`RONDA ${gameState.round}/3`, 20, 30);
+    
+    // Tiempo (más grande, destacado, abajo)
+    infoCtx.font = 'bold 28px Share Tech Mono, monospace';
+    const timeColor = roundTimeLeft <= 10 ? '#ff4040' : roundTimeLeft <= 20 ? '#ffff00' : '#00ff41';
+    infoCtx.fillStyle = timeColor;
+    infoCtx.fillText(`${roundTimeLeft}s`, 20, 75);
+    
+    // Texto "TIEMPO:" más pequeño al lado
+    /*infoCtx.font = 'bold 12px Share Tech Mono, monospace';
+    infoCtx.fillStyle = '#888';
+    const timeWidth = infoCtx.measureText(`${roundTimeLeft}s`).width;
+    infoCtx.fillText('TIEMPO', 20 + timeWidth + 10, 50);*/
+    
+    // === LÍNEA DIVISORIA VERTICAL ===
+    infoCtx.strokeStyle = '#333';
+    infoCtx.lineWidth = 1;
+    infoCtx.beginPath();
+    infoCtx.moveTo(leftSectionWidth, 10);
+    infoCtx.lineTo(leftSectionWidth, infoCanvas.height - 10);
+    infoCtx.stroke();
+    
+    // === SECCIÓN DERECHA: PUNTAJES DE JUGADORES ===
+    if (snakes && snakes.length > 0) {
+      const sortedSnakes = [...snakes].sort((a, b) => {
+        if (gameState.playing) {
+          return b.score - a.score;
+        } else {
+          const aTotal = (roomScores && roomScores[a.id]) ? roomScores[a.id].totalScore : 0;
+          const bTotal = (roomScores && roomScores[b.id]) ? roomScores[b.id].totalScore : 0;
+          return bTotal - aTotal;
+        }
+      });
+      
+      // Calcular layout optimizado - más jugadores por fila
+      const maxPlayersPerRow = Math.min(16, sortedSnakes.length);
+      const totalRows = Math.ceil(sortedSnakes.length / maxPlayersPerRow);
+      const playerWidth = rightSectionWidth / maxPlayersPerRow;
+      const playerHeight = Math.max(40, (infoCanvas.height - 20) / totalRows);
+      const startY = 40;
+      
+      sortedSnakes.forEach((snake, index) => {
+        const row = Math.floor(index / maxPlayersPerRow);
+        const col = index % maxPlayersPerRow;
+        const x = rightSectionX + (col * playerWidth) + 10;
+        const y = startY + (row * playerHeight);
+        
+        const isCurrentPlayer = snake.id === socket.id;
+        
+        // Usar el color de la snake del jugador
+        let textColor = snake.color;
+        /*if (isCurrentPlayer) {
+          textColor = '#ffff00';
+        }*/
+        
+        // Nombre del jugador con ranking
+        infoCtx.font = 'bold 18px Share Tech Mono, monospace';
+        infoCtx.fillStyle = textColor;
+        infoCtx.textAlign = 'left';
+        
+        // Truncar nombre según espacio disponible
+        const maxNameLength = Math.floor(playerWidth / 10);
+        const playerName = snake.name.length > maxNameLength ? snake.name.substring(0, maxNameLength - 1) + '…' : snake.name;
+        infoCtx.fillText(`#${index + 1} ${playerName}`, x, y);
+        
+        // Puntajes en línea separada
+        infoCtx.font = 'bold 16px Share Tech Mono, monospace';
+        if (gameState.playing) {
+          infoCtx.fillText(`${snake.score} segs`, x, y + 16);
+        } else {
+          const totalScore = (roomScores && roomScores[snake.id]) ? roomScores[snake.id].totalScore : 0;
+          const roundWins = (roomScores && roomScores[snake.id]) ? roomScores[snake.id].roundWins : 0;
+          infoCtx.fillText(`${totalScore} segs (${roundWins}V)`, x, y + 16);
+        }
+        
+        // Indicador de inmunidad al lado del nombre
+        /*if (snake.activeConsumable && snake.activeConsumable.type === 'immunity' && Date.now() < snake.activeConsumable.endTime) {
+          infoCtx.fillStyle = '#40a0ff';
+          infoCtx.font = 'bold 12px Share Tech Mono, monospace';
+          const nameWidth = infoCtx.measureText(`#${index + 1} ${playerName}`).width;
+          infoCtx.fillText('🛡️', x + nameWidth + 5, y);
+        }*/
+      });
+    }
+  }
+
   document.addEventListener('keydown', handleKeyPress);
 
   function handleKeyPress(event) {
@@ -507,7 +502,7 @@ document.addEventListener("DOMContentLoaded", function() {
     if (key >= 37 && key <= 40 && isConnected && gameState.playing) {
       event.preventDefault();
       socket.emit('newMove', { key });
-    } else if (key === 32 && isConnected && gameState.playing && roomConfig.attacksEnabled) {
+    } else if (key === 32 && isConnected && gameState.playing) {
       event.preventDefault();
       socket.emit('attack');
     }
@@ -518,14 +513,14 @@ document.addEventListener("DOMContentLoaded", function() {
       serverSnake.id,
       serverSnake.name,
       segmentSize,
-      roomConfig.canvasWidth || 1000,
-      roomConfig.canvasHeight || 600,
+      1200,
+      700,
       serverSnake.segments[0].x,
       serverSnake.segments[0].y,
       serverSnake.direction.x,
       serverSnake.direction.y,
-	  serverSnake.color,
-	  roomConfig.gameSpeed || 91
+      serverSnake.color,
+      roomConfig.gameSpeed || 91
     );
     
     snake.segments = serverSnake.segments.map(seg => ({ ...seg }));
@@ -536,7 +531,6 @@ document.addEventListener("DOMContentLoaded", function() {
     snake.gameover = serverSnake.gameover;
     snake.scoreLeftToGrow = serverSnake.scoreLeftToGrow;
     
-    // Sincronizar consumible activo
     snake.activeConsumable = serverSnake.activeConsumable;
     
     return snake;
@@ -579,6 +573,9 @@ document.addEventListener("DOMContentLoaded", function() {
   socket.on('connect', () => {
     console.log('Conectado al servidor:', socket.id);
     isConnected = true;
+    // Mostrar canvas de info siempre
+    showElement(infoCanvasContainer);
+    drawInfoCanvas();
     refreshRooms();
   });
 
@@ -606,7 +603,6 @@ document.addEventListener("DOMContentLoaded", function() {
     
     showGameInterface();
     updateConfigPanel();
-    updateAttackControls();
     showStatus(`¡Sala ${data.roomId} creada!`, 'success');
   });
 
@@ -624,7 +620,6 @@ document.addEventListener("DOMContentLoaded", function() {
     
     showGameInterface();
     updateConfigPanel();
-    updateAttackControls();
     showStatus(`¡Te uniste a la sala ${data.roomId}!`, 'success');
   });
 
@@ -662,11 +657,12 @@ document.addEventListener("DOMContentLoaded", function() {
     gameState = state;
     roomConfig = config;
     updatePlayerList(players);
-    updateGameInfo(state);
     updateRoomInfo(roomData);
     updateHostControls();
     updateConfigPanel();
-    updateAttackControls();
+    
+    // Actualizar canvas de info
+    drawInfoCanvas();
     
     if (players.length >= config.minPlayers && !state.playing && isHost) {
       showElement(startGameButton);
@@ -686,21 +682,21 @@ document.addEventListener("DOMContentLoaded", function() {
     roomConfig = newConfig;
     updateConfigInputs(newConfig);
     updateCanvasSize(newConfig);
-    updateAttackControls();
-	snakes.forEach(snake => {
-		snake.updateInterpolationSpeed(newConfig.gameSpeed);
-	});
+    snakes.forEach(snake => {
+      snake.updateInterpolationSpeed(newConfig.gameSpeed);
+    });
     showStatus('¡Configuración actualizada!', 'success');
   });
 
   socket.on('updateScores', (scores) => {
     roomScores = scores;
     updatePlayerList(snakes);
+    drawInfoCanvas();
   });
 
   socket.on('gameStart', (data) => {
-    canvas.width = data.config.canvasWidth;
-    canvas.height = data.config.canvasHeight;
+    canvas.width = 1200;
+    canvas.height = 700;
     segmentSize = data.config.segmentSize;
     
     snakes = data.players.map(serverPlayer => createLocalSnake(serverPlayer));
@@ -709,7 +705,7 @@ document.addEventListener("DOMContentLoaded", function() {
     projectiles = data.projectiles || [];
     gameState = data.gameState;
     roomConfig = data.config;
-    roundTimeLeft = data.gameState.roundTimeLeft || roomConfig.roundTime;
+    roundTimeLeft = data.gameState.roundTimeLeft || 35;
     
     isGameRunning = true;
     startRenderLoop();
@@ -717,8 +713,7 @@ document.addEventListener("DOMContentLoaded", function() {
     hideElement(gameOverScreen);
     hideElement(startGameButton);
     hideElement(configPanel);
-    showElement(roundTimer);
-    updateRoundTimer(roundTimeLeft);
+    
     showStatus(`Ronda ${data.gameState.round} - ¡Batalla por tiempo!`, 'success');
     console.log(`¡Ronda ${data.gameState.round} iniciada!`);
     
@@ -728,46 +723,37 @@ document.addEventListener("DOMContentLoaded", function() {
   socket.on('countdown', (count, state) => {
     gameState = state;
     showStatus(`Ronda ${state.round} inicia en ${count}...`, 'info');
-    updateGameInfo(state);
+    drawInfoCanvas();
   });
 
   socket.on('roundTimeUpdate', (timeLeft) => {
     roundTimeLeft = timeLeft;
-    updateRoundTimer(timeLeft);
-    
-    if (timeLeft <= 10) {
-      roundTimer.style.color = '#ff4040';
-      if (timeLeft <= 5) {
-        roundTimer.style.animation = 'shake 0.5s infinite';
-      }
-    }
+    drawInfoCanvas();
   });
 
-  // MODIFICADO: gameLogicFrame para manejar consumibles basados en tiempo
   socket.on('gameLogicFrame', (data) => {
-	snakes.forEach(localSnake => {
-	const serverSnake = data.players.find(p => p.id === localSnake.id);
-		if (serverSnake) {
-			const portalEvent = data.portals && data.portals.find(p => p.playerId === localSnake.id);
+    snakes.forEach(localSnake => {
+      const serverSnake = data.players.find(p => p.id === localSnake.id);
+      if (serverSnake) {
+        const portalEvent = data.portals && data.portals.find(p => p.playerId === localSnake.id);
 
-			if (portalEvent) {
-				localSnake.targetSegments = serverSnake.segments.map(seg => ({ ...seg }));
-				localSnake.segments = serverSnake.segments.map(seg => ({ ...seg }));
-				localSnake.renderSegments = serverSnake.segments.map(seg => ({ ...seg }));
-			} else {
-				localSnake.targetSegments = serverSnake.segments.map(seg => ({ ...seg }));
-				localSnake.segments = serverSnake.segments.map(seg => ({ ...seg }));
-			}
-			localSnake.direction = { ...serverSnake.direction };
-			localSnake.score = serverSnake.score;
-			localSnake.gameover = serverSnake.gameover;
-			localSnake.scoreLeftToGrow = serverSnake.scoreLeftToGrow;
-			localSnake.color = serverSnake.color;
-            
-            // Actualizar consumible activo
-            localSnake.activeConsumable = serverSnake.activeConsumable;
-		}
-	});    
+        if (portalEvent) {
+          localSnake.targetSegments = serverSnake.segments.map(seg => ({ ...seg }));
+          localSnake.segments = serverSnake.segments.map(seg => ({ ...seg }));
+          localSnake.renderSegments = serverSnake.segments.map(seg => ({ ...seg }));
+        } else {
+          localSnake.targetSegments = serverSnake.segments.map(seg => ({ ...seg }));
+          localSnake.segments = serverSnake.segments.map(seg => ({ ...seg }));
+        }
+        localSnake.direction = { ...serverSnake.direction };
+        localSnake.score = serverSnake.score;
+        localSnake.gameover = serverSnake.gameover;
+        localSnake.scoreLeftToGrow = serverSnake.scoreLeftToGrow;
+        localSnake.color = serverSnake.color;
+        localSnake.activeConsumable = serverSnake.activeConsumable;
+      }
+    });    
+    
     const serverProjectiles = data.projectiles || [];
     
     clientProjectiles.forEach(clientProjectile => {
@@ -803,29 +789,24 @@ document.addEventListener("DOMContentLoaded", function() {
     
     if (data.gameState.roundTimeLeft !== undefined) {
       roundTimeLeft = data.gameState.roundTimeLeft;
-      updateRoundTimer(roundTimeLeft);
     }
   });
 
   socket.on('roundEnd', (data) => {
     stopRenderLoop();
     roomScores = data.scores;
-    hideElement(roundTimer);
-    roundTimer.style.color = '#ff4040';
-    roundTimer.style.animation = '';
     
     showStatus(`¡Tiempo agotado! Ronda ${data.round} terminada`, 'info');
     if (data.winner) {
       showStatus(`Ganador de la ronda: ${data.winner.name} (${data.winner.score} segmentos)`, 'success');
     }
     
-    updateGameInfo({ round: data.round + 1, maxRounds: roomConfig.maxRounds });
     updatePlayerList(snakes);
+    drawInfoCanvas();
     
     if (data.nextRound) {
       setTimeout(() => {
         showStatus(`Preparando ronda ${data.round + 1}...`, 'info');
-        updateGameInfo({ round: data.round + 1, maxRounds: roomConfig.maxRounds });
       }, 2000);
     }
     
@@ -837,7 +818,6 @@ document.addEventListener("DOMContentLoaded", function() {
 
   socket.on('gameEnd', (data) => {
     stopRenderLoop();
-    hideElement(roundTimer);
     showStatus(`¡Juego Terminado! Campeón: ${data.winner.name}`, 'success');
     
     if (currentPlayerId) {
@@ -894,7 +874,6 @@ document.addEventListener("DOMContentLoaded", function() {
 
   socket.on('roomFinished', (data) => {
     stopRenderLoop();
-    hideElement(roundTimer);
     showFinalScreen(null, data.finalScores, data.reason);
   });
 
@@ -903,16 +882,9 @@ document.addEventListener("DOMContentLoaded", function() {
     currentRoomId = null;
     isHost = false;
     roomConfig = {};
-    hideElement(roundTimer);
     showRoomSelection();
     showStatus('Regresaste al menú', 'info');
   });
-
-  function updateRoundTimer(timeLeft) {
-    if (roundTimer) {
-      roundTimer.textContent = `Tiempo: ${timeLeft}s`;
-    }
-  }
 
   function updateConfigPanel() {
     if (currentRoomId && !gameState.playing) {
@@ -934,33 +906,20 @@ document.addEventListener("DOMContentLoaded", function() {
   function setConfigInputsEnabled(enabled) {
     maxPlayersInput.disabled = !enabled;
     minPlayersInput.disabled = !enabled;
-    maxRoundsInput.disabled = !enabled;
-    roundTimeInput.disabled = !enabled;
     gameSpeedInput.disabled = !enabled;
-    canvasSizeInput.disabled = !enabled;
     segmentSizeInput.disabled = !enabled;
-    attacksEnabledInput.disabled = !enabled;
     
-    // NUEVO: Habilitar/deshabilitar inputs de consumibles
     if (immunityEnabledInput) immunityEnabledInput.disabled = !enabled;
     if (immunityIntervalInput) immunityIntervalInput.disabled = !enabled;
     if (immunityDurationInput) immunityDurationInput.disabled = !enabled;
   }
 
-  // MODIFICADO: updateConfigInputs para nuevos controles
   function updateConfigInputs(config) {
     maxPlayersInput.value = config.maxPlayers;
     minPlayersInput.value = config.minPlayers;
-    maxRoundsInput.value = config.maxRounds;
-    roundTimeInput.value = config.roundTime || 30; // MODIFICADO: nuevo default 30s
     gameSpeedInput.value = config.gameSpeed;
     segmentSizeInput.value = config.segmentSize;
-    attacksEnabledInput.checked = config.attacksEnabled !== undefined ? config.attacksEnabled : true; // MODIFICADO: default true
     
-    const canvasSize = `${config.canvasWidth}x${config.canvasHeight}`;
-    canvasSizeInput.value = canvasSize;
-    
-    // NUEVO: Configuración de consumibles
     if (config.consumables && config.consumables.immunity) {
       if (immunityEnabledInput) immunityEnabledInput.checked = config.consumables.immunity.enabled !== false;
       if (immunityIntervalInput) immunityIntervalInput.value = config.consumables.immunity.spawnInterval || 13;
@@ -969,40 +928,23 @@ document.addEventListener("DOMContentLoaded", function() {
   }
 
   function updateCanvasSize(config) {
-    canvas.width = config.canvasWidth;
-    canvas.height = config.canvasHeight;
+    canvas.width = 1200;
+    canvas.height = 700;
     segmentSize = config.segmentSize;
     handleResize();
   }
 
-  function updateAttackControls() {
-    if (roomConfig.attacksEnabled) {
-      showElement(attackControls);
-    } else {
-      hideElement(attackControls);
-    }
-  }
-
-  // MODIFICADO: saveConfiguration para nuevos controles
   function saveConfiguration() {
     if (!isHost) {
       showStatus('Solo el anfitrión puede modificar la configuración', 'error');
       return;
     }
 
-    const canvasSize = canvasSizeInput.value.split('x');
-    
     const newConfig = {
       maxPlayers: parseInt(maxPlayersInput.value),
       minPlayers: parseInt(minPlayersInput.value),
-      maxRounds: parseInt(maxRoundsInput.value),
-      roundTime: parseInt(roundTimeInput.value),
       gameSpeed: parseInt(gameSpeedInput.value),
-      canvasWidth: parseInt(canvasSize[0]),
-      canvasHeight: parseInt(canvasSize[1]),
       segmentSize: parseInt(segmentSizeInput.value),
-      attacksEnabled: attacksEnabledInput.checked,
-      // NUEVO: Configuración de consumibles modificada
       consumables: {
         immunity: {
           enabled: immunityEnabledInput ? immunityEnabledInput.checked : true,
@@ -1039,16 +981,14 @@ document.addEventListener("DOMContentLoaded", function() {
     rooms.forEach(room => {
       const roomItem = document.createElement('li');
       roomItem.className = 'room-item';
-      const attacksStatus = room.config.attacksEnabled ? '⚔️' : '';
-      // MODIFICADO: Mostrar indicador de consumibles si están habilitados
       const consumablesStatus = (room.config.consumables && room.config.consumables.immunity && room.config.consumables.immunity.enabled) ? '🛡️' : '';
       roomItem.innerHTML = `
         <div class="room-info">
-          <strong>Sala: ${room.id}</strong> ${attacksStatus}${consumablesStatus}<br>
+          <strong>Sala: ${room.id}</strong> ⚔️${consumablesStatus}<br>
           Anfitrión: ${room.hostName}<br>
           Jugadores: ${room.players}/${room.maxPlayers}
           <div class="room-config">
-            ${room.config.maxRounds} rondas • ${room.config.roundTime}s • ${room.config.canvasWidth}x${room.config.canvasHeight} • Velocidad: ${room.config.gameSpeed}ms
+            3 rondas • 35s • 1200x700 • Velocidad: ${room.config.gameSpeed}ms
           </div>
         </div>
         <button onclick="joinSpecificRoom('${room.id}')" class="join-room-btn">Unirse</button>
@@ -1094,7 +1034,6 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   }
 
-  // MODIFICADO: drawPlayers con efecto de inmunidad
   function drawPlayers() {
     snakes.forEach((snake, index) => {
       if (!snake.gameover && snake.getRenderSegments) {
@@ -1102,7 +1041,6 @@ document.addEventListener("DOMContentLoaded", function() {
         const baseColor = snake.color;
         const renderSegments = snake.getRenderSegments();
         
-        // NUEVO: Verificar si tiene inmunidad activa
         const hasImmunity = snake.activeConsumable && 
                            snake.activeConsumable.type === 'immunity' && 
                            Date.now() < snake.activeConsumable.endTime;
@@ -1119,7 +1057,7 @@ document.addEventListener("DOMContentLoaded", function() {
             isHead, 
             isHead ? snake.direction : null,
             isCurrentPlayer,
-            hasImmunity // NUEVO: Pasar estado de inmunidad
+            hasImmunity
           );
         });
       }
@@ -1151,9 +1089,11 @@ document.addEventListener("DOMContentLoaded", function() {
     drawGrid();
     drawPlayers();
     updatePlayerList(snakes);
+    
+    // Actualizar canvas de información
+    drawInfoCanvas();
   }
 
-  // MODIFICADO: updatePlayerList para mostrar consumibles activos
   function updatePlayerList(players) {
     playerList.innerHTML = '';
     
@@ -1183,7 +1123,7 @@ document.addEventListener("DOMContentLoaded", function() {
       score.className = 'player-score';
       
       if (gameState.playing) {
-        score.textContent = player.score + ' segs';
+        score.textContent = player.score;
       } else {
         const totalScore = (roomScores && roomScores[player.id]) ? roomScores[player.id].totalScore : 0;
         const roundWins = (roomScores && roomScores[player.id]) ? roomScores[player.id].roundWins : 0;
@@ -1193,11 +1133,10 @@ document.addEventListener("DOMContentLoaded", function() {
       const status = document.createElement('span');
       status.className = 'player-status';
       
-      // MODIFICADO: Mostrar estado del consumible activo + estado del jugador
       let statusText = player.gameover ? '💀' : '🐍';
       if (player.activeConsumable && !player.gameover) {
         if (player.activeConsumable.type === 'immunity' && Date.now() < player.activeConsumable.endTime) {
-          statusText = '🛡️'; // Icono de inmunidad
+          statusText = '🛡️';
         }
       }
       status.textContent = statusText;
@@ -1209,12 +1148,6 @@ document.addEventListener("DOMContentLoaded", function() {
       
       playerList.appendChild(listItem);
     });
-  }
-
-  function updateGameInfo(state) {
-    if (roundInfo && roomConfig.maxRounds) {
-      roundInfo.textContent = `Ronda ${state.round}/${roomConfig.maxRounds}`;
-    }
   }
 
   function showFinalScreen(winner, finalScores, reason = null) {
@@ -1285,14 +1218,22 @@ document.addEventListener("DOMContentLoaded", function() {
   function handleResize() {
     const container = canvas.parentElement;
     const maxWidth = container.clientWidth - 40;
-    const maxHeight = window.innerHeight - 200;
+    const maxHeight = window.innerHeight - 300;
     
     if (canvas.width > maxWidth || canvas.height > maxHeight) {
       const scale = Math.min(maxWidth / canvas.width, maxHeight / canvas.height);
       canvas.style.transform = `scale(${scale})`;
       canvas.style.transformOrigin = 'top left';
+      
+      if (infoCanvas) {
+        infoCanvas.style.transform = `scale(${scale})`;
+        infoCanvas.style.transformOrigin = 'top left';
+      }
     } else {
       canvas.style.transform = 'none';
+      if (infoCanvas) {
+        infoCanvas.style.transform = 'none';
+      }
     }
   }
 
@@ -1328,53 +1269,53 @@ document.addEventListener("DOMContentLoaded", function() {
     const leaderboardList = document.getElementById('leaderboardList');
     
     if (leaderboardModal && leaderboardList) {
-		  leaderboardList.innerHTML = '';
-		  
-		  const sortedLeaderboard = leaderboard.sort((a, b) => {
-			const aHasMinGames = a.games_played >= 3;
-			const bHasMinGames = b.games_played >= 3;
-			
-			if (aHasMinGames && bHasMinGames) {
-			  const aWinRate = a.games_played > 0 ? (a.wins / a.games_played) : 0;
-			  const bWinRate = b.games_played > 0 ? (b.wins / b.games_played) : 0;
-			  
-			  if (aWinRate !== bWinRate) {
-				return bWinRate - aWinRate;
-			  }
-			  return b.wins - a.wins;
-			}
-			
-			if (!aHasMinGames && !bHasMinGames) {
-			  if (a.wins !== b.wins) {
-				return b.wins - a.wins;
-			  }
-			  return b.games_played - a.games_played;
-			}
-			
-			if (aHasMinGames && !bHasMinGames) {
-			  return -1;
-			}
-			if (!aHasMinGames && bHasMinGames) {
-			  return 1;
-			}
-			
-			return 0;
-		  });
-		  
-		  sortedLeaderboard.forEach((player, index) => {
-			const item = document.createElement('li');
-			item.className = 'leaderboard-item';
-			item.innerHTML = `
-			  <span class="rank">#${index + 1}</span>
-			  <span class="name">${player.name}</span>
-			  <span class="wins">${player.wins}V</span>
-			  <span class="games">${player.games_played}P</span>
-			  <span class="winrate">${player.games_played > 0 ? Math.round((player.wins / player.games_played) * 100) : 0}%</span>
-			`;
-			leaderboardList.appendChild(item);
-		  });
-		  
-		  showElement(leaderboardModal);
+      leaderboardList.innerHTML = '';
+      
+      const sortedLeaderboard = leaderboard.sort((a, b) => {
+        const aHasMinGames = a.games_played >= 3;
+        const bHasMinGames = b.games_played >= 3;
+        
+        if (aHasMinGames && bHasMinGames) {
+          const aWinRate = a.games_played > 0 ? (a.wins / a.games_played) : 0;
+          const bWinRate = b.games_played > 0 ? (b.wins / b.games_played) : 0;
+          
+          if (aWinRate !== bWinRate) {
+            return bWinRate - aWinRate;
+          }
+          return b.wins - a.wins;
+        }
+        
+        if (!aHasMinGames && !bHasMinGames) {
+          if (a.wins !== b.wins) {
+            return b.wins - a.wins;
+          }
+          return b.games_played - a.games_played;
+        }
+        
+        if (aHasMinGames && !bHasMinGames) {
+          return -1;
+        }
+        if (!aHasMinGames && bHasMinGames) {
+          return 1;
+        }
+        
+        return 0;
+      });
+      
+      sortedLeaderboard.forEach((player, index) => {
+        const item = document.createElement('li');
+        item.className = 'leaderboard-item';
+        item.innerHTML = `
+          <span class="rank">#${index + 1}</span>
+          <span class="name">${player.name}</span>
+          <span class="wins">${player.wins}V</span>
+          <span class="games">${player.games_played}P</span>
+          <span class="winrate">${player.games_played > 0 ? Math.round((player.wins / player.games_played) * 100) : 0}%</span>
+        `;
+        leaderboardList.appendChild(item);
+      });
+      
+      showElement(leaderboardModal);
     }
   }
 
@@ -1400,6 +1341,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
   window.resetPlayerProfile = resetPlayerProfile;
 
+  // Event Listeners
   toggleConfigButton.addEventListener('click', () => {
     if (configSettings.classList.contains('hidden')) {
       showElement(configSettings);

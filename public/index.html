@@ -11,11 +11,6 @@
             font-family: 'Share Tech Mono', monospace; 
             box-sizing: border-box;
         }
-		@keyframes shake {
-		  0%, 100% { transform: translate(0); }
-		  25% { transform: translate(-3px, 2px); }
-		  75% { transform: translate(3px, -2px); }
-		}
         
         body {
             display: flex;
@@ -45,7 +40,7 @@
         }
         
         .left-panel {
-            flex: 0 0 320px;
+            flex: 0 0 280px;
             display: flex;
             flex-direction: column;
             gap: 15px;
@@ -58,10 +53,43 @@
         }
 
         .right-panel {
-            flex: 0 0 350px;
+            flex: 0 0 300px;
             display: flex;
             flex-direction: column;
             gap: 15px;
+        }
+
+        /* MODIFICADO: Estilos para el canvas de información */
+        .info-canvas-container {
+            margin-bottom: 0;
+            background: #000;
+            position: relative;
+        }
+
+        #infoCanvas {
+            display: block;
+            background: #000;
+            border: none;
+            width: 1200px;
+            height: 90px;
+        }
+
+        /* NUEVO: Separador entre canvas */
+        .canvas-separator {
+            height: 1px;
+            background: #666;
+            width: 1200px;
+            margin: 0;
+        }
+
+        .game-canvas-container {
+            background: #000;
+            border: 2px solid #00ff41;
+            box-shadow: 0 0 8px rgba(0, 255, 65, 0.15);
+            padding: 0;
+            width: 1200px;
+            height: 700px;
+            overflow: hidden;
         }
 
         .profile-panel {
@@ -190,8 +218,8 @@
         }
         
         .config-input {
-            width: 80px;
-            padding: 5px 8px;
+            width: 70px;
+            padding: 4px 6px;
             border: 1px solid #666;
             background: #222;
             color: #00ff41;
@@ -213,8 +241,8 @@
         }
         
         .config-select {
-            width: 80px;
-            padding: 5px;
+            width: 70px;
+            padding: 4px;
             border: 1px solid #666;
             background: #222;
             color: #00ff41;
@@ -229,8 +257,8 @@
         }
         
         .config-checkbox {
-            width: 20px;
-            height: 20px;
+            width: 18px;
+            height: 18px;
             cursor: pointer;
             accent-color: #00ff41;
         }
@@ -257,7 +285,6 @@
             color: #000;
         }
 
-        /* NUEVO: Estilos para sección de consumibles */
         .config-divider {
             margin: 15px 0;
             border-top: 1px solid #666;
@@ -287,61 +314,6 @@
         .config-info strong {
             color: #00ffff;
         }
-
-        /* NUEVO: Indicador visual para jugadores con consumibles activos */
-        .player-item.has-consumable {
-            background: linear-gradient(90deg, #333 0%, #003300 100%);
-            border-left: 3px solid #40ff80;
-        }
-
-        .player-item.has-consumable .player-status {
-            animation: glow 2s ease-in-out infinite alternate;
-        }
-
-        @keyframes glow {
-            from { text-shadow: 0 0 5px #40ff80; }
-            to { text-shadow: 0 0 10px #40ff80, 0 0 15px #40ff80; }
-        }
-
-        /* NUEVO: Tooltip para consumibles */
-        .consumable-tooltip {
-            position: relative;
-            cursor: help;
-        }
-
-        .consumable-tooltip:hover::after {
-            content: attr(data-tooltip);
-            position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #000;
-            color: #00ff41;
-            padding: 5px 10px;
-            border: 1px solid #00ff41;
-            font-size: 0.8em;
-            white-space: nowrap;
-            z-index: 1000;
-            margin-bottom: 5px;
-        }
-
-        /* NUEVO: Efectos para mensajes de consumibles */
-        .consumable-message {
-            background: linear-gradient(45deg, #003300, #002200);
-            border: 2px solid #40ff80;
-            color: #40ff80;
-            animation: consumableAlert 0.5s ease-in-out;
-        }
-
-        @keyframes consumableAlert {
-            0% { transform: scale(0.8); opacity: 0; }
-            50% { transform: scale(1.05); }
-            100% { transform: scale(1); opacity: 1; }
-        }
-
-        @keyframes fadeOut {
-            to { opacity: 0; transform: translateX(100px); }
-        }
         
         #playerList {
             list-style: none;
@@ -352,12 +324,13 @@
         .player-item {
             display: flex;
             align-items: center;
-            gap: 10px;
-            padding: 8px;
-            margin-bottom: 5px;
+            gap: 8px;
+            padding: 6px;
+            margin-bottom: 4px;
             background: #333;
             border: 1px solid #666;
             transition: all 0.3s ease;
+            font-size: 0.9em;
         }
         
         .player-item.current-player {
@@ -374,11 +347,12 @@
         
         .player-rank {
             font-weight: bold;
-            min-width: 25px;
+            min-width: 20px;
             text-align: center;
             background: #444;
             color: #fff;
             padding: 2px;
+            font-size: 0.8em;
         }
         
         .player-name {
@@ -386,14 +360,15 @@
             text-align: left;
             font-weight: 500;
             color: #fff;
+            font-size: 0.85em;
         }
         
         .player-score {
             font-weight: bold;
-            min-width: 50px;
+            min-width: 40px;
             text-align: right;
-            line-height: 1.2;
-            font-size: 0.9em;
+            line-height: 1.1;
+            font-size: 0.8em;
             color: #00ff41;
         }
         
@@ -405,7 +380,7 @@
         }
         
         .player-status {
-            font-size: 1.2em;
+            font-size: 1em;
         }
         
         .form-panel {
@@ -493,7 +468,8 @@
         #game {
             border: 0px solid #00ff41;
             background: #000;
-		}
+            display: block;
+        }
         
         .game-over-screen {
             position: fixed;
@@ -529,22 +505,6 @@
             margin: 20px 0;
             text-align: center;
             color: #00ffff;
-        }
-        
-        #roundInfo {
-            font-size: 1.2em;
-            font-weight: bold;
-            color: #ffff00;
-            margin-bottom: 10px;
-            text-transform: uppercase;
-        }
-
-        #roundTimer {
-            font-size: 1.1em;
-            font-weight: bold;
-            color: #ff4040;
-            margin-bottom: 10px;
-            text-transform: uppercase;
         }
         
         .controls-hint {
@@ -697,7 +657,6 @@
             color: #888;
         }
 
-        /* Modal styles */
         .modal {
             position: fixed;
             top: 0;
@@ -816,7 +775,6 @@
             font-weight: bold;
         }
 
-        /* Top 3 special styling */
         .leaderboard-item:nth-child(1) .rank {
             color: #ffd700;
         }
@@ -945,7 +903,7 @@
                 flex: none;
             }
             
-            #game {
+            #game, #infoCanvas {
                 max-width: 100%;
                 height: auto;
             }
@@ -1019,9 +977,7 @@
 <body>
     <div class="container">
         <div class="left-panel">
-            <!-- Panel combinado Perfil/Login -->
             <div class="profile-panel" id="userPanel">
-                <!-- Perfil del usuario (cuando está logueado) -->
                 <div id="profileView" class="hidden">
                     <h3>👤 Mi Perfil</h3>
                     <div id="profileInfo">
@@ -1036,7 +992,6 @@
                     </div>
                 </div>
 
-                <!-- Formulario de login (cuando no está logueado) -->
                 <div id="loginView">
                     <h2>Entrar al Juego</h2>
                     <label for="username">Tu Nombre:</label>
@@ -1052,17 +1007,23 @@
         
         <div class="main-panel game-panel">
             <h1>🐍 Snake Multiplayer</h1>
-            <canvas id="game" width="1000" height="600"></canvas>
-			<div id="gameStatus" class="status"></div>
+            <!-- MODIFICADO: Canvas de información siempre visible, sin bordes -->
+            <div class="info-canvas-container" id="infoCanvasContainer">
+                <canvas id="infoCanvas" width="1200" height="90"></canvas>
+            </div>
+            <!-- NUEVO: Separador entre canvas -->
+            <div class="canvas-separator"></div>
+            <!-- MODIFICADO: Canvas principal en contenedor -->
+            <div class="game-canvas-container">
+                <canvas id="game" width="1200" height="700"></canvas>
+            </div>
+            <div id="gameStatus" class="status"></div>
         </div>
 
         <div class="right-panel">
-            <!-- Interfaz del juego (cuando está en una sala) -->
             <div id="gameInterface" class="game-panel game-info hidden">
                 <h2>🐍 Jugadores</h2>
                 <div id="roomInfo"></div>
-                <div id="roundInfo">Ronda 1/3</div>
-                <div id="roundTimer" class="hidden">Tiempo: 30s</div>
                 
                 <div id="configPanel" class="config-panel hidden">
                     <button id="toggleConfigButton" class="config-button">⚙️ Configuración</button>
@@ -1076,34 +1037,12 @@
                             <input type="number" id="minPlayersInput" class="config-input" min="2" max="16" value="2">
                         </div>
                         <div class="config-row">
-                            <span class="config-label">Rondas:</span>
-                            <input type="number" id="maxRoundsInput" class="config-input" min="1" max="10" value="3">
-                        </div>
-                        <div class="config-row">
-                            <span class="config-label">Tiempo Ronda:</span>
-                            <select id="roundTimeInput" class="config-select">
-                                <option value="20">20s</option>
-                                <option value="30" selected>30s</option>
-                                <option value="45">45s</option>
-                                <option value="60">60s</option>
-                            </select>
-                        </div>
-                        <div class="config-row">
-                            <span class="config-label">Velocidad (ms):</span>
+                            <span class="config-label">Velocidad:</span>
                             <select id="gameSpeedInput" class="config-select">
                                 <option value="200">Lento</option>
                                 <option value="91" selected>Normal</option>
                                 <option value="50">Rápido</option>
                                 <option value="40">Muy Rápido</option>
-                            </select>
-                        </div>
-                        <div class="config-row">
-                            <span class="config-label">Tamaño Canvas:</span>
-                            <select id="canvasSizeInput" class="config-select">
-                                <option value="800x500">Pequeño</option>
-                                <option value="1000x600" selected>Mediano</option>
-                                <option value="1200x700">Grande</option>
-                                <option value="1400x800">Extra Grande</option>
                             </select>
                         </div>
                         <div class="config-row">
@@ -1116,12 +1055,7 @@
                                 <option value="25">XXL</option>
                             </select>
                         </div>
-                        <div class="config-row">
-                            <span class="config-label">Ataques:</span>
-                            <input type="checkbox" id="attacksEnabledInput" class="config-checkbox" checked>
-                        </div>
 
-                        <!-- NUEVA SECCIÓN: Configuración de Consumibles Modificada -->
                         <div class="config-divider">
                             <h4>🎁 Consumibles</h4>
                         </div>
@@ -1132,7 +1066,7 @@
                         </div>
 
                         <div class="config-row">
-                            <span class="config-label">⏱️ Intervalo Spawn:</span>
+                            <span class="config-label">⏱️ Intervalo:</span>
                             <select id="immunityIntervalInput" class="config-select">
                                 <option value="5">5s</option>
                                 <option value="8">8s</option>
@@ -1152,7 +1086,7 @@
                         </div>
 
                         <div class="config-info">
-                            <strong>ℹ️ Info:</strong> Los consumibles se generan automáticamente cada X segundos si faltan en el mapa. La inmunidad protege contra 1 impacto de proyectil durante el tiempo configurado.
+                            <strong>ℹ️ Info:</strong> Inmunidad bloquea 1 proyectil. Juego fijo: 3 rondas, 35s cada una, ataques activos, mapa 1200x700.
                         </div>
 
                         <button id="saveConfigButton" class="config-button">💾 Guardar</button>
@@ -1164,11 +1098,10 @@
                 <div class="controls-hint">
                     <strong>Controles:</strong><br>
                     ⬆️⬇️⬅️➡️ Flechas<br>
-                    <span id="attackControls">🎯 Espacio - Atacar</span>
+                    🎯 Espacio - Atacar
                 </div>
             </div>
             
-            <!-- Selección de salas -->
             <div id="roomSelection" class="form-panel hidden">
                 <h2>Unirse o Crear Sala</h2>
                 
@@ -1232,123 +1165,29 @@
             </div>
         </div>
     </div>
-	
-	<footer id="gameFooter">
-		<div class="footer-content">
-			<span class="footer-text">Hecho con ❤️ por El Marto</span>
-			<div class="footer-links">
-				<a href="https://github.com/marto993" target="_blank" title="GitHub">
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-						<path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-					</svg>
-				</a>
-				<a href="https://www.linkedin.com/in/martin-di-geronimo-29a06b17b" target="_blank" title="LinkedIn">
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-						<path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
-					</svg>
-				</a>
-				<a href="https://elprode.up.railway.app/" target="_blank" title="El Prode">
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-						<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-					</svg>
-				</a>
-			</div>
-		</div>
-	</footer>
     
-    <!-- NUEVO: JavaScript adicional para mejorar la UX de consumibles modificado -->
-    <script>
-        // Agregar tooltips informativos y validación en tiempo real
-        document.addEventListener('DOMContentLoaded', function() {
-            const immunityEnabledInput = document.getElementById('immunityEnabledInput');
-            const immunityIntervalInput = document.getElementById('immunityIntervalInput');
-            const immunityDurationInput = document.getElementById('immunityDurationInput');
-            
-            if (immunityEnabledInput) {
-                immunityEnabledInput.setAttribute('data-tooltip', 'Habilitar/deshabilitar consumibles de inmunidad');
-                immunityEnabledInput.className += ' consumable-tooltip';
-                
-                // Habilitar/deshabilitar otros controles según checkbox
-                immunityEnabledInput.addEventListener('change', function() {
-                    const enabled = this.checked;
-                    if (immunityIntervalInput) immunityIntervalInput.disabled = !enabled;
-                    if (immunityDurationInput) immunityDurationInput.disabled = !enabled;
-                    
-                    // Feedback visual en las etiquetas
-                    const intervalLabel = document.querySelector('label[for="immunityIntervalInput"]') || 
-                                        immunityIntervalInput?.parentElement?.querySelector('.config-label');
-                    const durationLabel = document.querySelector('label[for="immunityDurationInput"]') || 
-                                        immunityDurationInput?.parentElement?.querySelector('.config-label');
-                    
-                    if (intervalLabel) {
-                        intervalLabel.style.color = enabled ? '#ccc' : '#888';
-                    }
-                    if (durationLabel) {
-                        durationLabel.style.color = enabled ? '#ccc' : '#888';
-                    }
-                });
-            }
-            
-            if (immunityIntervalInput) {
-                immunityIntervalInput.setAttribute('data-tooltip', 'Tiempo entre generaciones de consumibles de inmunidad');
-                immunityIntervalInput.className += ' consumable-tooltip';
-            }
-            
-            if (immunityDurationInput) {
-                immunityDurationInput.setAttribute('data-tooltip', 'Duración del efecto de inmunidad tras consumir');
-                immunityDurationInput.className += ' consumable-tooltip';
-            }
-        });
-
-        // Función para actualizar indicadores visuales de consumibles en lista de jugadores
-        function updatePlayerConsumableIndicators() {
-            const playerItems = document.querySelectorAll('.player-item');
-            playerItems.forEach((item, index) => {
-                if (typeof snakes !== 'undefined' && snakes[index]) {
-                    const player = snakes[index];
-                    if (player && player.activeConsumable && Date.now() < player.activeConsumable.endTime) {
-                        item.classList.add('has-consumable');
-                    } else {
-                        item.classList.remove('has-consumable');
-                    }
-                }
-            });
-        }
-
-        // Función para mostrar notificación especial de consumible
-        function showConsumableNotification(playerName, consumableType) {
-            const notification = document.createElement('div');
-            notification.className = 'consumable-message';
-            notification.style.cssText = `
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                padding: 15px 20px;
-                border-radius: 5px;
-                font-weight: bold;
-                z-index: 1002;
-                font-family: 'Share Tech Mono', monospace;
-            `;
-            
-            const consumableStyles = {
-                immunity: { name: 'Inmunidad' }
-            };
-            
-            const consumableName = consumableStyles[consumableType]?.name || consumableType;
-            notification.textContent = `🎁 ${playerName} obtuvo ${consumableName}!`;
-            
-            document.body.appendChild(notification);
-            
-            setTimeout(() => {
-                notification.style.animation = 'fadeOut 0.5s ease-in-out forwards';
-                setTimeout(() => {
-                    if (notification.parentNode) {
-                        notification.parentNode.removeChild(notification);
-                    }
-                }, 500);
-            }, 3000);
-        }
-    </script>
+    <footer id="gameFooter">
+        <div class="footer-content">
+            <span class="footer-text">Hecho con ❤️ por El Marto</span>
+            <div class="footer-links">
+                <a href="https://github.com/marto993" target="_blank" title="GitHub">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                </a>
+                <a href="https://www.linkedin.com/in/martin-di-geronimo-29a06b17b" target="_blank" title="LinkedIn">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                    </svg>
+                </a>
+                <a href="https://elprode.up.railway.app/" target="_blank" title="El Prode">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </footer>
     
     <script src="./SnakeGame.js"></script>
 </body>

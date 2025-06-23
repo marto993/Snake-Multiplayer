@@ -198,19 +198,19 @@ function validateRoomConfig(config) {
   return {
     maxPlayers: Math.max(2, Math.min(20, parseInt(config.maxPlayers) || 8)),
     minPlayers: Math.max(2, Math.min(parseInt(config.maxPlayers) || 8, parseInt(config.minPlayers) || 2)),
-    maxRounds: Math.max(1, Math.min(10, parseInt(config.maxRounds) || 3)),
+    maxRounds: 3, // FIJO: siempre 3 rondas
     gameSpeed: Math.max(25, Math.min(200, parseInt(config.gameSpeed) || 75)),
-    canvasWidth: Math.max(400, Math.min(1600, parseInt(config.canvasWidth) || 1000)),
-    canvasHeight: Math.max(300, Math.min(1000, parseInt(config.canvasHeight) || 600)),
-    segmentSize: Math.max(5, Math.min(25, parseInt(config.segmentSize) || 20)), // MODIFICADO: nuevo default 20
-    attacksEnabled: config.attacksEnabled !== undefined ? Boolean(config.attacksEnabled) : true, // MODIFICADO: por defecto true
-    roundTime: parseInt(config.roundTime) || 30, // MODIFICADO: por defecto 30s
-    // MODIFICADO: Configuración de consumibles con timers
+    canvasWidth: 1200, // FIJO: siempre 1200x700
+    canvasHeight: 700, // FIJO: siempre 1200x700
+    segmentSize: Math.max(5, Math.min(25, parseInt(config.segmentSize) || 20)),
+    attacksEnabled: true, // FIJO: siempre activado
+    roundTime: 35, // FIJO: siempre 35 segundos
+    // Configuración de consumibles (mantenida)
     consumables: {
       immunity: {
-        enabled: Boolean(config.consumables?.immunity?.enabled !== false), // Por defecto habilitado
-        spawnInterval: Math.max(5, Math.min(30, parseInt(config.consumables?.immunity?.spawnInterval) || 13)), // 5s, 8s, 13s, 17s
-        duration: Math.max(3, Math.min(15, parseInt(config.consumables?.immunity?.duration) || 5)) // 3s, 5s, 7s, 9s
+        enabled: Boolean(config.consumables?.immunity?.enabled !== false),
+        spawnInterval: Math.max(5, Math.min(30, parseInt(config.consumables?.immunity?.spawnInterval) || 13)),
+        duration: Math.max(3, Math.min(15, parseInt(config.consumables?.immunity?.duration) || 5))
       }
     }
   };
