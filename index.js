@@ -48,7 +48,6 @@ function getNextAvailableColor(room) {
       return color;
     }
   }
-  // Si todos están en uso, usar el próximo en la lista
   return PLAYER_COLORS[room.players.length % PLAYER_COLORS.length];
 }
 
@@ -169,8 +168,9 @@ function getPlayerStats(playerId) {
 app.use(express.static('public'));
 
 let rooms = new Map();
-let connectedUsers = new Map(); // socketId -> playerName
+let connectedUsers = new Map();
 
+// MODIFICADO: serializePlayers para incluir consumibles activos
 function serializePlayers(players) {
   return players.map(player => ({
     id: player.id,
@@ -180,7 +180,8 @@ function serializePlayers(players) {
     direction: { ...player.direction },
     score: player.score,
     gameover: player.gameover,
-    scoreLeftToGrow: player.scoreLeftToGrow
+    scoreLeftToGrow: player.scoreLeftToGrow,
+    activeConsumable: player.getActiveConsumable() // Incluir consumible activo
   }));
 }
 
@@ -192,6 +193,7 @@ function generateRoomId() {
   return roomId;
 }
 
+// MODIFICADO: validateRoomConfig con nuevos valores por defecto
 function validateRoomConfig(config) {
   return {
     maxPlayers: Math.max(2, Math.min(20, parseInt(config.maxPlayers) || 8)),
@@ -200,10 +202,17 @@ function validateRoomConfig(config) {
     gameSpeed: Math.max(25, Math.min(200, parseInt(config.gameSpeed) || 75)),
     canvasWidth: Math.max(400, Math.min(1600, parseInt(config.canvasWidth) || 1000)),
     canvasHeight: Math.max(300, Math.min(1000, parseInt(config.canvasHeight) || 600)),
-    segmentSize: Math.max(5, Math.min(25, parseInt(config.segmentSize) || 10)),
-    countdownTime: Math.max(1, Math.min(10, parseInt(config.countdownTime) || 3)),
-    attacksEnabled: Boolean(config.attacksEnabled),
-    roundTime: parseInt(config.roundTime) || 45
+    segmentSize: Math.max(5, Math.min(25, parseInt(config.segmentSize) || 20)), // MODIFICADO: nuevo default 20
+    attacksEnabled: config.attacksEnabled !== undefined ? Boolean(config.attacksEnabled) : true, // MODIFICADO: por defecto true
+    roundTime: parseInt(config.roundTime) || 30, // MODIFICADO: por defecto 30s
+    // MODIFICADO: Configuración de consumibles con timers
+    consumables: {
+      immunity: {
+        enabled: Boolean(config.consumables?.immunity?.enabled !== false), // Por defecto habilitado
+        spawnInterval: Math.max(5, Math.min(30, parseInt(config.consumables?.immunity?.spawnInterval) || 13)), // 5s, 8s, 13s, 17s
+        duration: Math.max(3, Math.min(15, parseInt(config.consumables?.immunity?.duration) || 5)) // 3s, 5s, 7s, 9s
+      }
+    }
   };
 }
 
@@ -221,7 +230,7 @@ function createRoom(hostId, hostName) {
       playing: false,
       round: 1,
       timeoutIdStartGame: null,
-      downCounter: defaultConfig.countdownTime,
+      downCounter: 3, // FIJO: siempre 3 segundos
       intervalId: null,
       roundTimeLeft: defaultConfig.roundTime,
       roundTimerId: null
@@ -229,13 +238,16 @@ function createRoom(hostId, hostName) {
     config: defaultConfig,
     gameboard: [],
     foods: [],
+    consumables: [], // Array de consumibles
     projectiles: [],
-    roundScores: {}
+    roundScores: {},
+    consumableTimers: {} // NUEVO: Timers para generación de consumibles
   });
   
   const room = rooms.get(roomId);
   resetGameBoard(room);
   generateFoods(room);
+  initializeConsumableSystem(room); // NUEVO: Inicializar sistema de consumibles
   
   console.log(`Room ${roomId} created by ${hostName}`);
   return roomId;
@@ -252,6 +264,12 @@ function deleteRoom(roomId) {
     if (room.gameState.intervalId) clearInterval(room.gameState.intervalId);
     if (room.gameState.timeoutIdStartGame) clearTimeout(room.gameState.timeoutIdStartGame);
     if (room.gameState.roundTimerId) clearInterval(room.gameState.roundTimerId);
+    
+    // NUEVO: Limpiar timers de consumibles
+    Object.values(room.consumableTimers).forEach(timerId => {
+      if (timerId) clearInterval(timerId);
+    });
+    
     rooms.delete(roomId);
     console.log(`Room ${roomId} deleted`);
   }
@@ -265,6 +283,7 @@ function resetGameBoard(room) {
   room.gameboard = Array(gridWidth).fill().map(() => Array(gridHeight).fill(0));
 }
 
+// MODIFICADO: updateGameBoard para incluir consumibles
 function updateGameBoard(room) {
   resetGameBoard(room);
   const { segmentSize } = room.config;
@@ -288,6 +307,14 @@ function updateGameBoard(room) {
     const foodY = Math.floor(food.y / segmentSize);
     if (foodX >= 0 && foodX < gridWidth && foodY >= 0 && foodY < gridHeight) {
       room.gameboard[foodX][foodY] = 2;
+    }
+  });
+  
+  room.consumables.forEach(consumable => {
+    const consX = Math.floor(consumable.x / segmentSize);
+    const consY = Math.floor(consumable.y / segmentSize);
+    if (consX >= 0 && consX < gridWidth && consY >= 0 && consY < gridHeight) {
+      room.gameboard[consX][consY] = 3; // 3 = consumible
     }
   });
 }
@@ -356,6 +383,134 @@ function generateFoods(room) {
   }
 }
 
+// NUEVO: Sistema de consumibles basado en timers
+function initializeConsumableSystem(room) {
+  // Limpiar timers existentes
+  Object.values(room.consumableTimers).forEach(timerId => {
+    if (timerId) clearInterval(timerId);
+  });
+  room.consumableTimers = {};
+  
+  // Inicializar consumibles de inmunidad si están habilitados
+  if (room.config.consumables.immunity.enabled) {
+    startConsumableTimer(room, 'immunity');
+  }
+}
+
+function startConsumableTimer(room, consumableType) {
+  const config = room.config.consumables[consumableType];
+  if (!config || !config.enabled) return;
+  
+  const checkAndSpawn = () => {
+    if (!room || !room.gameState.playing) return;
+    
+    const maxConsumables = getMaxConsumablesForType(room, consumableType);
+    const currentCount = room.consumables.filter(c => c.type === consumableType).length;
+    
+    if (currentCount < maxConsumables) {
+      spawnConsumable(room, consumableType);
+    }
+  };
+    
+  // Configurar timer
+  room.consumableTimers[consumableType] = setInterval(checkAndSpawn, config.spawnInterval * 1000);
+}
+
+// NUEVO: Reiniciar timer específico de consumible
+function restartConsumableTimer(room, consumableType) {
+  const config = room.config.consumables[consumableType];
+  if (!config || !config.enabled || !room.gameState.playing) return;
+  
+  // Limpiar timer existente
+  if (room.consumableTimers[consumableType]) {
+    clearInterval(room.consumableTimers[consumableType]);
+  }
+  
+  // Reiniciar timer
+  const checkAndSpawn = () => {
+    if (!room || !room.gameState.playing) return;
+    
+    const maxConsumables = getMaxConsumablesForType(room, consumableType);
+    const currentCount = room.consumables.filter(c => c.type === consumableType).length;
+    
+    if (currentCount < maxConsumables) {
+      spawnConsumable(room, consumableType);
+    }
+  };
+  
+  room.consumableTimers[consumableType] = setInterval(checkAndSpawn, config.spawnInterval * 1000);
+}
+
+function getMaxConsumablesForType(room, consumableType) {
+  const playerCount = room.players.filter(p => !p.gameover).length;
+  
+  switch(consumableType) {
+    case 'immunity':
+      return Math.max(1, playerCount - 1); // N = jugadores - 1
+    default:
+      return 1;
+  }
+}
+
+function spawnConsumable(room, type) {
+  const { canvasWidth, canvasHeight, segmentSize } = room.config;
+  
+  let consumableX, consumableY;
+  let attempts = 0;
+  const maxAttempts = 100;
+  
+  do {
+    consumableX = getRandomCoordinate(canvasWidth, segmentSize);
+    consumableY = getRandomCoordinate(canvasHeight, segmentSize);
+    attempts++;
+  } while (!verifyCoordinate(room, consumableX, consumableY) && attempts < maxAttempts);
+  
+  if (attempts >= maxAttempts) {
+    consumableX = Math.floor(canvasWidth * 0.8 / segmentSize) * segmentSize;
+    consumableY = Math.floor(canvasHeight * 0.8 / segmentSize) * segmentSize;
+  }
+  
+  room.consumables.push({ 
+    id: Math.random().toString(36).substring(2, 9),
+    x: consumableX, 
+    y: consumableY, 
+    type: type,
+    spawnTime: Date.now()
+  });
+  
+  console.log(`Spawned ${type} consumable in room ${room.id}`);
+}
+
+// MODIFICADO: Verificar si un jugador consumió un consumible
+function checkConsumableConsumption(room, player) {
+  const { segmentSize } = room.config;
+  const head = player.segments[0];
+  const headX = Math.floor(head.x / segmentSize);
+  const headY = Math.floor(head.y / segmentSize);
+  
+  const consumableIndex = room.consumables.findIndex(consumable => 
+    Math.floor(consumable.x / segmentSize) === headX && 
+    Math.floor(consumable.y / segmentSize) === headY
+  );
+  
+  if (consumableIndex !== -1) {
+    const consumable = room.consumables[consumableIndex];
+    
+    // Obtener duración del consumible según configuración
+    const duration = room.config.consumables[consumable.type]?.duration || 5;
+    
+    // El jugador consume el consumible
+    player.consumeConsumable(consumable.type, duration);
+    
+    // Remover el consumible del mapa
+    room.consumables.splice(consumableIndex, 1);
+    
+    return consumable;
+  }
+  
+  return null;
+}
+
 function createProjectile(room, player) {
   if (!room.config.attacksEnabled || player.segments.length < 3) {
     return false;
@@ -389,6 +544,7 @@ function createProjectile(room, player) {
   return true;
 }
 
+// MODIFICADO: moveProjectiles para manejar inmunidad
 function moveProjectiles(room) {
   const { segmentSize, canvasWidth, canvasHeight } = room.config;
   
@@ -406,6 +562,15 @@ function moveProjectiles(room) {
         for (let i = 0; i < player.segments.length; i++) {
           const segment = player.segments[i];
           if (segment.x === projectile.x && segment.y === projectile.y) {
+            
+            // Verificar inmunidad
+            if (player.hasImmunity()) {
+              player.useImmunity(); // Consumir inmunidad
+              console.log(`${player.name} used immunity to block projectile`);
+              return false; // Remover el proyectil
+            }
+            
+            // Sin inmunidad, aplicar daño normal
             if (i === 0) {
               const segmentsToRemove = Math.min(3, player.segments.length - 1);
               for (let j = 0; j < segmentsToRemove; j++) {
@@ -465,6 +630,11 @@ function endRound(room) {
     room.gameState.roundTimerId = null;
   }
   
+  // Pausar generación de consumibles
+  Object.values(room.consumableTimers).forEach(timerId => {
+    if (timerId) clearInterval(timerId);
+  });
+  
   let roundWinner = null;
   let maxSize = 0;
   
@@ -513,6 +683,11 @@ async function endGame(room) {
     clearInterval(room.gameState.roundTimerId);
     room.gameState.roundTimerId = null;
   }
+  
+  // Parar generación de consumibles
+  Object.values(room.consumableTimers).forEach(timerId => {
+    if (timerId) clearInterval(timerId);
+  });
     
   const finalWinner = Object.values(room.roundScores).reduce((prev, current) => 
     (prev.totalScore > current.totalScore) ? prev : current
@@ -546,10 +721,12 @@ async function endGame(room) {
   setTimeout(() => deleteRoom(room.id), 30000);
 }
 
+// MODIFICADO: startNewRound
 function startNewRound(room) {
-  room.gameState.downCounter = room.config.countdownTime;
+  room.gameState.downCounter = 3; // FIJO: siempre 3 segundos
   room.gameState.roundTimeLeft = room.config.roundTime;
   room.projectiles = [];
+  room.consumables = []; // Limpiar consumibles
   
   room.players.forEach((player, index) => {
     const spawnPos = getPlayerSpawnPosition(room, index);
@@ -560,11 +737,13 @@ function startNewRound(room) {
     player.gameover = false;
     player.scoreLeftToGrow = 0;
     player.moveQueue = [];
+    player.activeConsumable = null; // Limpiar consumibles activos
     player.updateInterpolationSpeed(room.config.gameSpeed);
     player.updateTargets();
   });
   
   generateFoods(room);
+  initializeConsumableSystem(room); // Reiniciar sistema de consumibles
   updateGameBoard(room);
   startGame(room);
 }
@@ -584,6 +763,7 @@ function startGame(room) {
     io.to(room.id).emit('gameStart', {
       players: serializePlayers(room.players),
       foods: [...room.foods],
+      consumables: [...room.consumables],
       projectiles: [...room.projectiles],
       config: room.config,
       gameState: {
@@ -596,6 +776,9 @@ function startGame(room) {
     room.gameState.intervalId = setInterval(() => gameLogicLoop(room), room.config.gameSpeed);
     startRoundTimer(room);
     
+    // Iniciar timers de consumibles
+    initializeConsumableSystem(room);
+    
   } else {
     io.to(room.id).emit('countdown', room.gameState.downCounter, 
       { playing: room.gameState.playing, round: room.gameState.round });
@@ -604,11 +787,13 @@ function startGame(room) {
   }
 }
 
+// MODIFICADO: gameLogicLoop
 function gameLogicLoop(room) {
   if (!room.gameState.playing) return;
   
   const { canvasWidth, canvasHeight, segmentSize } = room.config;
   let portalEvents = [];
+  let consumableEvents = [];
   
   if (!room.gameboard || room.gameboard.length === 0) {
     resetGameBoard(room);
@@ -620,6 +805,9 @@ function gameLogicLoop(room) {
   
   room.players.forEach((player) => {
     if (!player.gameover) {
+      // Actualizar consumibles expirados
+      player.updateConsumables();
+      
       player.processNextMove();
       const prevHead = { ...player.segments[0] };
       player.moveLogic();
@@ -636,6 +824,7 @@ function gameLogicLoop(room) {
       let headY = Math.floor(head.y / segmentSize);
       let portalOccurred = false;
       
+      // Lógica de portales
       if (headX < 0) {
         headX = gridWidth - 1;
         head.x = headX * segmentSize;
@@ -660,6 +849,20 @@ function gameLogicLoop(room) {
         portalEvents.push({ playerId: player.id, type: 'vertical', from: 'bottom', to: 'top' });
       }
       
+      // Verificar consumo de consumibles
+      const consumedConsumable = checkConsumableConsumption(room, player);
+      if (consumedConsumable) {
+        consumableEvents.push({
+          playerId: player.id,
+          playerName: player.name,
+          consumableType: consumedConsumable.type
+        });
+        
+        // NUEVO: Reiniciar timer del tipo de consumible consumido
+        restartConsumableTimer(room, consumedConsumable.type);
+      }
+      
+      // Lógica de comida
       if (room.gameboard[headX] && room.gameboard[headX][headY] === 2) {
         const eatenFoodIndex = room.foods.findIndex(food => 
           Math.floor(food.x / segmentSize) === headX && 
@@ -700,8 +903,10 @@ function gameLogicLoop(room) {
   io.to(room.id).emit('gameLogicFrame', {
     players: serializePlayers(room.players),
     foods: [...room.foods],
+    consumables: [...room.consumables],
     projectiles: [...room.projectiles],
     portals: portalEvents,
+    consumableEvents: consumableEvents,
     gameState: {
       playing: room.gameState.playing,
       round: room.gameState.round,
@@ -839,7 +1044,7 @@ io.on('connection', (socket) => {
     const validConfig = validateRoomConfig(newConfig);
     
     room.config = validConfig;
-    room.gameState.downCounter = validConfig.countdownTime;
+    room.gameState.downCounter = 3; // FIJO: siempre 3 segundos
     room.gameState.roundTimeLeft = validConfig.roundTime;
     
     room.players.forEach((player, index) => {
@@ -853,6 +1058,7 @@ io.on('connection', (socket) => {
     
     resetGameBoard(room);
     generateFoods(room);
+    initializeConsumableSystem(room); // Reinicializar sistema de consumibles
     updateGameBoard(room);
     
     io.to(currentRoom).emit('configUpdated', validConfig);
@@ -911,7 +1117,8 @@ io.on('connection', (socket) => {
           canvasWidth: room.config.canvasWidth,
           canvasHeight: room.config.canvasHeight,
           attacksEnabled: room.config.attacksEnabled,
-          roundTime: room.config.roundTime
+          roundTime: room.config.roundTime,
+          consumables: room.config.consumables
         }
       }));
     socket.emit('roomsList', availableRooms);
@@ -959,7 +1166,6 @@ io.on('connection', (socket) => {
       
       const username = data.username.trim();
       
-      // Verificar si el usuario ya está conectado
       const isUserConnected = Array.from(connectedUsers.values()).some(connectedName => 
         connectedName.toLowerCase() === username.toLowerCase()
       );
@@ -971,7 +1177,6 @@ io.on('connection', (socket) => {
       
       const playerProfile = await getOrCreatePlayer(username, data.playerId);
       
-      // Registrar usuario como conectado
       connectedUsers.set(socket.id, playerProfile.stats.name);
       
       socket.emit('profileLoaded', playerProfile);
@@ -982,17 +1187,14 @@ io.on('connection', (socket) => {
   });
 
   socket.on('logout', (data) => {
-    // Limpiar usuario de la lista de conectados
     connectedUsers.delete(socket.id);
     
-    // Si estaba en una sala, manejar la salida usando la variable del socket
     if (currentRoom) {
       handlePlayerLeaveRoom(socket, currentRoom);
-      currentRoom = null; // Limpiar la variable del socket
+      currentRoom = null;
     }
   });
 
-  // Función para manejar salida de sala (reutilizable para disconnect y logout)
   function handlePlayerLeaveRoom(socket, roomId) {
     const room = getRoom(roomId);
     if (!room) return;
@@ -1031,13 +1233,16 @@ io.on('connection', (socket) => {
           clearInterval(room.gameState.roundTimerId);
           room.gameState.roundTimerId = null;
         }
+        Object.values(room.consumableTimers).forEach(timerId => {
+          if (timerId) clearInterval(timerId);
+        });
         io.to(roomId).emit('gameError', 'Not enough players to continue');
       }
       
       if (room.players.length < room.config.minPlayers && room.gameState.timeoutIdStartGame) {
         clearTimeout(room.gameState.timeoutIdStartGame);
         room.gameState.timeoutIdStartGame = null;
-        room.gameState.downCounter = room.config.countdownTime;
+        room.gameState.downCounter = 3;
       }
     }
     
@@ -1062,17 +1267,14 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    // Limpiar usuario de la lista de conectados
     connectedUsers.delete(socket.id);
     
     if (!currentRoom) return;
     
-    // Usar la función reutilizable para manejar la salida
     handlePlayerLeaveRoom(socket, currentRoom);
   });
 });
 
-// Close database on exit
 process.on('SIGINT', () => {
   db.close((err) => {
     if (err) console.error(err.message);

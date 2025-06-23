@@ -37,8 +37,12 @@ document.addEventListener("DOMContentLoaded", function() {
   const gameSpeedInput = document.getElementById('gameSpeedInput');
   const canvasSizeInput = document.getElementById('canvasSizeInput');
   const segmentSizeInput = document.getElementById('segmentSizeInput');
-  const countdownInput = document.getElementById('countdownInput');
   const attacksEnabledInput = document.getElementById('attacksEnabledInput');
+  
+  // NUEVO: Inputs para configuración de consumibles modificados
+  const immunityEnabledInput = document.getElementById('immunityEnabledInput');
+  const immunityIntervalInput = document.getElementById('immunityIntervalInput');
+  const immunityDurationInput = document.getElementById('immunityDurationInput');
 
   // Persistence variables
   let playerProfile = null;
@@ -46,9 +50,10 @@ document.addEventListener("DOMContentLoaded", function() {
 
   const socket = io();
   let gameState = { playing: false, round: 1 };
-  let segmentSize = 20;
+  let segmentSize = 20; // MODIFICADO: nuevo valor por defecto
   let snakes = [];
   let foods = [];
+  let consumables = [];
   let projectiles = [];
   let clientProjectiles = [];
   let isConnected = false;
@@ -57,6 +62,15 @@ document.addEventListener("DOMContentLoaded", function() {
   let roomConfig = {};
   let roomScores = {};
   let roundTimeLeft = 0;
+
+  // MODIFICADO: Colores y estilos para consumibles (sin símbolo, solo efecto visual)
+  const consumableStyles = {
+    immunity: {
+      color: '#0101FF',
+      glowColor: '#1F1FEF',
+      name: 'Inmunidad'
+    }
+  };
 
   // localStorage functions
   function savePlayerProfile(profile) {
@@ -93,19 +107,16 @@ document.addEventListener("DOMContentLoaded", function() {
   function initializeUserInterface() {
     const savedProfile = loadPlayerProfile();
     if (savedProfile && savedProfile.stats) {
-      // Usuario tiene perfil guardado - validar si no está conectado
       usernameInput.value = savedProfile.stats.name;
       playerProfile = savedProfile;
       currentPlayerId = savedProfile.playerId;
       
-      // Validar con el servidor antes de proceder
       showStatus('Verificando sesión...', 'info');
       socket.emit('getOrCreateProfile', { 
         username: savedProfile.stats.name, 
         playerId: savedProfile.playerId 
       });
     } else {
-      // No hay perfil - mostrar formulario de login
       showElement(document.getElementById('loginView'));
       hideElement(document.getElementById('profileView'));
       hideElement(document.getElementById('roomSelection'));
@@ -193,14 +204,38 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   }
 
-  function drawRetroSnakeSegment(ctx, x, y, size, color, isHead = false, direction = null, isCurrentPlayer = false) {
+  // MODIFICADO: drawRetroSnakeSegment con efecto de inmunidad
+  function drawRetroSnakeSegment(ctx, x, y, size, color, isHead = false, direction = null, isCurrentPlayer = false, hasImmunity = false) {
     const padding = 1;
     const innerSize = size - (padding * 2);
     
+    // NUEVO: Efecto de sombra azulada pulsante para inmunidad
+    if (hasImmunity) {
+      const pulseIntensity = (Math.sin(Date.now() * 0.008) + 1) * 0.5; // Pulso lento pero notorio
+      const glowSize = 4 + (pulseIntensity * 3);
+      const glowAlpha = 0.3 + (pulseIntensity * 0.4);
+      
+      // Sombra azulada exterior
+      ctx.shadowColor = `rgba(100, 150, 255, ${glowAlpha})`;
+      ctx.shadowBlur = glowSize;
+      ctx.fillStyle = color;
+      ctx.fillRect(x + padding, y + padding, innerSize, innerSize);
+      
+      // Brillo sutil adicional
+      ctx.shadowColor = `rgba(150, 200, 255, ${glowAlpha * 0.7})`;
+      ctx.shadowBlur = glowSize * 1.5;
+      ctx.fillRect(x + padding, y + padding, innerSize, innerSize);
+      
+      // Limpiar sombra
+      ctx.shadowBlur = 0;
+      ctx.shadowColor = 'transparent';
+    }
+    
+    // Dibujar segmento normal
     drawRetroRect(ctx, x + padding, y + padding, innerSize, innerSize, color);
     
     if (isHead) {
-      ctx.strokeStyle = isCurrentPlayer ? '#ffffff' : '#000000';
+      ctx.strokeStyle = '#000000';//isCurrentPlayer ? '#ffffff' : '#000000';
       ctx.lineWidth = 1;
       ctx.strokeRect(x + padding, y + padding, innerSize, innerSize);
       
@@ -293,6 +328,39 @@ document.addEventListener("DOMContentLoaded", function() {
     ctx.fillText(food.score, centerX, centerY);
   }
 
+  // MODIFICADO: Renderizar consumibles (mismo estilo visual)
+  function drawRetroConsumable(ctx, consumable, segmentSize) {
+    const style = consumableStyles[consumable.type];
+    if (!style) return;
+    
+    const padding = 3;
+    const size = segmentSize - (padding * 2);
+    
+    const pulse = Math.sin(Date.now() * 0.008) * 0.15 + 1;
+    const pulseSize = size * pulse;
+    const offset = (size - pulseSize) / 2;
+    
+    drawRetroRect(
+      ctx, 
+      consumable.x + padding + offset, 
+      consumable.y + padding + offset, 
+      pulseSize, 
+      pulseSize, 
+      style.color, 
+      style.glowColor
+    );
+    
+    ctx.strokeStyle = '#4F4DFF';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(
+      consumable.x + padding + offset, 
+      consumable.y + padding + offset, 
+      pulseSize, 
+      pulseSize
+    );
+	ctx.strokeStyle = '#000000';
+  }
+
   document.addEventListener('keydown', handleKeyPress);
 
   function handleKeyPress(event) {
@@ -329,6 +397,9 @@ document.addEventListener("DOMContentLoaded", function() {
     snake.score = serverSnake.score;
     snake.gameover = serverSnake.gameover;
     snake.scoreLeftToGrow = serverSnake.scoreLeftToGrow;
+    
+    // Sincronizar consumible activo
+    snake.activeConsumable = serverSnake.activeConsumable;
     
     return snake;
   }
@@ -442,7 +513,8 @@ document.addEventListener("DOMContentLoaded", function() {
         existingSnake.score = serverPlayer.score;
         existingSnake.gameover = serverPlayer.gameover;
         existingSnake.scoreLeftToGrow = serverPlayer.scoreLeftToGrow;
-		existingSnake.color = serverPlayer.color;
+        existingSnake.color = serverPlayer.color;
+        existingSnake.activeConsumable = serverPlayer.activeConsumable;
         return existingSnake;
       } else {
         return createLocalSnake(serverPlayer);
@@ -495,6 +567,7 @@ document.addEventListener("DOMContentLoaded", function() {
     
     snakes = data.players.map(serverPlayer => createLocalSnake(serverPlayer));
     foods = data.foods || [];
+    consumables = data.consumables || [];
     projectiles = data.projectiles || [];
     gameState = data.gameState;
     roomConfig = data.config;
@@ -532,6 +605,7 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   });
 
+  // MODIFICADO: gameLogicFrame para manejar consumibles basados en tiempo
   socket.on('gameLogicFrame', (data) => {
 	snakes.forEach(localSnake => {
 	const serverSnake = data.players.find(p => p.id === localSnake.id);
@@ -551,6 +625,9 @@ document.addEventListener("DOMContentLoaded", function() {
 			localSnake.gameover = serverSnake.gameover;
 			localSnake.scoreLeftToGrow = serverSnake.scoreLeftToGrow;
 			localSnake.color = serverSnake.color;
+            
+            // Actualizar consumible activo
+            localSnake.activeConsumable = serverSnake.activeConsumable;
 		}
 	});    
     const serverProjectiles = data.projectiles || [];
@@ -573,8 +650,18 @@ document.addEventListener("DOMContentLoaded", function() {
     });
     
     foods = data.foods || [];
+    consumables = data.consumables || [];
     gameState = data.gameState;
     projectiles = data.projectiles || [];
+    
+    if (data.consumableEvents && data.consumableEvents.length > 0) {
+      data.consumableEvents.forEach(event => {
+        const style = consumableStyles[event.consumableType];
+        if (style) {
+          showStatus(`${event.playerName} obtuvo ${style.name}!`, 'success');
+        }
+      });
+    }
     
     if (data.gameState.roundTimeLeft !== undefined) {
       roundTimeLeft = data.gameState.roundTimeLeft;
@@ -644,7 +731,6 @@ document.addEventListener("DOMContentLoaded", function() {
     savePlayerProfile(profile);
     updateProfileDisplay(profile.stats);
     
-    // Mostrar vista de perfil y selección de salas
     hideElement(document.getElementById('loginView'));
     showElement(document.getElementById('profileView'));
     showElement(document.getElementById('roomSelection'));
@@ -656,7 +742,6 @@ document.addEventListener("DOMContentLoaded", function() {
   socket.on('profileError', (message) => {
     showStatus(message, 'error');
     
-    // Si hay error, limpiar localStorage y mostrar login
     clearPlayerProfile();
     usernameInput.value = '';
     showElement(document.getElementById('loginView'));
@@ -716,22 +801,33 @@ document.addEventListener("DOMContentLoaded", function() {
     gameSpeedInput.disabled = !enabled;
     canvasSizeInput.disabled = !enabled;
     segmentSizeInput.disabled = !enabled;
-    countdownInput.disabled = !enabled;
     attacksEnabledInput.disabled = !enabled;
+    
+    // NUEVO: Habilitar/deshabilitar inputs de consumibles
+    if (immunityEnabledInput) immunityEnabledInput.disabled = !enabled;
+    if (immunityIntervalInput) immunityIntervalInput.disabled = !enabled;
+    if (immunityDurationInput) immunityDurationInput.disabled = !enabled;
   }
 
+  // MODIFICADO: updateConfigInputs para nuevos controles
   function updateConfigInputs(config) {
     maxPlayersInput.value = config.maxPlayers;
     minPlayersInput.value = config.minPlayers;
     maxRoundsInput.value = config.maxRounds;
-    roundTimeInput.value = config.roundTime || 45;
+    roundTimeInput.value = config.roundTime || 30; // MODIFICADO: nuevo default 30s
     gameSpeedInput.value = config.gameSpeed;
     segmentSizeInput.value = config.segmentSize;
-    countdownInput.value = config.countdownTime;
-    attacksEnabledInput.checked = config.attacksEnabled || false;
+    attacksEnabledInput.checked = config.attacksEnabled !== undefined ? config.attacksEnabled : true; // MODIFICADO: default true
     
     const canvasSize = `${config.canvasWidth}x${config.canvasHeight}`;
     canvasSizeInput.value = canvasSize;
+    
+    // NUEVO: Configuración de consumibles
+    if (config.consumables && config.consumables.immunity) {
+      if (immunityEnabledInput) immunityEnabledInput.checked = config.consumables.immunity.enabled !== false;
+      if (immunityIntervalInput) immunityIntervalInput.value = config.consumables.immunity.spawnInterval || 13;
+      if (immunityDurationInput) immunityDurationInput.value = config.consumables.immunity.duration || 5;
+    }
   }
 
   function updateCanvasSize(config) {
@@ -749,6 +845,7 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   }
 
+  // MODIFICADO: saveConfiguration para nuevos controles
   function saveConfiguration() {
     if (!isHost) {
       showStatus('Solo el anfitrión puede modificar la configuración', 'error');
@@ -756,6 +853,7 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 
     const canvasSize = canvasSizeInput.value.split('x');
+    
     const newConfig = {
       maxPlayers: parseInt(maxPlayersInput.value),
       minPlayers: parseInt(minPlayersInput.value),
@@ -765,8 +863,15 @@ document.addEventListener("DOMContentLoaded", function() {
       canvasWidth: parseInt(canvasSize[0]),
       canvasHeight: parseInt(canvasSize[1]),
       segmentSize: parseInt(segmentSizeInput.value),
-      countdownTime: parseInt(countdownInput.value),
-      attacksEnabled: attacksEnabledInput.checked
+      attacksEnabled: attacksEnabledInput.checked,
+      // NUEVO: Configuración de consumibles modificada
+      consumables: {
+        immunity: {
+          enabled: immunityEnabledInput ? immunityEnabledInput.checked : true,
+          spawnInterval: immunityIntervalInput ? parseInt(immunityIntervalInput.value) : 13,
+          duration: immunityDurationInput ? parseInt(immunityDurationInput.value) : 5
+        }
+      }
     };
 
     if (newConfig.minPlayers > newConfig.maxPlayers) {
@@ -797,9 +902,11 @@ document.addEventListener("DOMContentLoaded", function() {
       const roomItem = document.createElement('li');
       roomItem.className = 'room-item';
       const attacksStatus = room.config.attacksEnabled ? '⚔️' : '';
+      // MODIFICADO: Mostrar indicador de consumibles si están habilitados
+      const consumablesStatus = (room.config.consumables && room.config.consumables.immunity && room.config.consumables.immunity.enabled) ? '🛡️' : '';
       roomItem.innerHTML = `
         <div class="room-info">
-          <strong>Sala: ${room.id}</strong> ${attacksStatus}<br>
+          <strong>Sala: ${room.id}</strong> ${attacksStatus}${consumablesStatus}<br>
           Anfitrión: ${room.hostName}<br>
           Jugadores: ${room.players}/${room.maxPlayers}
           <div class="room-config">
@@ -849,12 +956,18 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   }
 
+  // MODIFICADO: drawPlayers con efecto de inmunidad
   function drawPlayers() {
     snakes.forEach((snake, index) => {
       if (!snake.gameover && snake.getRenderSegments) {
         const isCurrentPlayer = snake.id === socket.id;
         const baseColor = snake.color;
         const renderSegments = snake.getRenderSegments();
+        
+        // NUEVO: Verificar si tiene inmunidad activa
+        const hasImmunity = snake.activeConsumable && 
+                           snake.activeConsumable.type === 'immunity' && 
+                           Date.now() < snake.activeConsumable.endTime;
         
         renderSegments.forEach((segment, segIndex) => {
           const isHead = segIndex === 0;
@@ -867,7 +980,8 @@ document.addEventListener("DOMContentLoaded", function() {
             baseColor, 
             isHead, 
             isHead ? snake.direction : null,
-            isCurrentPlayer
+            isCurrentPlayer,
+            hasImmunity // NUEVO: Pasar estado de inmunidad
           );
         });
       }
@@ -876,6 +990,12 @@ document.addEventListener("DOMContentLoaded", function() {
     if (foods && foods.length > 0) {
       foods.forEach(food => {
         drawRetroFood(ctx, food, segmentSize);
+      });
+    }
+
+    if (consumables && consumables.length > 0) {
+      consumables.forEach(consumable => {
+        drawRetroConsumable(ctx, consumable, segmentSize);
       });
     }
 
@@ -895,6 +1015,7 @@ document.addEventListener("DOMContentLoaded", function() {
     updatePlayerList(snakes);
   }
 
+  // MODIFICADO: updatePlayerList para mostrar consumibles activos
   function updatePlayerList(players) {
     playerList.innerHTML = '';
     
@@ -933,7 +1054,15 @@ document.addEventListener("DOMContentLoaded", function() {
       
       const status = document.createElement('span');
       status.className = 'player-status';
-      status.textContent = player.gameover ? '💀' : '🐍';
+      
+      // MODIFICADO: Mostrar estado del consumible activo + estado del jugador
+      let statusText = player.gameover ? '💀' : '🐍';
+      if (player.activeConsumable && !player.gameover) {
+        if (player.activeConsumable.type === 'immunity' && Date.now() < player.activeConsumable.endTime) {
+          statusText = '🛡️'; // Icono de inmunidad
+        }
+      }
+      status.textContent = statusText;
       
       listItem.appendChild(rank);
       listItem.appendChild(name);
@@ -1030,7 +1159,6 @@ document.addEventListener("DOMContentLoaded", function() {
   }
 
   function resetPlayerProfile() {
-    // Notificar al servidor para limpiar la sesión (incluye salir de sala si está en una)
     socket.emit('logout', { currentRoomId });
     
     clearPlayerProfile();
@@ -1040,7 +1168,6 @@ document.addEventListener("DOMContentLoaded", function() {
       profileInfo.innerHTML = '<div class="profile-stats"><span>Ingresa tu nombre para ver estadísticas</span></div>';
     }
     
-    // Mostrar vista de login
     showElement(document.getElementById('loginView'));
     hideElement(document.getElementById('profileView'));
     hideElement(document.getElementById('roomSelection'));
@@ -1065,38 +1192,32 @@ document.addEventListener("DOMContentLoaded", function() {
     if (leaderboardModal && leaderboardList) {
 		  leaderboardList.innerHTML = '';
 		  
-		  // Ordenar el leaderboard según los nuevos criterios
 		  const sortedLeaderboard = leaderboard.sort((a, b) => {
 			const aHasMinGames = a.games_played >= 3;
 			const bHasMinGames = b.games_played >= 3;
 			
-			// Si ambos tienen >= 3 partidas, ordenar por porcentaje de victorias
 			if (aHasMinGames && bHasMinGames) {
 			  const aWinRate = a.games_played > 0 ? (a.wins / a.games_played) : 0;
 			  const bWinRate = b.games_played > 0 ? (b.wins / b.games_played) : 0;
 			  
 			  if (aWinRate !== bWinRate) {
-				return bWinRate - aWinRate; // Mayor porcentaje primero
+				return bWinRate - aWinRate;
 			  }
-			  // En caso de empate en porcentaje, ordenar por victorias totales
 			  return b.wins - a.wins;
 			}
 			
-			// Si ambos tienen < 3 partidas, ordenar por victorias
 			if (!aHasMinGames && !bHasMinGames) {
 			  if (a.wins !== b.wins) {
-				return b.wins - a.wins; // Más victorias primero
+				return b.wins - a.wins;
 			  }
-			  // En caso de empate en victorias, ordenar por partidas jugadas
 			  return b.games_played - a.games_played;
 			}
 			
-			// Priorizar jugadores con >= 3 partidas sobre los que tienen < 3
 			if (aHasMinGames && !bHasMinGames) {
-			  return -1; // a va primero
+			  return -1;
 			}
 			if (!aHasMinGames && bHasMinGames) {
-			  return 1; // b va primero
+			  return 1;
 			}
 			
 			return 0;
@@ -1179,7 +1300,6 @@ document.addEventListener("DOMContentLoaded", function() {
     event.preventDefault();
     const username = usernameInput.value.trim();
     if (username && username.length >= 2 && username.length <= 20) {
-      // Solicitar perfil del jugador al servidor
       const dataToSend = { username };
       if (currentPlayerId && playerProfile && playerProfile.stats.name.toLowerCase() === username.toLowerCase()) {
         dataToSend.playerId = currentPlayerId;

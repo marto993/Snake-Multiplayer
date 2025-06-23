@@ -17,6 +17,9 @@ class Snake {
       this.gameover = false;
       this.scoreLeftToGrow = 0;
       
+      // MODIFICADO: Sistema de consumibles basado en tiempo
+      this.activeConsumable = null; // { type: 'immunity', endTime: timestamp }
+      
       // Calcular interpolationSpeed basado en gameSpeed
       this.interpolationSpeed = this.calculateInterpolationSpeed(gameSpeed);
       this.targetSegments = [{ x: startX, y: startY }];
@@ -201,6 +204,68 @@ class Snake {
         // El puntaje se actualiza automáticamente en el método move()
     }
     
+    // MODIFICADO: Consumir consumible con duración por tiempo
+    consumeConsumable(consumableType, durationSeconds) {
+        const endTime = Date.now() + (durationSeconds * 1000);
+        switch(consumableType) {
+            case 'immunity':
+                this.activeConsumable = {
+                    type: 'immunity',
+                    endTime: endTime
+                };
+                break;
+            default:
+                console.warn(`Unknown consumable type: ${consumableType}`);
+        }
+    }
+    
+    // MODIFICADO: Verificar si tiene inmunidad activa basado en tiempo
+    hasImmunity() {
+        if (!this.activeConsumable || this.activeConsumable.type !== 'immunity') {
+            return false;
+        }
+        
+        const currentTime = Date.now();
+        if (currentTime >= this.activeConsumable.endTime) {
+            this.activeConsumable = null; // Limpiar consumible expirado
+            return false;
+        }
+        
+        return true;
+    }
+    
+    // MODIFICADO: Usar inmunidad (solo eliminar el efecto, sin contar usos)
+    useImmunity() {
+        if (this.hasImmunity()) {
+            this.activeConsumable = null; // Eliminar inmunidad al ser usada
+            return true;
+        }
+        return false;
+    }
+    
+    // MODIFICADO: Obtener información del consumible activo para serialización
+    getActiveConsumable() {
+        // Verificar expiración antes de enviar
+        if (this.activeConsumable) {
+            const currentTime = Date.now();
+            if (currentTime >= this.activeConsumable.endTime) {
+                this.activeConsumable = null;
+                return null;
+            }
+        }
+        return this.activeConsumable ? { ...this.activeConsumable } : null;
+    }
+    
+    // NUEVO: Método para verificar y limpiar consumibles expirados
+    updateConsumables() {
+        if (this.activeConsumable) {
+            const currentTime = Date.now();
+            if (currentTime >= this.activeConsumable.endTime) {
+                this.activeConsumable = null;
+            }
+        }
+    }
+    
     canAttack() {
       return this.segments.length >= 3 && !this.gameover;
     }
@@ -252,6 +317,8 @@ class Snake {
         { x: 0, y: 0 }
       ];
       this.score = 0;
+      // Limpiar consumibles activos
+      this.activeConsumable = null;
     }
     
     // Nuevo método para reiniciar la snake sin "morir"
@@ -265,6 +332,9 @@ class Snake {
       this.scoreLeftToGrow = 0;
       this.moveQueue = [];
       this.eatFood = false;
+      
+      // Limpiar consumibles activos al reiniciar
+      this.activeConsumable = null;
     }
     
     // Método para obtener el puntaje actual (tamaño de la snake)
