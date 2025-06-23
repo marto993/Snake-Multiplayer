@@ -328,39 +328,177 @@ document.addEventListener("DOMContentLoaded", function() {
     ctx.fillText(food.score, centerX, centerY);
   }
 
-  // MODIFICADO: Renderizar consumibles (mismo estilo visual)
-  function drawRetroConsumable(ctx, consumable, segmentSize) {
-    const style = consumableStyles[consumable.type];
-    if (!style) return;
-    
-    const padding = 3;
-    const size = segmentSize - (padding * 2);
-    
-    const pulse = Math.sin(Date.now() * 0.008) * 0.15 + 1;
-    const pulseSize = size * pulse;
-    const offset = (size - pulseSize) / 2;
-    
-    drawRetroRect(
-      ctx, 
-      consumable.x + padding + offset, 
-      consumable.y + padding + offset, 
-      pulseSize, 
-      pulseSize, 
-      style.color, 
-      style.glowColor
-    );
-    
-    ctx.strokeStyle = '#4F4DFF';
-    ctx.lineWidth = 3;
-    ctx.strokeRect(
-      consumable.x + padding + offset, 
-      consumable.y + padding + offset, 
-      pulseSize, 
-      pulseSize
-    );
-	ctx.strokeStyle = '#000000';
-  }
+  // Escudo con Path2D
+	function drawShield(ctx, centerX, centerY, size, color, glowColor) {
+	  const shield = new Path2D();
+	  const width = size * 1.2;
+	  const height = size * 1.5;
+	  
+	  // Contorno del escudo
+	  shield.moveTo(centerX, centerY - height/2);
+	  shield.quadraticCurveTo(centerX + width/2, centerY - height/2, centerX + width/2, centerY);
+	  shield.quadraticCurveTo(centerX + width/2, centerY + height/3, centerX, centerY + height/2);
+	  shield.quadraticCurveTo(centerX - width/2, centerY + height/3, centerX - width/2, centerY);
+	  shield.quadraticCurveTo(centerX - width/2, centerY - height/2, centerX, centerY - height/2);
+	  
+	  if (glowColor) {
+		ctx.shadowColor = glowColor;
+		ctx.shadowBlur = 8;
+	  }
+	  
+	  ctx.fillStyle = color;
+	  ctx.fill(shield);
+	  ctx.strokeStyle = '#ffffff';
+	  ctx.lineWidth = 2;
+	  ctx.stroke(shield);
+	  ctx.shadowBlur = 0;
+	  ctx.strokeStyle = '#000000';
+	  ctx.lineWidth = 0;
+	}
 
+	// Rayo/Lightning
+	function drawLightning(ctx, centerX, centerY, size, color, glowColor) {
+	  const lightning = new Path2D();
+	  const width = size * 0.8;
+	  const height = size * 1.4;
+	  
+	  lightning.moveTo(centerX - width/3, centerY - height/2);
+	  lightning.lineTo(centerX + width/3, centerY - height/2);
+	  lightning.lineTo(centerX - width/6, centerY - height/6);
+	  lightning.lineTo(centerX + width/2, centerY - height/6);
+	  lightning.lineTo(centerX - width/4, centerY + height/6);
+	  lightning.lineTo(centerX + width/6, centerY + height/6);
+	  lightning.lineTo(centerX - width/3, centerY + height/2);
+	  lightning.lineTo(centerX - width/6, centerY + height/6);
+	  lightning.lineTo(centerX - width/2, centerY + height/6);
+	  lightning.lineTo(centerX + width/4, centerY - height/6);
+	  lightning.closePath();
+	  
+	  if (glowColor) {
+		ctx.shadowColor = glowColor;
+		ctx.shadowBlur = 10;
+	  }
+	  
+	  ctx.fillStyle = color;
+	  ctx.fill(lightning);
+	  ctx.shadowBlur = 0;
+	}
+
+	// Corazón
+	function drawHeart(ctx, centerX, centerY, size, color, glowColor) {
+	  const heart = new Path2D();
+	  const width = size;
+	  const height = size;
+	  
+	  heart.moveTo(centerX, centerY + height/4);
+	  heart.bezierCurveTo(centerX, centerY, centerX - width/2, centerY - height/2, centerX - width/4, centerY - height/4);
+	  heart.bezierCurveTo(centerX - width/8, centerY - height/2, centerX + width/8, centerY - height/2, centerX + width/4, centerY - height/4);
+	  heart.bezierCurveTo(centerX + width/2, centerY - height/2, centerX, centerY, centerX, centerY + height/4);
+	  
+	  if (glowColor) {
+		ctx.shadowColor = glowColor;
+		ctx.shadowBlur = 8;
+	  }
+	  
+	  ctx.fillStyle = color;
+	  ctx.fill(heart);
+	  ctx.strokeStyle = '#ffffff';
+	  ctx.lineWidth = 1;
+	  ctx.stroke(heart);
+	  ctx.shadowBlur = 0;
+	  ctx.strokeStyle = '#000000';
+	  ctx.lineWidth = 0;
+	}
+	function drawHexagon(ctx, centerX, centerY, radius, color, glowColor) {
+	  const sides = 6;
+	  const angle = (Math.PI * 2) / sides;
+	  
+	  ctx.beginPath();
+	  
+	  for (let i = 0; i <= sides; i++) {
+		const x = centerX + Math.cos(i * angle) * radius;
+		const y = centerY + Math.sin(i * angle) * radius;
+		
+		if (i === 0) {
+		  ctx.moveTo(x, y);
+		} else {
+		  ctx.lineTo(x, y);
+		}
+	  }
+	  
+	  ctx.closePath();
+	  
+	  // Efecto de brillo
+	  if (glowColor) {
+		ctx.shadowColor = glowColor;
+		ctx.shadowBlur = 8;
+	  }
+	  
+	  ctx.fillStyle = color;
+	  ctx.fill();
+	  
+	  // Borde más marcado
+	  ctx.strokeStyle = '#ffffff';
+	  ctx.lineWidth = 2;
+	  ctx.stroke();
+	  
+	  // Limpiar sombra y borde
+	  ctx.shadowBlur = 0;
+	  ctx.shadowColor = 'transparent';
+	  ctx.strokeStyle = '#000000';
+	  ctx.lineWidth = 0;
+	}
+	// Función de doble capa para efectos visuales avanzados
+	function drawLayeredConsumable(ctx, centerX, centerY, size, baseColor, accentColor, glowColor) {
+	  const pulse = Math.sin(Date.now() * 0.01) * 0.2 + 1;
+	  
+	  // Capa exterior (más grande, transparente)
+	  ctx.globalAlpha = 0.3;
+	  drawHexagon(ctx, centerX, centerY, size * pulse * 1.3, accentColor, glowColor);
+	  
+	  // Capa interior (sólida)
+	  ctx.globalAlpha = 1;
+	  drawHexagon(ctx, centerX, centerY, size * pulse, baseColor, glowColor);
+	  
+	  // Núcleo brillante
+	  ctx.globalAlpha = 0.8;
+	  drawHexagon(ctx, centerX, centerY, size * 0.4, '#ffffff', '#ffffff');
+	  ctx.globalAlpha = 1;
+	}
+
+	// Versión actualizada con formas complejas
+	function drawRetroConsumable(ctx, consumable, segmentSize) {
+	  const style = consumableStyles[consumable.type];
+	  if (!style) return;
+	  
+	  const centerX = consumable.x + segmentSize / 2;
+	  const centerY = consumable.y + segmentSize / 2;
+	  const pulse = Math.sin(Date.now() * 0.008) * 0.15 + 1;
+	  const size = (segmentSize * 0.35) * pulse;
+	  
+	  switch(consumable.type) {
+		case 'immunity':
+			drawLayeredConsumable(ctx, centerX, centerY, size, style.color, '#c080ff', style.glowColor);
+			//drawShield(ctx, centerX, centerY, size, style.color, style.glowColor);
+			break;
+		  
+		case 'speed':
+		  drawLightning(ctx, centerX, centerY, size, '#ffff00', '#ffff80');
+		  break;
+		  
+		case 'health':
+		  drawHeart(ctx, centerX, centerY, size, '#ff4040', '#ff8080');
+		  break;
+		  
+		case 'power':
+		  drawLayeredConsumable(ctx, centerX, centerY, size, '#8040ff', '#c080ff', '#ff80ff');
+		  break;
+		  
+		default:
+		  drawHexagon(ctx, centerX, centerY, size, style.color, style.glowColor);
+	  }
+	}
+	
   document.addEventListener('keydown', handleKeyPress);
 
   function handleKeyPress(event) {

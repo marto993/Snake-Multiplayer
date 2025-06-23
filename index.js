@@ -352,7 +352,7 @@ function verifyCoordinate(room, x, y) {
 function generateFoods(room) {
   const { canvasWidth, canvasHeight, segmentSize } = room.config;
   const playerCount = room.players.length;
-  const foodCount = playerCount === 2 ? 8 : playerCount + 6;
+  const foodCount = playerCount === 2 ? 7 : playerCount + 5;
   
   room.foods = [];
   
@@ -372,7 +372,7 @@ function generateFoods(room) {
       foodY = Math.floor(canvasHeight / 2 / segmentSize) * segmentSize;
     }
     
-    const scoreFood = Math.floor(Math.random() * 6) + 1;
+    const scoreFood = Math.floor(Math.random() * 5) + 1;
     room.foods.push({ x: foodX, y: foodY, score: scoreFood });
     
     const gridX = Math.floor(foodX / segmentSize);
@@ -889,7 +889,7 @@ function gameLogicLoop(room) {
             foodY = Math.floor(room.config.canvasHeight / 2 / segmentSize) * segmentSize;
           }
           
-          const newFoodScore = Math.floor(Math.random() * 6) + 1;
+          const newFoodScore = Math.floor(Math.random() * 5) + 1;
           room.foods.push({ x: foodX, y: foodY, score: newFoodScore });
         }
       }
