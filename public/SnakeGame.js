@@ -1092,6 +1092,74 @@ document.addEventListener("DOMContentLoaded", function() {
       });
     }
   }
+  
+  function drawCountdown() {
+	if (roundTimeLeft > 10 || roundTimeLeft < 0) return;
+	  
+	  const centerX = canvas.width / 2;
+	  const centerY = canvas.height / 2;
+	  
+	  // Configurar el contexto para el countdown
+	  ctx.save();
+	  
+	  // Tamaño de fuente dinámico basado en el tiempo restante
+	  const fontSize = 220 + (10 - roundTimeLeft) * 8; // Crece a medida que se acerca a 0
+	  ctx.font = `bold ${fontSize}px Share Tech Mono, monospace`;
+	  ctx.textAlign = 'center';
+	  ctx.textBaseline = 'middle';
+	  
+	  // Efecto de pulsación
+	  const pulseScale = 1 + Math.sin(Date.now() * 0.01) * 0.1;
+	  ctx.scale(pulseScale, pulseScale);
+	  
+	  // Color y transparencia basados en urgencia
+	  let alpha, strokeColor, fillColor;
+	  if (roundTimeLeft <= 3) {
+		// Rojo urgente para últimos 3 segundos
+		alpha = 0.25;
+		strokeColor = '#ff0000';
+		fillColor = '#ff4040';
+	  } else if (roundTimeLeft <= 5) {
+		// Amarillo de advertencia
+		alpha = 0.17;
+		strokeColor = '#ff4a00';
+		fillColor = '#ff4f00';
+	  } else {
+		// Blanco normal
+		alpha = 0.12;
+		strokeColor = '#ffffff';
+		fillColor = '#ffffff';
+	  }
+	  
+	  // Sombra/Glow para mejor visibilidad
+	  ctx.shadowColor = strokeColor;
+	  ctx.shadowBlur = 20;
+	  ctx.globalAlpha = alpha;
+	  
+	  // Dibujar contorno grueso
+	  ctx.strokeStyle = strokeColor;
+	  ctx.lineWidth = 6;
+	  ctx.strokeText(roundTimeLeft.toString(), centerX / pulseScale, centerY / pulseScale);
+	  
+	  // Dibujar texto principal
+	  ctx.fillStyle = fillColor;
+	  ctx.fillText(roundTimeLeft.toString(), centerX / pulseScale, centerY / pulseScale);
+	  
+	  // Texto adicional "TIEMPO!" en los últimos 3 segundos
+	  if (roundTimeLeft <= 1) {
+		ctx.font = `bold 48px Share Tech Mono, monospace`;
+		ctx.globalAlpha = alpha * 0.8;
+		ctx.fillStyle = fillColor;
+		ctx.strokeStyle = strokeColor;
+		ctx.lineWidth = 2;
+		
+		const warningY = (centerY / pulseScale) + 160;
+		ctx.strokeText('¡TIEMPO!', centerX / pulseScale, warningY);
+		ctx.fillText('¡TIEMPO!', centerX / pulseScale, warningY);
+	  }
+	  
+	  ctx.restore();
+	}
 
   function gameLoop() {
     ctx.fillStyle = retroColors.background;
@@ -1099,6 +1167,7 @@ document.addEventListener("DOMContentLoaded", function() {
     
     drawGrid();
     drawPlayers();
+	drawCountdown();
     updatePlayerList(snakes);
     
     // Actualizar canvas de información
