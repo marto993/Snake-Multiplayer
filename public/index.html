@@ -130,6 +130,104 @@
             padding: 8px 12px;
             font-size: 0.9em;
         }
+
+        /* NUEVO: Estilos para lista de jugadores en línea */
+        .online-players-panel {
+            background: #1a1a1a;
+            border: 2px solid #00ffff;
+            padding: 15px;
+            box-shadow: 0 0 8px rgba(0, 255, 255, 0.15);
+        }
+
+        .online-players-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .online-player-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            margin-bottom: 6px;
+            background: #333;
+            border: 1px solid #666;
+            font-size: 0.85em;
+            transition: all 0.3s ease;
+        }
+
+        .online-player-item:hover {
+            background: #444;
+            border-color: #00ffff;
+        }
+
+        .online-player-info {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+			padding-right: 4px;
+        }
+
+        .online-player-name {
+            color: #fff;
+            font-weight: 600;
+			min-width: 8.75rem;
+        }
+
+        .online-player-status {
+            color: #888;
+            font-size: 0.8em;
+        }
+
+        .online-player-status.in-game {
+            color: #ff8040;
+        }
+
+        .online-player-status.available {
+            color: #00ff41;
+        }
+
+        .invite-button {
+            background: #333;
+            color: #00ffff;
+            border: 1px solid #00ffff;
+            padding: 4px 8px;
+            font-size: 0.8em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: 'Share Tech Mono', monospace;
+            text-transform: uppercase;
+            margin: 0;
+        }
+
+        .invite-button:hover {
+            background: #00ffff;
+            color: #000;
+        }
+
+        .invite-button:disabled {
+            background: #222;
+            color: #666;
+            border-color: #444;
+            cursor: not-allowed;
+        }
+
+        .invite-button:disabled:hover {
+            background: #222;
+            color: #666;
+        }
+
+        .online-players-empty {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+            font-style: italic;
+            font-size: 0.9em;
+        }
         
         h1 {
             margin: 0 0 20px 0;
@@ -972,6 +1070,14 @@
                         <button id="loginLeaderboardButton" class="secondary">🏆 Ver Rankings</button>
                     </div>
                 </div>
+            </div>
+
+            <!-- NUEVO: Panel de jugadores en línea -->
+            <div class="online-players-panel hidden" id="onlinePlayersPanel">
+                <h3>🌐 Jugadores Activos</h3>
+                <ul id="onlinePlayersList" class="online-players-list">
+                    <li class="online-players-empty">Cargando jugadores...</li>
+                </ul>
             </div>
         </div>
         

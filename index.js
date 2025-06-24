@@ -168,7 +168,7 @@ function getPlayerStats(playerId) {
 app.use(express.static('public'));
 
 let rooms = new Map();
-let connectedUsers = new Map();
+let connectedUsers = new Map(); // socketId -> { name, roomId, playerId }
 
 // MODIFICADO: serializePlayers para incluir consumibles activos
 function serializePlayers(players) {
@@ -181,8 +181,48 @@ function serializePlayers(players) {
     score: player.score,
     gameover: player.gameover,
     scoreLeftToGrow: player.scoreLeftToGrow,
-    activeConsumable: player.getActiveConsumable() // Incluir consumible activo
+    activeConsumable: player.getActiveConsumable()
   }));
+}
+
+// NUEVO: Función para obtener lista de jugadores en línea
+function getOnlinePlayersList(excludeSocketId = null, excludeRoomId = null) {
+  const onlinePlayers = [];
+  
+  connectedUsers.forEach((userData, socketId) => {
+    if (socketId === excludeSocketId) return;
+    
+    // Excluir jugadores de la misma sala
+    //if (excludeRoomId && userData.roomId === excludeRoomId) return;
+    
+    // Solo incluir jugadores que no están en juego
+    let isInGame = false;
+    if (userData.roomId) {
+      const room = rooms.get(userData.roomId);
+      if (room && room.gameState.playing) {
+        isInGame = true;
+      }
+    }
+    
+    onlinePlayers.push({
+      socketId: socketId,
+      name: userData.name,
+      roomId: userData.roomId,
+      isInGame: isInGame,
+      canInvite: !isInGame && userData.roomId !== excludeRoomId
+    });
+  });
+  
+  return onlinePlayers.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// NUEVO: Función para enviar lista actualizada de jugadores
+function broadcastOnlinePlayersList() {
+  connectedUsers.forEach((userData, socketId) => {
+    const currentRoom = userData.roomId;
+    const onlineList = getOnlinePlayersList(socketId, currentRoom);
+    io.to(socketId).emit('onlinePlayersList', onlineList);
+  });
 }
 
 function generateRoomId() {
@@ -791,6 +831,9 @@ function startGame(room) {
     // Iniciar timers de consumibles
     initializeConsumableSystem(room);
     
+    // NUEVO: Actualizar lista de jugadores en línea (ya no pueden ser invitados)
+    broadcastOnlinePlayersList();
+    
   } else {
     io.to(room.id).emit('countdown', room.gameState.downCounter, 
       { playing: room.gameState.playing, round: room.gameState.round });
@@ -945,6 +988,13 @@ io.on('connection', (socket) => {
       currentRoom = roomId;
       socket.join(roomId);
       
+      // NUEVO: Actualizar datos del usuario conectado
+      connectedUsers.set(socket.id, {
+        name: playerProfile.stats.name,
+        roomId: roomId,
+        playerId: playerProfile.playerId
+      });
+      
       const room = getRoom(roomId);
       if (!room) {
         socket.emit('gameError', 'Failed to create room');
@@ -968,6 +1018,9 @@ io.on('connection', (socket) => {
       io.to(roomId).emit('updatePlayers', serializePlayers(room.players), 
         { playing: room.gameState.playing, round: room.gameState.round }, 
         room.config, { host: room.host, roomId });
+      
+      // NUEVO: Enviar lista de jugadores en línea actualizadas
+      broadcastOnlinePlayersList();
     } catch (error) {
       console.error('Error creating room:', error);
       socket.emit('gameError', 'Error creating room');
@@ -1012,6 +1065,13 @@ io.on('connection', (socket) => {
       currentRoom = data.roomId;
       socket.join(data.roomId);
       
+      // NUEVO: Actualizar datos del usuario conectado
+      connectedUsers.set(socket.id, {
+        name: playerProfile.stats.name,
+        roomId: data.roomId,
+        playerId: playerProfile.playerId
+      });
+      
       const { canvasWidth, canvasHeight, segmentSize } = room.config;
       const playerIndex = room.players.length;
       const spawnPos = getPlayerSpawnPosition(room, playerIndex);
@@ -1033,6 +1093,9 @@ io.on('connection', (socket) => {
       io.to(data.roomId).emit('updatePlayers', serializePlayers(room.players), 
         { playing: room.gameState.playing, round: room.gameState.round }, 
         room.config, { host: room.host, roomId: data.roomId });
+      
+      // NUEVO: Enviar lista de jugadores en línea actualizadas
+      broadcastOnlinePlayersList();
     } catch (error) {
       console.error('Error joining room:', error);
       socket.emit('gameError', 'Error joining room');
@@ -1179,7 +1242,7 @@ io.on('connection', (socket) => {
       const username = data.username.trim();
       
       const isUserConnected = Array.from(connectedUsers.values()).some(connectedName => 
-        connectedName.toLowerCase() === username.toLowerCase()
+        connectedName.name.toLowerCase() === username.toLowerCase()
       );
       
       if (isUserConnected) {
@@ -1189,13 +1252,74 @@ io.on('connection', (socket) => {
       
       const playerProfile = await getOrCreatePlayer(username, data.playerId);
       
-      connectedUsers.set(socket.id, playerProfile.stats.name);
+      // NUEVO: Registrar usuario conectado
+      connectedUsers.set(socket.id, {
+        name: playerProfile.stats.name,
+        roomId: null,
+        playerId: playerProfile.playerId
+      });
       
       socket.emit('profileLoaded', playerProfile);
+      
+      // NUEVO: Enviar lista de jugadores en línea actualizadas
+      broadcastOnlinePlayersList();
     } catch (error) {
       console.error('Error getting profile:', error);
       socket.emit('profileError', 'Error loading profile');
     }
+  });
+
+  // NUEVO: Obtener lista de jugadores en línea
+  socket.on('getOnlinePlayers', () => {
+    const userData = connectedUsers.get(socket.id);
+    const currentRoomId = userData ? userData.roomId : null;
+    const onlineList = getOnlinePlayersList(socket.id, currentRoomId);
+    socket.emit('onlinePlayersList', onlineList);
+  });
+
+  // NUEVO: Enviar invitación a otro jugador
+  socket.on('invitePlayer', (data) => {
+    if (!data.targetSocketId || !currentRoom) {
+      socket.emit('gameError', 'No se puede enviar la invitación');
+      return;
+    }
+    
+    const room = getRoom(currentRoom);
+    if (!room || room.gameState.playing) {
+      socket.emit('gameError', 'No puedes invitar durante el juego');
+      return;
+    }
+    
+    const inviterData = connectedUsers.get(socket.id);
+    const targetData = connectedUsers.get(data.targetSocketId);
+    
+    if (!inviterData || !targetData) {
+      socket.emit('gameError', 'Jugador no encontrado');
+      return;
+    }
+    
+    // Verificar que el objetivo no esté en una partida
+    if (targetData.roomId) {
+      const targetRoom = getRoom(targetData.roomId);
+      if (targetRoom && targetRoom.gameState.playing) {
+        socket.emit('gameError', `${targetData.name} está jugando actualmente`);
+        return;
+      }
+    }
+    
+    // Enviar invitación
+    io.to(data.targetSocketId).emit('invitationReceived', {
+      fromPlayer: inviterData.name,
+      roomId: currentRoom,
+      fromSocketId: socket.id
+    });
+    
+    // Confirmar al que invitó
+    socket.emit('invitationSent', {
+      toPlayer: targetData.name
+    });
+    
+    console.log(`${inviterData.name} invited ${targetData.name} to room ${currentRoom}`);
   });
 
   socket.on('logout', (data) => {
@@ -1205,6 +1329,9 @@ io.on('connection', (socket) => {
       handlePlayerLeaveRoom(socket, currentRoom);
       currentRoom = null;
     }
+    
+    // NUEVO: Actualizar lista de jugadores en línea
+    broadcastOnlinePlayersList();
   });
 
   function handlePlayerLeaveRoom(socket, roomId) {
@@ -1220,6 +1347,12 @@ io.on('connection', (socket) => {
       room.projectiles = room.projectiles.filter(p => p.playerId !== socket.id);
       delete room.roundScores[socket.id];
       
+      // NUEVO: Actualizar datos del usuario (ya no está en sala)
+      const userData = connectedUsers.get(socket.id);
+      if (userData) {
+        userData.roomId = null;
+      }
+      
       if (room.host === socket.id) {
         if (room.players.length > 0) {
           room.host = room.players[0].id;
@@ -1227,6 +1360,8 @@ io.on('connection', (socket) => {
           io.to(roomId).emit('newHost', { hostId: room.host, hostName: room.hostName });
         } else {
           deleteRoom(roomId);
+          // NUEVO: Actualizar lista de jugadores en línea
+          broadcastOnlinePlayersList();
           return;
         }
       }
@@ -1256,6 +1391,9 @@ io.on('connection', (socket) => {
         room.gameState.timeoutIdStartGame = null;
         room.gameState.downCounter = 3;
       }
+      
+      // NUEVO: Actualizar lista de jugadores en línea
+      broadcastOnlinePlayersList();
     }
     
     socket.leave(roomId);
@@ -1272,8 +1410,17 @@ io.on('connection', (socket) => {
 
   socket.on('backToMenu', () => {
     if (currentRoom) {
+      // NUEVO: Actualizar datos del usuario (ya no está en sala)
+      const userData = connectedUsers.get(socket.id);
+      if (userData) {
+        userData.roomId = null;
+      }
+      
       socket.leave(currentRoom);
       currentRoom = null;
+      
+      // NUEVO: Actualizar lista de jugadores en línea
+      broadcastOnlinePlayersList();
     }
     socket.emit('backToMenuSuccess');
   });
@@ -1281,7 +1428,11 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     connectedUsers.delete(socket.id);
     
-    if (!currentRoom) return;
+    if (!currentRoom) {
+      // NUEVO: Actualizar lista de jugadores en línea
+      broadcastOnlinePlayersList();
+      return;
+    }
     
     handlePlayerLeaveRoom(socket, currentRoom);
   });

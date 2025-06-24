@@ -42,6 +42,10 @@ document.addEventListener("DOMContentLoaded", function() {
   const immunityIntervalInput = document.getElementById('immunityIntervalInput');
   const immunityDurationInput = document.getElementById('immunityDurationInput');
 
+  // NUEVO: Elementos para sistema de invitaciones
+  const onlinePlayersPanel = document.getElementById('onlinePlayersPanel');
+  const onlinePlayersList = document.getElementById('onlinePlayersList');
+
   // Sistema de notificaciones en canvas
   let canvasNotifications = [];
   
@@ -71,6 +75,11 @@ document.addEventListener("DOMContentLoaded", function() {
         this.backgroundColor = 'rgba(255, 64, 64, 0.9)';
         this.textColor = '#ffffff';
         this.borderColor = '#ff4040';
+        break;
+      case 'invitation':
+        this.backgroundColor = 'rgba(0, 255, 255, 0.9)';
+        this.textColor = '#000000';
+        this.borderColor = '#00ffff';
         break;
       case 'info':
       default:
@@ -222,6 +231,10 @@ document.addEventListener("DOMContentLoaded", function() {
   let roomScores = {};
   let roundTimeLeft = 0;
 
+  // NUEVO: Variables para sistema de invitaciones
+  let onlinePlayers = [];
+  let pendingInvitations = [];
+
   const consumableStyles = {
     immunity: {
       color: '#0101FF',
@@ -269,7 +282,7 @@ document.addEventListener("DOMContentLoaded", function() {
       playerProfile = savedProfile;
       currentPlayerId = savedProfile.playerId;
       
-      addCanvasNotification('Verificando sesión...', 'info');
+      //addCanvasNotification('Verificando sesión...', 'info');
       socket.emit('getOrCreateProfile', { 
         username: savedProfile.stats.name, 
         playerId: savedProfile.playerId 
@@ -278,6 +291,7 @@ document.addEventListener("DOMContentLoaded", function() {
       showElement(document.getElementById('loginView'));
       hideElement(document.getElementById('profileView'));
       hideElement(document.getElementById('roomSelection'));
+      hideElement(onlinePlayersPanel);
       updateLogoutButtonVisibility();
       addCanvasNotification('¡Conectado! Ingresa tu nombre para comenzar.', 'info');
     }
@@ -307,6 +321,90 @@ document.addEventListener("DOMContentLoaded", function() {
         </div>
       `;
     }
+  }
+
+  // NUEVO: Funciones para sistema de invitaciones
+  function updateOnlinePlayersList(players) {
+    console.log('Actualizando lista de jugadores online:', players); // DEBUG
+    onlinePlayers = players || [];
+    
+    if (!onlinePlayers || onlinePlayers.length === 0) {
+      onlinePlayersList.innerHTML = '<li class="online-players-empty">No hay otros jugadores en línea</li>';
+      return;
+    }
+    
+    onlinePlayersList.innerHTML = '';
+    
+    onlinePlayers.forEach(player => {
+      const listItem = document.createElement('li');
+      listItem.className = 'online-player-item';
+      
+      const playerInfo = document.createElement('div');
+      playerInfo.className = 'online-player-info';
+      
+      const playerName = document.createElement('div');
+      playerName.className = 'online-player-name';
+      playerName.textContent = player.name;
+      
+      const playerStatus = document.createElement('div');
+      playerStatus.className = `online-player-status ${player.isInGame ? 'in-game' : 'available'}`;
+      playerStatus.textContent = player.isInGame ? 'En partida' : 'Disponible';
+      
+      playerInfo.appendChild(playerName);
+      playerInfo.appendChild(playerStatus);
+      listItem.appendChild(playerInfo);
+      
+      // Mostrar botón invitar solo si: estamos en sala + juego no activo + jugador disponible
+      const showInviteButton = currentRoomId && !gameState.playing && player.canInvite;
+      
+      if (showInviteButton) {
+        const inviteButton = document.createElement('button');
+        inviteButton.className = 'invite-button';
+        inviteButton.textContent = '📩 Invitar';
+        inviteButton.disabled = !player.canInvite;
+        
+        inviteButton.addEventListener('click', () => {
+          invitePlayer(player.socketId, player.name);
+        });
+        
+        listItem.appendChild(inviteButton);
+      }
+      
+      onlinePlayersList.appendChild(listItem);
+    });
+  }
+
+  function invitePlayer(targetSocketId, targetPlayerName) {
+    if (!currentRoomId || gameState.playing) {
+      addCanvasNotification('No puedes invitar en este momento', 'error');
+      return;
+    }
+    
+    socket.emit('invitePlayer', { targetSocketId });
+    addCanvasNotification(`Invitación enviada a ${targetPlayerName}`, 'info');
+  }
+
+  function handleInvitationReceived(invitationData) {
+    const { fromPlayer, roomId } = invitationData;
+    
+    // Mostrar notificación especial de invitación
+    addCanvasNotification(`${fromPlayer} te ha invitado a la sala ${roomId}`, 'invitation', 5000);
+    
+    // Copiar automáticamente el código de sala al input
+    if (roomIdInput) {
+      roomIdInput.value = roomId;
+      roomIdInput.focus();
+      roomIdInput.select();
+    }
+    
+    // Agregar a lista de invitaciones pendientes
+    pendingInvitations.push({
+      from: fromPlayer,
+      roomId: roomId,
+      timestamp: Date.now()
+    });
+    
+    console.log(`Invitation received from ${fromPlayer} to room ${roomId}`);
   }
 
   function lerp(start, end, factor) {
@@ -765,6 +863,9 @@ document.addEventListener("DOMContentLoaded", function() {
     showGameInterface();
     updateConfigPanel();
     addCanvasNotification(`¡Sala ${data.roomId} creada!`, 'success');
+    
+    // NUEVO: Actualizar lista de jugadores (ahora con botones de invitar)
+    socket.emit('getOnlinePlayers');
   });
 
   socket.on('roomJoined', (data) => {
@@ -782,6 +883,9 @@ document.addEventListener("DOMContentLoaded", function() {
     showGameInterface();
     updateConfigPanel();
     addCanvasNotification(`¡Te uniste a la sala ${data.roomId}!`, 'success');
+    
+    // NUEVO: Actualizar lista de jugadores (ahora con botones de invitar)
+    socket.emit('getOnlinePlayers');
   });
 
   socket.on('roomsList', (rooms) => {
@@ -837,6 +941,9 @@ document.addEventListener("DOMContentLoaded", function() {
     } else {
       hideElement(waitingSpan);
     }
+    
+    // NUEVO: Actualizar lista de jugadores online cuando cambie el estado
+    socket.emit('getOnlinePlayers');
   });
 
   socket.on('configUpdated', (newConfig) => {
@@ -877,6 +984,9 @@ document.addEventListener("DOMContentLoaded", function() {
     
     addCanvasNotification(`Ronda ${data.gameState.round} - ¡Batalla por tiempo!`, 'success');
     console.log(`¡Ronda ${data.gameState.round} iniciada!`);
+    
+    // NUEVO: Actualizar lista sin botones de invitar (juego activo)
+    socket.emit('getOnlinePlayers');
     
     gameLoop();
   });
@@ -965,16 +1075,19 @@ document.addEventListener("DOMContentLoaded", function() {
     updatePlayerList(snakes);
     drawInfoCanvas();
     
-    if (data.nextRound) {
+    /*if (data.nextRound) {
       setTimeout(() => {
         addCanvasNotification(`Preparando ronda ${data.round + 1}...`, 'info');
       }, 2000);
-    }
+    }*/
     
     if (isHost && data.nextRound) {
       showElement(startGameButton);
       updateConfigPanel();
     }
+    
+    // NUEVO: Actualizar lista con botones (ronda terminada, juego pausado)
+    socket.emit('getOnlinePlayers');
   });
 
   socket.on('gameEnd', (data) => {
@@ -994,6 +1107,9 @@ document.addEventListener("DOMContentLoaded", function() {
         updateConfigPanel();
       }
     }
+    
+    // NUEVO: Actualizar lista con botones (juego terminado)
+    socket.emit('getOnlinePlayers');
   });
 
   socket.on('playerStats', (data) => {
@@ -1014,8 +1130,16 @@ document.addEventListener("DOMContentLoaded", function() {
     showElement(document.getElementById('profileView'));
     showElement(document.getElementById('roomSelection'));
     hideElement(document.getElementById('gameInterface'));
+    
+    // NUEVO: Mostrar panel de jugadores en línea
+    showElement(onlinePlayersPanel);
     updateLogoutButtonVisibility();
     addCanvasNotification(`¡Bienvenido, ${profile.stats.name}!`, 'success');
+    
+    // NUEVO: Solicitar lista de jugadores después de un breve delay
+    setTimeout(() => {
+      socket.emit('getOnlinePlayers');
+    }, 500);
   });
 
   socket.on('profileError', (message) => {
@@ -1026,6 +1150,7 @@ document.addEventListener("DOMContentLoaded", function() {
     showElement(document.getElementById('loginView'));
     hideElement(document.getElementById('profileView'));
     hideElement(document.getElementById('roomSelection'));
+    hideElement(onlinePlayersPanel);
     updateLogoutButtonVisibility();
   });
 
@@ -1045,6 +1170,23 @@ document.addEventListener("DOMContentLoaded", function() {
     roomConfig = {};
     showRoomSelection();
     addCanvasNotification('Regresaste al menú', 'info');
+    
+    // NUEVO: Actualizar lista sin botones (fuera de sala)
+    socket.emit('getOnlinePlayers');
+  });
+
+  // NUEVO: Eventos para sistema de invitaciones
+  socket.on('onlinePlayersList', (players) => {
+    updateOnlinePlayersList(players);
+	console.log(players);
+  });
+
+  socket.on('invitationReceived', (invitationData) => {
+    handleInvitationReceived(invitationData);
+  });
+
+  socket.on('invitationSent', (data) => {
+    addCanvasNotification(`Invitación enviada a ${data.toPlayer}`, 'success');
   });
 
   function updateConfigPanel() {
@@ -1437,7 +1579,7 @@ document.addEventListener("DOMContentLoaded", function() {
   function handleResize() {
     const container = canvas.parentElement;
     const maxWidth = container.clientWidth; //- 40;
-    const maxHeight = window.innerHeight - 300;
+    const maxHeight = window.innerHeight - 20;
     
     if (canvas.width > maxWidth || canvas.height > maxHeight) {
       const scale = Math.min(maxWidth / canvas.width, maxHeight / canvas.height);
@@ -1470,6 +1612,7 @@ document.addEventListener("DOMContentLoaded", function() {
     hideElement(document.getElementById('profileView'));
     hideElement(document.getElementById('roomSelection'));
     hideElement(document.getElementById('gameInterface'));
+    hideElement(onlinePlayersPanel);
     updateLogoutButtonVisibility();
     addCanvasNotification('Sesión cerrada.', 'info');
   }
