@@ -204,7 +204,7 @@ function validateRoomConfig(config) {
     canvasHeight: 700, // FIJO: siempre 1200x700
     segmentSize: Math.max(5, Math.min(25, parseInt(config.segmentSize) || 20)),
     attacksEnabled: true, // FIJO: siempre activado
-    roundTime: 14, // FIJO
+    roundTime: 60, // FIJO
     // Configuración de consumibles (mantenida)
     consumables: {
       immunity: {
