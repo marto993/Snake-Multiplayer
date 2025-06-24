@@ -378,7 +378,7 @@ document.addEventListener("DOMContentLoaded", function() {
     const centerX = consumable.x + segmentSize / 2;
     const centerY = consumable.y + segmentSize / 2;
     const pulse = Math.sin(Date.now() * 0.008) * 0.15 + 1;
-    const size = (segmentSize * 0.35) * pulse;
+    const size = (segmentSize * 0.45) * pulse;
     
     switch(consumable.type) {
       case 'immunity':
