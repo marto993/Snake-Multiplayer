@@ -26,7 +26,6 @@ document.addEventListener("DOMContentLoaded", function() {
   const roomsList = document.getElementById('roomsList');
   const waitingSpan = document.getElementById('waitingSpan');
   const playerList = document.getElementById('playerList');
-  const gameStatus = document.getElementById('gameStatus');
   const roomInfo = document.getElementById('roomInfo');
 
   const configPanel = document.getElementById('configPanel');
@@ -42,6 +41,167 @@ document.addEventListener("DOMContentLoaded", function() {
   const immunityEnabledInput = document.getElementById('immunityEnabledInput');
   const immunityIntervalInput = document.getElementById('immunityIntervalInput');
   const immunityDurationInput = document.getElementById('immunityDurationInput');
+
+  // Sistema de notificaciones en canvas
+  let canvasNotifications = [];
+  
+  function CanvasNotification(message, type = 'info', duration = 3000) {
+    this.message = message;
+    this.type = type;
+    this.duration = duration;
+    this.createdAt = Date.now();
+    this.alpha = 0;
+    this.y = -50; // Empieza arriba, fuera del canvas
+    this.targetY = 0;
+    this.animationPhase = 'entering'; // 'entering', 'showing', 'exiting'
+    this.id = Math.random().toString(36).substring(2, 9);
+    
+    // Calcular posición Y basada en notificaciones existentes
+    const existingNotifications = canvasNotifications.filter(n => n.animationPhase !== 'exiting');
+    this.targetY = existingNotifications.length * 45 + 20;
+    
+    // Configurar colores según tipo
+    switch(type) {
+      case 'success':
+        this.backgroundColor = 'rgba(0, 255, 65, 0.9)';
+        this.textColor = '#000000';
+        this.borderColor = '#00ff41';
+        break;
+      case 'error':
+        this.backgroundColor = 'rgba(255, 64, 64, 0.9)';
+        this.textColor = '#ffffff';
+        this.borderColor = '#ff4040';
+        break;
+      case 'info':
+      default:
+        this.backgroundColor = 'rgba(0, 255, 255, 0.9)';
+        this.textColor = '#000000';
+        this.borderColor = '#00ffff';
+        break;
+    }
+  }
+  
+  CanvasNotification.prototype.update = function() {
+    const now = Date.now();
+    const elapsed = now - this.createdAt;
+    
+    if (this.animationPhase === 'entering') {
+      // Animación de entrada (primeros 300ms)
+      const progress = Math.min(elapsed / 300, 1);
+      this.alpha = progress;
+      this.y = this.lerp(-50, this.targetY, this.easeOut(progress));
+      
+      if (progress >= 1) {
+        this.animationPhase = 'showing';
+      }
+    } else if (this.animationPhase === 'showing') {
+      // Mostrando (duración - 600ms para entrada y salida)
+      this.alpha = 1;
+      this.y = this.targetY;
+      
+      if (elapsed >= this.duration - 300) {
+        this.animationPhase = 'exiting';
+      }
+    } else if (this.animationPhase === 'exiting') {
+      // Animación de salida (últimos 300ms)
+      const exitProgress = (elapsed - (this.duration - 300)) / 300;
+      this.alpha = 1 - exitProgress;
+      this.y = this.lerp(this.targetY, -50, this.easeIn(exitProgress));
+      
+      if (exitProgress >= 1) {
+        return false; // Marcar para eliminación
+      }
+    }
+    
+    return true; // Continuar mostrando
+  };
+  
+  CanvasNotification.prototype.lerp = function(start, end, factor) {
+    return start + (end - start) * factor;
+  };
+  
+  CanvasNotification.prototype.easeOut = function(t) {
+    return 1 - Math.pow(1 - t, 3);
+  };
+  
+  CanvasNotification.prototype.easeIn = function(t) {
+    return t * t * t;
+  };
+  
+  CanvasNotification.prototype.draw = function(context) {
+    if (this.alpha <= 0) return;
+    
+    context.save();
+    context.globalAlpha = this.alpha;
+    
+    // Configurar fuente
+    context.font = 'bold 16px Share Tech Mono, monospace';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    
+    // Medir texto para dimensiones del toast
+    const textWidth = context.measureText(this.message).width;
+    const padding = 20;
+    const toastWidth = textWidth + (padding * 2);
+    const toastHeight = 35;
+    const x = (context.canvas.width - toastWidth) / 2;
+    
+    // Dibujar fondo del toast
+    context.fillStyle = this.backgroundColor;
+    this.roundRect(context, x, this.y, toastWidth, toastHeight, 8);
+    context.fill();
+    
+    // Dibujar borde
+    context.strokeStyle = this.borderColor;
+    context.lineWidth = 2;
+    context.stroke();
+    
+    // Dibujar texto
+    context.fillStyle = this.textColor;
+    context.fillText(this.message, context.canvas.width / 2, this.y + toastHeight / 2);
+    
+    context.restore();
+  };
+  
+  CanvasNotification.prototype.roundRect = function(ctx, x, y, width, height, radius) {
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + width - radius, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+    ctx.lineTo(x + width, y + height - radius);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+    ctx.lineTo(x + radius, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+    ctx.closePath();
+  };
+  
+  function addCanvasNotification(message, type = 'info', duration = 3000) {
+    if (!message || message.trim() === '') return;
+    
+    // Marcar todas las notificaciones existentes para salida inmediata
+    canvasNotifications.forEach(notif => {
+      if (notif.animationPhase !== 'exiting') {
+        notif.animationPhase = 'exiting';
+        notif.createdAt = Date.now() - (notif.duration - 300); // Forzar inicio de salida
+      }
+    });
+    
+    const notification = new CanvasNotification(message.trim(), type, duration);
+    notification.targetY = 20; // Siempre en la primera posición
+    canvasNotifications.push(notification);
+  }
+  
+  function updateCanvasNotifications() {
+    canvasNotifications = canvasNotifications.filter(notification => notification.update());
+  }
+  
+  function drawCanvasNotifications(context) {
+    canvasNotifications.forEach(notification => {
+      notification.draw(context);
+    });
+  }
 
   // Persistence variables
   let playerProfile = null;
@@ -109,7 +269,7 @@ document.addEventListener("DOMContentLoaded", function() {
       playerProfile = savedProfile;
       currentPlayerId = savedProfile.playerId;
       
-      showStatus('Verificando sesión...', 'info');
+      addCanvasNotification('Verificando sesión...', 'info');
       socket.emit('getOrCreateProfile', { 
         username: savedProfile.stats.name, 
         playerId: savedProfile.playerId 
@@ -119,7 +279,7 @@ document.addEventListener("DOMContentLoaded", function() {
       hideElement(document.getElementById('profileView'));
       hideElement(document.getElementById('roomSelection'));
       updateLogoutButtonVisibility();
-      showStatus('¡Conectado! Ingresa tu nombre para comenzar.', 'info');
+      addCanvasNotification('¡Conectado! Ingresa tu nombre para comenzar.', 'info');
     }
   }
 
@@ -389,7 +549,7 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   }
 
-  // REDISEÑADO: Canvas de información con layout de 2 columnas
+  // Canvas de información con layout de 2 columnas
   function drawInfoCanvas() {
     if (!infoCanvas) return;
     
@@ -415,12 +575,6 @@ document.addEventListener("DOMContentLoaded", function() {
     const timeColor = roundTimeLeft <= 10 ? '#ff4040' : roundTimeLeft <= 20 ? '#ffff00' : '#00ff41';
     infoCtx.fillStyle = timeColor;
     infoCtx.fillText(`${roundTimeLeft}s`, 20, 75);
-    
-    // Texto "TIEMPO:" más pequeño al lado
-    /*infoCtx.font = 'bold 12px Share Tech Mono, monospace';
-    infoCtx.fillStyle = '#888';
-    const timeWidth = infoCtx.measureText(`${roundTimeLeft}s`).width;
-    infoCtx.fillText('TIEMPO', 20 + timeWidth + 10, 50);*/
     
     // === LÍNEA DIVISORIA VERTICAL ===
     infoCtx.strokeStyle = '#333';
@@ -459,9 +613,6 @@ document.addEventListener("DOMContentLoaded", function() {
         
         // Usar el color de la snake del jugador
         let textColor = snake.color;
-        /*if (isCurrentPlayer) {
-          textColor = '#ffff00';
-        }*/
         
         // Nombre del jugador con ranking
         infoCtx.font = 'bold 18px Share Tech Mono, monospace';
@@ -482,16 +633,12 @@ document.addEventListener("DOMContentLoaded", function() {
           const roundWins = (roomScores && roomScores[snake.id]) ? roomScores[snake.id].roundWins : 0;
           infoCtx.fillText(`${totalScore} segs (${roundWins}V)`, x, y + 16);
         }
-        
-        // Indicador de inmunidad al lado del nombre
-        /*if (snake.activeConsumable && snake.activeConsumable.type === 'immunity' && Date.now() < snake.activeConsumable.endTime) {
-          infoCtx.fillStyle = '#40a0ff';
-          infoCtx.font = 'bold 12px Share Tech Mono, monospace';
-          const nameWidth = infoCtx.measureText(`#${index + 1} ${playerName}`).width;
-          infoCtx.fillText('🛡️', x + nameWidth + 5, y);
-        }*/
       });
     }
+    
+    // Dibujar notificaciones en el canvas de información
+    updateCanvasNotifications();
+    drawCanvasNotifications(infoCtx);
   }
 
   document.addEventListener('keydown', handleKeyPress);
@@ -509,7 +656,7 @@ document.addEventListener("DOMContentLoaded", function() {
 		  if (key === 87) keyToSend = 38; // W -> ↑
 		  else if (key === 65) keyToSend = 37; // A -> ←
 		  else if (key === 83) keyToSend = 40; // S -> ↓
-		  else if (key === 68) keyToSend = 39; // D -> →
+		  else if (key === 68) keyToSend = 39; // D → →
 		  
 		  socket.emit('newMove', { key: keyToSend });
 		}
@@ -565,6 +712,9 @@ document.addEventListener("DOMContentLoaded", function() {
         gameLoop();
       }
       
+      // Actualizar canvas de info siempre (para notificaciones)
+      drawInfoCanvas();
+      
       if (isGameRunning) {
         renderLoop = requestAnimationFrame(render);
       }
@@ -593,11 +743,11 @@ document.addEventListener("DOMContentLoaded", function() {
   socket.on('disconnect', () => {
     isConnected = false;
     stopRenderLoop();
-    showStatus('Desconectado del servidor', 'error');
+    addCanvasNotification('Desconectado del servidor', 'error');
   });
 
   socket.on('gameError', (message) => {
-    showStatus(message, 'error');
+    addCanvasNotification(message, 'error');
   });
 
   socket.on('roomCreated', (data) => {
@@ -614,7 +764,7 @@ document.addEventListener("DOMContentLoaded", function() {
     
     showGameInterface();
     updateConfigPanel();
-    showStatus(`¡Sala ${data.roomId} creada!`, 'success');
+    addCanvasNotification(`¡Sala ${data.roomId} creada!`, 'success');
   });
 
   socket.on('roomJoined', (data) => {
@@ -631,7 +781,7 @@ document.addEventListener("DOMContentLoaded", function() {
     
     showGameInterface();
     updateConfigPanel();
-    showStatus(`¡Te uniste a la sala ${data.roomId}!`, 'success');
+    addCanvasNotification(`¡Te uniste a la sala ${data.roomId}!`, 'success');
   });
 
   socket.on('roomsList', (rooms) => {
@@ -641,7 +791,7 @@ document.addEventListener("DOMContentLoaded", function() {
   socket.on('newHost', (data) => {
     if (data.hostId === socket.id) {
       isHost = true;
-      showStatus('¡Ahora eres el anfitrión!', 'info');
+      addCanvasNotification('¡Ahora eres el anfitrión!', 'info');
     }
     updateHostControls();
     updateConfigPanel();
@@ -683,7 +833,7 @@ document.addEventListener("DOMContentLoaded", function() {
     
     if (players.length < config.minPlayers) {
       showElement(waitingSpan);
-      showStatus(`Necesitas ${config.minPlayers - players.length} jugadores más`, 'info');
+      addCanvasNotification(`Necesitas ${config.minPlayers - players.length} jugadores más`, 'info');
     } else {
       hideElement(waitingSpan);
     }
@@ -696,7 +846,7 @@ document.addEventListener("DOMContentLoaded", function() {
     snakes.forEach(snake => {
       snake.updateInterpolationSpeed(newConfig.gameSpeed);
     });
-    showStatus('¡Configuración actualizada!', 'success');
+    addCanvasNotification('¡Configuración actualizada!', 'success');
   });
 
   socket.on('updateScores', (scores) => {
@@ -725,7 +875,7 @@ document.addEventListener("DOMContentLoaded", function() {
     hideElement(startGameButton);
     hideElement(configPanel);
     
-    showStatus(`Ronda ${data.gameState.round} - ¡Batalla por tiempo!`, 'success');
+    addCanvasNotification(`Ronda ${data.gameState.round} - ¡Batalla por tiempo!`, 'success');
     console.log(`¡Ronda ${data.gameState.round} iniciada!`);
     
     gameLoop();
@@ -733,7 +883,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
   socket.on('countdown', (count, state) => {
     gameState = state;
-    showStatus(`Ronda ${state.round} inicia en ${count}...`, 'info');
+    addCanvasNotification(`Ronda ${state.round} inicia en ${count}...`, 'info');
     drawInfoCanvas();
   });
 
@@ -793,7 +943,7 @@ document.addEventListener("DOMContentLoaded", function() {
       data.consumableEvents.forEach(event => {
         const style = consumableStyles[event.consumableType];
         if (style) {
-          showStatus(`${event.playerName} obtuvo ${style.name}!`, 'success');
+          addCanvasNotification(`${event.playerName} obtuvo ${style.name}!`, 'success');
         }
       });
     }
@@ -807,9 +957,9 @@ document.addEventListener("DOMContentLoaded", function() {
     stopRenderLoop();
     roomScores = data.scores;
     
-    showStatus(`¡Tiempo agotado! Ronda ${data.round} terminada`, 'info');
+    addCanvasNotification(`¡Tiempo agotado! Ronda ${data.round} terminada`, 'info');
     if (data.winner) {
-      showStatus(`Ganador de la ronda: ${data.winner.name} (${data.winner.score} segmentos)`, 'success');
+      addCanvasNotification(`Ganador de la ronda: ${data.winner.name} (${data.winner.score} segmentos)`, 'success');
     }
     
     updatePlayerList(snakes);
@@ -817,7 +967,7 @@ document.addEventListener("DOMContentLoaded", function() {
     
     if (data.nextRound) {
       setTimeout(() => {
-        showStatus(`Preparando ronda ${data.round + 1}...`, 'info');
+        addCanvasNotification(`Preparando ronda ${data.round + 1}...`, 'info');
       }, 2000);
     }
     
@@ -829,7 +979,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
   socket.on('gameEnd', (data) => {
     stopRenderLoop();
-    showStatus(`¡Juego Terminado! Campeón: ${data.winner.name}`, 'success');
+    addCanvasNotification(`¡Juego Terminado! Campeón: ${data.winner.name}`, 'success');
     
     if (currentPlayerId) {
       socket.emit('getPlayerStats', currentPlayerId);
@@ -865,11 +1015,11 @@ document.addEventListener("DOMContentLoaded", function() {
     showElement(document.getElementById('roomSelection'));
     hideElement(document.getElementById('gameInterface'));
     updateLogoutButtonVisibility();
-    showStatus(`¡Bienvenido, ${profile.stats.name}!`, 'success');
+    addCanvasNotification(`¡Bienvenido, ${profile.stats.name}!`, 'success');
   });
 
   socket.on('profileError', (message) => {
-    showStatus(message, 'error');
+    addCanvasNotification(message, 'error');
     
     clearPlayerProfile();
     usernameInput.value = '';
@@ -894,7 +1044,7 @@ document.addEventListener("DOMContentLoaded", function() {
     isHost = false;
     roomConfig = {};
     showRoomSelection();
-    showStatus('Regresaste al menú', 'info');
+    addCanvasNotification('Regresaste al menú', 'info');
   });
 
   function updateConfigPanel() {
@@ -947,7 +1097,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
   function saveConfiguration() {
     if (!isHost) {
-      showStatus('Solo el anfitrión puede modificar la configuración', 'error');
+      addCanvasNotification('Solo el anfitrión puede modificar la configuración', 'error');
       return;
     }
 
@@ -966,7 +1116,7 @@ document.addEventListener("DOMContentLoaded", function() {
     };
 
     if (newConfig.minPlayers > newConfig.maxPlayers) {
-      showStatus('Los jugadores mínimos no pueden exceder los máximos', 'error');
+      addCanvasNotification('Los jugadores mínimos no pueden exceder los máximos', 'error');
       return;
     }
 
@@ -1276,17 +1426,6 @@ document.addEventListener("DOMContentLoaded", function() {
     gameOverScreen.classList.add('hidden');
   }
 
-  function showStatus(message, type = 'info') {
-    if (gameStatus) {
-      gameStatus.textContent = message;
-      gameStatus.className = `status ${type}`;
-      setTimeout(() => {
-        gameStatus.textContent = '';
-        gameStatus.className = 'status';
-      }, 3000);
-    }
-  }
-
   function showElement(element) {
     if (element) element.classList.remove('hidden');
   }
@@ -1297,7 +1436,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
   function handleResize() {
     const container = canvas.parentElement;
-    const maxWidth = container.clientWidth - 40;
+    const maxWidth = container.clientWidth; //- 40;
     const maxHeight = window.innerHeight - 300;
     
     if (canvas.width > maxWidth || canvas.height > maxHeight) {
@@ -1332,7 +1471,7 @@ document.addEventListener("DOMContentLoaded", function() {
     hideElement(document.getElementById('roomSelection'));
     hideElement(document.getElementById('gameInterface'));
     updateLogoutButtonVisibility();
-    showStatus('Sesión cerrada.', 'info');
+    addCanvasNotification('Sesión cerrada.', 'info');
   }
 
   function showGameInterface() {
@@ -1404,7 +1543,7 @@ document.addEventListener("DOMContentLoaded", function() {
   window.joinSpecificRoom = function(roomId) {
     const username = usernameInput.value.trim();
     if (!username || username.length < 2 || username.length > 20) {
-      showStatus('Por favor ingresa un nombre válido (2-20 caracteres)', 'error');
+      addCanvasNotification('Por favor ingresa un nombre válido (2-20 caracteres)', 'error');
       usernameInput.focus();
       return;
     }
@@ -1467,10 +1606,10 @@ document.addEventListener("DOMContentLoaded", function() {
         currentPlayerId = null;
       }
       
-      showStatus('Cargando perfil...', 'info');
+      addCanvasNotification('Cargando perfil...', 'info');
       socket.emit('getOrCreateProfile', dataToSend);
     } else {
-      showStatus('El nombre debe tener 2-20 caracteres', 'error');
+      addCanvasNotification('El nombre debe tener 2-20 caracteres', 'error');
       usernameInput.focus();
     }
   });
@@ -1487,7 +1626,7 @@ document.addEventListener("DOMContentLoaded", function() {
       
       socket.emit('createRoom', dataToSend);
     } else {
-      showStatus('El nombre debe tener 2-20 caracteres', 'error');
+      addCanvasNotification('El nombre debe tener 2-20 caracteres', 'error');
       usernameInput.focus();
     }
   });
@@ -1497,13 +1636,13 @@ document.addEventListener("DOMContentLoaded", function() {
     const roomId = roomIdInput.value.trim().toUpperCase();
     
     if (!username || username.length < 2) {
-      showStatus('El nombre debe tener 2-20 caracteres', 'error');
+      addCanvasNotification('El nombre debe tener 2-20 caracteres', 'error');
       usernameInput.focus();
       return;
     }
     
     if (!roomId || roomId.length !== 6) {
-      showStatus('Por favor ingresa un ID de sala válido', 'error');
+      addCanvasNotification('Por favor ingresa un ID de sala válido', 'error');
       roomIdInput.focus();
       return;
     }
@@ -1568,6 +1707,11 @@ document.addEventListener("DOMContentLoaded", function() {
     e.target.value = e.target.value.toUpperCase();
   });
 
+  // Inicializar interfaz y render loop para notificaciones
   initializeUserInterface();
   handleResize();
+  
+  // Iniciar loop de renderizado para las notificaciones (siempre activo)
+  isGameRunning = true;
+  startRenderLoop();
 });
