@@ -564,28 +564,39 @@ function checkConsumableConsumption(room, player) {
 }
 
 function createProjectile(room, player) {
-  if (!room.config.attacksEnabled || player.segments.length < 3) {
-    return false;
-  }
-  
-  const existingProjectile = room.projectiles.find(p => p.playerId === player.id);
-  if (existingProjectile) {
+  // Cambio 1: Reducir mínimo requerido de 3 a 2 segmentos
+  if (!room.config.attacksEnabled || player.segments.length < 2) {
     return false;
   }
   
   const head = player.segments[0];
   const { segmentSize } = room.config;
   
+  // Calcular la posición donde aparecería el nuevo proyectil
+  const newProjectileX = head.x + (player.direction.x * segmentSize);
+  const newProjectileY = head.y + (player.direction.y * segmentSize);
+  
+  // Cambio 2: Nueva lógica - verificar si hay un proyectil en la posición frontal
+  const frontProjectile = room.projectiles.find(p => 
+    p.playerId === player.id && 
+    p.x === newProjectileX && 
+    p.y === newProjectileY
+  );
+  
+  if (frontProjectile) {
+    return false; // No puede lanzar si hay un proyectil suyo directamente enfrente
+  }
+  
   const projectile = {
     id: Math.random().toString(36).substring(2, 9),
     playerId: player.id,
-    x: head.x + (player.direction.x * segmentSize),
-    y: head.y + (player.direction.y * segmentSize),
+    x: newProjectileX,
+    y: newProjectileY,
     direction: { ...player.direction },
     color: player.color
   };
   
-  player.segments.pop();
+  // Cambio 3: Reducir pérdida de segmentos de 2 a 1
   if (player.segments.length > 1) {
     player.segments.pop();
   }

@@ -267,7 +267,7 @@ class Snake {
     }
     
     canAttack() {
-      return this.segments.length >= 3 && !this.gameover;
+      return this.segments.length >= 2 && !this.gameover;
     }
     
     attack() {
@@ -284,8 +284,6 @@ class Snake {
         color: this.color
       };
       
-      // Remove two segments
-      this.segments.pop();
       if (this.segments.length > 1) {
         this.segments.pop();
       }
