@@ -127,9 +127,9 @@ snake-multiplayer/
 ├── package.json             # Dependencias y scripts
 ├── fly.toml                 # Configuración Fly.io
 ├── public/
-│   ├── index.html           # Interfaz completa
-│   ├── SnakeGame.js         # Cliente principal
-│   └── snakeClass.js        # Clase Snake
+�?  ├── index.html           # Interfaz completa
+�?  ├── SnakeGame.js         # Cliente principal
+�?  └── snakeClass.js        # Clase Snake
 └── game_stats.db           # Base de datos (auto-generada)
 ```
 
@@ -175,7 +175,7 @@ MIT License - Uso libre para proyectos personales y comerciales.
 
 <div align="center">
 
-⭐ Si te resulta útil, considera darle una estrella
+�?Si te resulta útil, considera darle una estrella
 
 🐛 Issues y PRs son bienvenidos
 
@@ -184,6 +184,6 @@ MIT License - Uso libre para proyectos personales y comerciales.
 **Desarrollado por [El Marto](https://github.com/marto993)**
 
 [![GitHub](https://img.shields.io/badge/GitHub-marto993-100000?style=flat-square&logo=github)](https://github.com/marto993)
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-Martin%20Di%20Geronimo-0077B5?style=flat-square&logo=linkedin)](https://www.linkedin.com/in/martin-di-geronimo-29a06b17b)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Contactar-0077B5?style=flat-square&logo=linkedin)](https://www.linkedin.com/in/martin-di-geronimo-29a06b17b)
 
 </div>
