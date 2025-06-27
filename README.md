@@ -29,10 +29,10 @@ Juego Snake multijugador en tiempo real con salas privadas, sistema de combate y
 - Base de datos SQLite embebida
 
 ### Interfaz
-- Diseño retro-cyberpunk
+- Diseño retro-cyberpunk responsivo
 - Notificaciones integradas en canvas
 - Panel de configuración para anfitriones
-- Lista de jugadores en línea con posibilidad de enviar invitación
+- Lista de jugadores en línea
 
 ## Tecnologías
 
@@ -127,9 +127,9 @@ snake-multiplayer/
 ├── package.json             # Dependencias y scripts
 ├── fly.toml                 # Configuración Fly.io
 ├── public/
-�?  ├── index.html           # Interfaz completa
-�?  ├── SnakeGame.js         # Cliente principal
-�?  └── snakeClass.js        # Clase Snake
+│   ├── index.html           # Interfaz completa
+│   ├── SnakeGame.js         # Cliente principal
+│   └── snakeClass.js        # Clase Snake
 └── game_stats.db           # Base de datos (auto-generada)
 ```
 
@@ -175,7 +175,7 @@ MIT License - Uso libre para proyectos personales y comerciales.
 
 <div align="center">
 
-�?Si te resulta útil, considera darle una estrella
+⭐ Si te resulta útil, considera darle una estrella
 
 🐛 Issues y PRs son bienvenidos
 
