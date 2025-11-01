@@ -67,25 +67,25 @@ document.addEventListener("DOMContentLoaded", function() {
     // Configurar colores según tipo
     switch(type) {
       case 'success':
-        this.backgroundColor = 'rgba(0, 255, 65, 0.9)';
-        this.textColor = '#000000';
-        this.borderColor = '#00ff41';
+        this.backgroundColor = 'rgba(63, 185, 80, 0.9)';
+        this.textColor = '#ffffff';
+        this.borderColor = '#3fb950';
         break;
       case 'error':
-        this.backgroundColor = 'rgba(255, 64, 64, 0.9)';
+        this.backgroundColor = 'rgba(248, 81, 73, 0.9)';
         this.textColor = '#ffffff';
-        this.borderColor = '#ff4040';
+        this.borderColor = '#f85149';
         break;
       case 'invitation':
-        this.backgroundColor = 'rgba(0, 255, 255, 0.9)';
-        this.textColor = '#000000';
-        this.borderColor = '#00ffff';
+        this.backgroundColor = 'rgba(88, 166, 255, 0.9)';
+        this.textColor = '#ffffff';
+        this.borderColor = '#58a6ff';
         break;
       case 'info':
       default:
-        this.backgroundColor = 'rgba(0, 255, 255, 0.9)';
-        this.textColor = '#000000';
-        this.borderColor = '#00ffff';
+        this.backgroundColor = 'rgba(88, 166, 255, 0.9)';
+        this.textColor = '#ffffff';
+        this.borderColor = '#58a6ff';
         break;
     }
   }
@@ -144,7 +144,7 @@ document.addEventListener("DOMContentLoaded", function() {
     context.globalAlpha = this.alpha;
     
     // Configurar fuente
-    context.font = 'bold 16px Share Tech Mono, monospace';
+    context.font = '400 16px Share Tech Mono, monospace';
     context.textAlign = 'center';
     context.textBaseline = 'middle';
     
@@ -226,6 +226,7 @@ document.addEventListener("DOMContentLoaded", function() {
   let clientProjectiles = [];
   let isConnected = false;
   let isHost = false;
+  let isSpectating = false;
   let currentRoomId = null;
   let roomConfig = {};
   let roomScores = {};
@@ -439,12 +440,12 @@ document.addEventListener("DOMContentLoaded", function() {
   };
 
   const retroColors = {
-    snake: ['#00ff41', '#ff0080', '#00ffff', '#ffff00', '#ff4040', '#8040ff', '#40ff80', '#ff8040'],
-    background: '#000000',
-    grid: '#001100',
-    food: '#ff0080',
-    foodGlow: '#ff40a0',
-    projectile: '#ffff00'
+    snake: ['#58a6ff', '#a371f7', '#7dd3fc', '#fbbf24', '#f85149', '#c084fc', '#3fb950', '#f97316'],
+    background: '#010409',
+    grid: '#161b22',
+    food: '#a371f7',
+    foodGlow: '#c084fc',
+    projectile: '#fbbf24'
   };
 
   function drawRetroRect(ctx, x, y, width, height, color, glowColor = null) {
@@ -652,7 +653,7 @@ document.addEventListener("DOMContentLoaded", function() {
     if (!infoCanvas) return;
     
     // Limpiar canvas
-    infoCtx.fillStyle = '#000000';
+    infoCtx.fillStyle = '#010409';
     infoCtx.fillRect(0, 0, infoCanvas.width, infoCanvas.height);
     
     // Definir las dos secciones
@@ -664,18 +665,18 @@ document.addEventListener("DOMContentLoaded", function() {
     infoCtx.textAlign = 'left';
     
     // Ronda (más pequeña, arriba)
-    infoCtx.font = 'bold 22px Share Tech Mono, monospace';
-    infoCtx.fillStyle = '#00ffff';
+    infoCtx.font = '400 22px Share Tech Mono, monospace';
+    infoCtx.fillStyle = '#c9d1d9';
     infoCtx.fillText(`RONDA ${gameState.round}/3`, 20, 32);
     
     // Tiempo (más grande, destacado, abajo)
-    infoCtx.font = 'bold 28px Share Tech Mono, monospace';
-    const timeColor = roundTimeLeft <= 10 ? '#ff4040' : roundTimeLeft <= 20 ? '#ffff00' : '#00ff41';
+    infoCtx.font = '400 28px Share Tech Mono, monospace';
+    const timeColor = roundTimeLeft <= 10 ? '#f85149' : roundTimeLeft <= 20 ? '#d29922' : '#58a6ff';
     infoCtx.fillStyle = timeColor;
     infoCtx.fillText(`${roundTimeLeft}s`, 20, 75);
     
     // === LÍNEA DIVISORIA VERTICAL ===
-    infoCtx.strokeStyle = '#333';
+    infoCtx.strokeStyle = '#30363d';
     infoCtx.lineWidth = 1;
     infoCtx.beginPath();
     infoCtx.moveTo(leftSectionWidth, 10);
@@ -710,10 +711,10 @@ document.addEventListener("DOMContentLoaded", function() {
         const isCurrentPlayer = snake.id === socket.id;
         
         // Usar el color de la snake del jugador
-        let textColor = snake.color;
+        let textColor = snake.color || '#58a6ff';
         
         // Nombre del jugador con ranking
-        infoCtx.font = 'bold 18px Share Tech Mono, monospace';
+        infoCtx.font = '400 18px Share Tech Mono, monospace';
         infoCtx.fillStyle = textColor;
         infoCtx.textAlign = 'left';
         
@@ -723,7 +724,7 @@ document.addEventListener("DOMContentLoaded", function() {
         infoCtx.fillText(`#${index + 1} ${playerName}`, x, y);
         
         // Puntajes en línea separada
-        infoCtx.font = 'bold 16px Share Tech Mono, monospace';
+        infoCtx.font = '400 16px Share Tech Mono, monospace';
         if (gameState.playing) {
           infoCtx.fillText(`${snake.score} segs`, x, y + 16);
         } else {
@@ -742,6 +743,9 @@ document.addEventListener("DOMContentLoaded", function() {
   document.addEventListener('keydown', handleKeyPress);
 
 	function handleKeyPress(event) {
+	  // No permitir controles si se está espectando
+	  if (isSpectating) return;
+	  
 	  const key = event.keyCode;
 	  
 	  // Flechas (37-40) o WASD (87,65,83,68)
@@ -769,8 +773,8 @@ document.addEventListener("DOMContentLoaded", function() {
       serverSnake.id,
       serverSnake.name,
       segmentSize,
-      1200,
-      700,
+      600,
+      600,
       serverSnake.segments[0].x,
       serverSnake.segments[0].y,
       serverSnake.direction.x,
@@ -849,6 +853,7 @@ document.addEventListener("DOMContentLoaded", function() {
   });
 
   socket.on('roomCreated', (data) => {
+    isSpectating = false;
     currentRoomId = data.roomId;
     isHost = data.isHost;
     roomConfig = data.config;
@@ -862,6 +867,7 @@ document.addEventListener("DOMContentLoaded", function() {
     
     showGameInterface();
     updateConfigPanel();
+    updateSpectatorIndicator();
     addCanvasNotification(`¡Sala ${data.roomId} creada!`, 'success');
     
     // NUEVO: Actualizar lista de jugadores (ahora con botones de invitar)
@@ -869,6 +875,7 @@ document.addEventListener("DOMContentLoaded", function() {
   });
 
   socket.on('roomJoined', (data) => {
+    isSpectating = false;
     currentRoomId = data.roomId;
     isHost = data.isHost;
     roomConfig = data.config;
@@ -882,6 +889,7 @@ document.addEventListener("DOMContentLoaded", function() {
     
     showGameInterface();
     updateConfigPanel();
+    updateSpectatorIndicator();
     addCanvasNotification(`¡Te uniste a la sala ${data.roomId}!`, 'success');
     
     // NUEVO: Actualizar lista de jugadores (ahora con botones de invitar)
@@ -963,8 +971,9 @@ document.addEventListener("DOMContentLoaded", function() {
   });
 
   socket.on('gameStart', (data) => {
-    canvas.width = 1200;
-    canvas.height = 700;
+    isSpectating = false;
+    canvas.width = 600;
+    canvas.height = 600;
     segmentSize = data.config.segmentSize;
     
     snakes = data.players.map(serverPlayer => createLocalSnake(serverPlayer));
@@ -988,7 +997,50 @@ document.addEventListener("DOMContentLoaded", function() {
     // NUEVO: Actualizar lista sin botones de invitar (juego activo)
     socket.emit('getOnlinePlayers');
     
+    updateSpectatorIndicator();
     gameLoop();
+  });
+
+  socket.on('spectatingStarted', (data) => {
+    isSpectating = true;
+    isHost = false;
+    currentRoomId = data.roomId;
+    
+    canvas.width = 600;
+    canvas.height = 600;
+    segmentSize = data.config.segmentSize;
+    
+    snakes = data.players.map(serverPlayer => createLocalSnake(serverPlayer));
+    foods = data.foods || [];
+    consumables = data.consumables || [];
+    projectiles = data.projectiles || [];
+    gameState = data.gameState;
+    roomConfig = data.config;
+    roundTimeLeft = data.roundTimeLeft || 60;
+    roomScores = data.roundScores || {};
+    
+    isGameRunning = true;
+    startRenderLoop();
+    
+    hideElement(gameOverScreen);
+    hideElement(startGameButton);
+    hideElement(configPanel);
+    showElement(document.getElementById('gameInterface'));
+    hideElement(document.getElementById('roomSelection'));
+    
+    updateSpectatorIndicator();
+    addCanvasNotification(`Espectando sala ${data.roomId}`, 'info');
+    
+    gameLoop();
+  });
+
+  socket.on('spectatorJoined', (data) => {
+    if (isSpectating) return; // No mostrar a otros espectadores
+    addCanvasNotification(`${data.spectatorName} se unió como espectador`, 'info');
+  });
+
+  socket.on('spectatorLeft', (data) => {
+    // Actualizar contador si es necesario
   });
 
   socket.on('countdown', (count, state) => {
@@ -1167,8 +1219,10 @@ document.addEventListener("DOMContentLoaded", function() {
     stopRenderLoop();
     currentRoomId = null;
     isHost = false;
+    isSpectating = false;
     roomConfig = {};
     showRoomSelection();
+    updateSpectatorIndicator();
     addCanvasNotification('Regresaste al menú', 'info');
     
     // NUEVO: Actualizar lista sin botones (fuera de sala)
@@ -1231,8 +1285,8 @@ document.addEventListener("DOMContentLoaded", function() {
   }
 
   function updateCanvasSize(config) {
-    canvas.width = 1200;
-    canvas.height = 700;
+    canvas.width = 600;
+    canvas.height = 600;
     segmentSize = config.segmentSize;
     handleResize();
   }
@@ -1285,16 +1339,27 @@ document.addEventListener("DOMContentLoaded", function() {
       const roomItem = document.createElement('li');
       roomItem.className = 'room-item';
       const consumablesStatus = (room.config.consumables && room.config.consumables.immunity && room.config.consumables.immunity.enabled) ? '🛡️' : '';
+      const isPlaying = room.playing || false;
+      
+      let buttonsHtml = '';
+      if (isPlaying) {
+        buttonsHtml = `<button onclick="spectateRoom('${room.id}')" class="join-room-btn" style="background: #333; color: #00ffff; border-color: #00ffff;">👁️ Espectar</button>`;
+      } else if (room.players < room.maxPlayers) {
+        buttonsHtml = `<button onclick="joinSpecificRoom('${room.id}')" class="join-room-btn">Unirse</button>`;
+      } else {
+        buttonsHtml = `<span style="color: #888; font-size: 0.9em;">Llena</span>`;
+      }
+      
       roomItem.innerHTML = `
         <div class="room-info">
-          <strong>Sala: ${room.id}</strong> ⚔️${consumablesStatus}<br>
+          <strong>Sala: ${room.id}</strong> ${isPlaying ? '🎮' : ''} ⚔️${consumablesStatus}<br>
           Anfitrión: ${room.hostName}<br>
-          Jugadores: ${room.players}/${room.maxPlayers}
+          Jugadores: ${room.players}/${room.maxPlayers}${isPlaying ? ' (En juego)' : ''}
           <div class="room-config">
-            3 rondas • 35s • 1200x700 • Velocidad: ${room.config.gameSpeed}ms
+            3 rondas • 35s • 600x600 • Velocidad: ${room.config.gameSpeed}ms
           </div>
         </div>
-        <button onclick="joinSpecificRoom('${room.id}')" class="join-room-btn">Unirse</button>
+        ${buttonsHtml}
       `;
       roomsList.appendChild(roomItem);
     });
@@ -1302,12 +1367,58 @@ document.addEventListener("DOMContentLoaded", function() {
 
   function updateRoomInfo(roomData) {
     if (roomInfo && roomData) {
+      let statusText = '';
+      if (isSpectating) {
+        statusText = '<strong style="color: #00ffff;">👁️ Modo Espectador</strong><br>';
+      } else if (roomData.host === socket.id) {
+        statusText = '<strong>Anfitrión:</strong> Tú<br>';
+      } else {
+        statusText = '<strong>Anfitrión:</strong> Otro jugador<br>';
+      }
+      
       roomInfo.innerHTML = `
-        <strong>Sala:</strong> ${roomData.roomId}<br>
-        <strong>Anfitrión:</strong> ${roomData.host === socket.id ? 'Tú' : 'Otro jugador'}
+        ${statusText}
+        <strong>Sala:</strong> ${roomData.roomId}
       `;
     }
   }
+
+  function updateSpectatorIndicator() {
+    const spectatorBanner = document.getElementById('spectatorBanner');
+    if (spectatorBanner) {
+      if (isSpectating) {
+        showElement(spectatorBanner);
+      } else {
+        hideElement(spectatorBanner);
+      }
+    }
+    
+    // Actualizar controles hint
+    const controlsHint = document.querySelector('.controls-hint');
+    if (controlsHint && isSpectating) {
+      controlsHint.innerHTML = '<strong>👁️ MODO ESPECTADOR</strong><br>Estás viendo la partida en tiempo real';
+    } else if (controlsHint) {
+      controlsHint.innerHTML = `
+        <strong>Controles:</strong><br>
+        ⬆️⬇️⬅️➡️ Flechas o WASD<br>
+        🎯 Espacio - Atacar
+      `;
+    }
+  }
+
+  function spectateRoom(roomId) {
+    if (!playerProfile || !currentPlayerId) {
+      addCanvasNotification('Necesitas estar conectado para espectar', 'error');
+      return;
+    }
+    
+    socket.emit('spectateRoom', { 
+      roomId: roomId,
+      spectatorName: playerProfile.stats.name
+    });
+  }
+
+  window.spectateRoom = spectateRoom;
 
   function updateHostControls() {
     if (isHost && gameState && !gameState.playing) {
@@ -1404,23 +1515,23 @@ document.addEventListener("DOMContentLoaded", function() {
 	  const pulseScale = 1 + Math.sin(Date.now() * 0.01) * 0.1;
 	  ctx.scale(pulseScale, pulseScale);
 	  
-	  // Color y transparencia basados en urgencia
-	  let alpha, strokeColor, fillColor;
-	  if (roundTimeLeft <= 3) {
+      // Color y transparencia basados en urgencia
+      let alpha, strokeColor, fillColor;
+      if (roundTimeLeft <= 3) {
 		// Rojo urgente para últimos 3 segundos
-		alpha = 0.25;
-		strokeColor = '#ff0000';
-		fillColor = '#ff4040';
+		alpha = 0.2;
+		strokeColor = '#f85149';
+		fillColor = '#f85149';
 	  } else if (roundTimeLeft <= 5) {
 		// Amarillo de advertencia
-		alpha = 0.17;
-		strokeColor = '#ff4a00';
-		fillColor = '#ff4f00';
+		alpha = 0.15;
+		strokeColor = '#d29922';
+		fillColor = '#d29922';
 	  } else {
-		// Blanco normal
-		alpha = 0.12;
-		strokeColor = '#ffffff';
-		fillColor = '#ffffff';
+		// Azul normal
+		alpha = 0.1;
+		strokeColor = '#58a6ff';
+		fillColor = '#58a6ff';
 	  }
 	  
 	  // Sombra/Glow para mejor visibilidad
@@ -1439,7 +1550,7 @@ document.addEventListener("DOMContentLoaded", function() {
 	  
 	  // Texto adicional "TIEMPO!" en los últimos 3 segundos
 	  if (roundTimeLeft <= 1) {
-		ctx.font = `bold 48px Share Tech Mono, monospace`;
+		ctx.font = `400 48px Share Tech Mono, monospace`;
 		ctx.globalAlpha = alpha * 0.8;
 		ctx.fillStyle = fillColor;
 		ctx.strokeStyle = strokeColor;
@@ -1830,8 +1941,21 @@ document.addEventListener("DOMContentLoaded", function() {
   });
 
   document.getElementById('backToMenuButton').addEventListener('click', () => {
-    socket.emit('backToMenu');
-    hideFinalScreen();
+    if (isSpectating) {
+      // Si está espectando, salir de la sala
+      if (currentRoomId) {
+        socket.leave(currentRoomId);
+        currentRoomId = null;
+        isSpectating = false;
+        stopRenderLoop();
+        showRoomSelection();
+        updateSpectatorIndicator();
+        socket.emit('getRooms');
+      }
+    } else {
+      socket.emit('backToMenu');
+      hideFinalScreen();
+    }
   });
 
   document.getElementById('leaderboardButton').addEventListener('click', () => {

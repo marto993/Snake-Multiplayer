@@ -240,8 +240,8 @@ function validateRoomConfig(config) {
     minPlayers: Math.max(2, Math.min(parseInt(config.maxPlayers) || 8, parseInt(config.minPlayers) || 2)),
     maxRounds: 3, // FIJO: siempre 3 rondas
     gameSpeed: Math.max(40, Math.min(200, parseInt(config.gameSpeed) || 83)),
-    canvasWidth: 1200, // FIJO: siempre 1200x700
-    canvasHeight: 700, // FIJO: siempre 1200x700
+    canvasWidth: 600, // FIJO: siempre 600x600
+    canvasHeight: 600, // FIJO: siempre 600x600
     segmentSize: Math.max(5, Math.min(25, parseInt(config.segmentSize) || 20)),
     attacksEnabled: true, // FIJO: siempre activado
     roundTime: 60, // FIJO
@@ -281,7 +281,8 @@ function createRoom(hostId, hostName) {
     consumables: [], // Array de consumibles
     projectiles: [],
     roundScores: {},
-    consumableTimers: {} // NUEVO: Timers para generación de consumibles
+    consumableTimers: {}, // NUEVO: Timers para generación de consumibles
+    spectators: new Map() // NUEVO: Espectadores activos (socketId -> { name, joinedAt })
   });
   
   const room = rooms.get(roomId);
@@ -296,6 +297,20 @@ function createRoom(hostId, hostName) {
 function getRoom(roomId) {
   const room = rooms.get(roomId);
   return room && !room.finished ? room : null;
+}
+
+function addSpectator(roomId, socketId, spectatorName) {
+  const room = getRoom(roomId);
+  if (!room || !room.gameState.playing) return false;
+  
+  if (!room.spectators) room.spectators = new Map();
+  
+  room.spectators.set(socketId, {
+    name: spectatorName,
+    joinedAt: Date.now()
+  });
+  
+  return true;
 }
 
 function deleteRoom(roomId) {
@@ -1183,20 +1198,195 @@ io.on('connection', (socket) => {
     const room = getRoom(currentRoom);
     if (!room || !room.gameState.playing || !room.config.attacksEnabled) return;
     
+    // Verificar que no sea un espectador
+    if (room.spectators && room.spectators.has(socket.id)) return;
+    
     const player = room.players.find(p => p.id === socket.id);
     if (!player || player.gameover) return;
     
     createProjectile(room, player);
   });
 
+  socket.on('spectateRoom', async (data) => {
+    try {
+      const { roomId, spectatorName } = data;
+      
+      if (!roomId || roomId.length !== 6) {
+        socket.emit('gameError', 'ID de sala inválido');
+        return;
+      }
+      
+      const room = getRoom(roomId);
+      if (!room) {
+        socket.emit('gameError', 'Sala no encontrada');
+        return;
+      }
+      
+      if (!room.gameState.playing) {
+        socket.emit('gameError', 'La partida no está en progreso');
+        return;
+      }
+      
+      if (room.spectators && room.spectators.has(socket.id)) {
+        socket.emit('gameError', 'Ya estás espectando esta sala');
+        return;
+      }
+      
+      // Verificar que no esté jugando en esta sala
+      if (room.players.some(p => p.id === socket.id)) {
+        socket.emit('gameError', 'Ya estás jugando en esta sala');
+        return;
+      }
+      
+      // Agregar como espectador
+      const name = spectatorName || (connectedUsers.get(socket.id)?.name || 'Espectador');
+      if (addSpectator(roomId, socket.id, name)) {
+        socket.join(roomId);
+        currentRoom = roomId;
+        
+        // Actualizar datos del usuario conectado
+        const userData = connectedUsers.get(socket.id);
+        if (userData) {
+          userData.roomId = roomId;
+        }
+        
+        // Serializar roundScores para evitar referencias circulares
+        const serializedRoundScores = {};
+        if (room.roundScores) {
+          Object.keys(room.roundScores).forEach(playerId => {
+            const scoreData = room.roundScores[playerId];
+            if (scoreData && typeof scoreData === 'object') {
+              serializedRoundScores[playerId] = {
+                name: scoreData.name || '',
+                totalScore: scoreData.totalScore || 0,
+                roundWins: scoreData.roundWins || 0
+              };
+            }
+          });
+        }
+        
+        // Serializar consumibles del config
+        const serializedConsumables = {};
+        if (room.config.consumables) {
+          Object.keys(room.config.consumables).forEach(key => {
+            const consumableConfig = room.config.consumables[key];
+            if (consumableConfig && typeof consumableConfig === 'object') {
+              serializedConsumables[key] = {
+                enabled: Boolean(consumableConfig.enabled),
+                spawnInterval: Number(consumableConfig.spawnInterval) || 5,
+                duration: Number(consumableConfig.duration) || 5
+              };
+            }
+          });
+        }
+        
+        // Serializar players asegurando que no haya referencias circulares
+        const serializedPlayers = room.players.map(player => {
+          try {
+            return {
+              id: String(player.id),
+              name: String(player.name),
+              color: String(player.color),
+              segments: player.segments ? player.segments.map(seg => ({
+                x: Number(seg.x),
+                y: Number(seg.y)
+              })) : [],
+              direction: player.direction ? {
+                x: Number(player.direction.x),
+                y: Number(player.direction.y)
+              } : { x: 0, y: 0 },
+              score: Number(player.score) || 0,
+              gameover: Boolean(player.gameover),
+              scoreLeftToGrow: Number(player.scoreLeftToGrow) || 0,
+              activeConsumable: player.getActiveConsumable ? 
+                (player.getActiveConsumable() ? {
+                  type: String(player.getActiveConsumable().type),
+                  endTime: Number(player.getActiveConsumable().endTime)
+                } : null) : null
+            };
+          } catch (err) {
+            console.error('Error serializing player:', err);
+            return null;
+          }
+        }).filter(p => p !== null);
+        
+        // Enviar estado actual del juego
+        socket.emit('spectatingStarted', {
+          roomId: String(roomId),
+          players: serializedPlayers,
+          foods: room.foods ? room.foods.map(f => ({
+            x: Number(f.x),
+            y: Number(f.y),
+            score: Number(f.score) || 1,
+            type: f.type ? String(f.type) : undefined
+          })) : [],
+          consumables: room.consumables ? room.consumables.map(c => ({
+            id: String(c.id),
+            x: Number(c.x),
+            y: Number(c.y),
+            type: String(c.type),
+            spawnTime: Number(c.spawnTime) || Date.now()
+          })) : [],
+          projectiles: room.projectiles ? room.projectiles.map(p => ({
+            id: String(p.id),
+            playerId: String(p.playerId),
+            x: Number(p.x),
+            y: Number(p.y),
+            direction: {
+              x: Number(p.direction.x),
+              y: Number(p.direction.y)
+            },
+            color: String(p.color)
+          })) : [],
+          config: {
+            maxPlayers: Number(room.config.maxPlayers) || 8,
+            minPlayers: Number(room.config.minPlayers) || 2,
+            maxRounds: Number(room.config.maxRounds) || 3,
+            gameSpeed: Number(room.config.gameSpeed) || 83,
+            canvasWidth: Number(room.config.canvasWidth) || 600,
+            canvasHeight: Number(room.config.canvasHeight) || 600,
+            segmentSize: Number(room.config.segmentSize) || 20,
+            attacksEnabled: Boolean(room.config.attacksEnabled),
+            roundTime: Number(room.config.roundTime) || 60,
+            consumables: serializedConsumables
+          },
+          gameState: {
+            playing: Boolean(room.gameState.playing),
+            round: Number(room.gameState.round) || 1,
+            roundTimeLeft: Number(room.gameState.roundTimeLeft) || 60
+          },
+          roundScores: serializedRoundScores,
+          roundTimeLeft: Number(room.gameState.roundTimeLeft) || 60
+        });
+        
+        // Notificar a los jugadores (opcional)
+        io.to(roomId).emit('spectatorJoined', {
+          spectatorName: name,
+          spectatorCount: room.spectators.size
+        });
+        
+        console.log(`${name} started spectating room ${roomId}`);
+        
+        // Actualizar lista de jugadores en línea
+        broadcastOnlinePlayersList();
+      } else {
+        socket.emit('gameError', 'No se pudo unir como espectador');
+      }
+    } catch (error) {
+      console.error('Error spectating room:', error);
+      socket.emit('gameError', 'Error al unirse como espectador');
+    }
+  });
+
   socket.on('getRooms', () => {
     const availableRooms = Array.from(rooms.values())
-      .filter(room => !room.gameState.playing && !room.finished && room.players.length < room.config.maxPlayers)
+      .filter(room => !room.finished)
       .map(room => ({
         id: room.id,
         hostName: room.hostName,
         players: room.players.length,
         maxPlayers: room.config.maxPlayers,
+        playing: room.gameState.playing,
         config: {
           maxRounds: room.config.maxRounds,
           gameSpeed: room.config.gameSpeed,
@@ -1215,6 +1405,9 @@ io.on('connection', (socket) => {
     
     const room = getRoom(currentRoom);
     if (!room || !room.gameState.playing) return;
+    
+    // Verificar que no sea un espectador
+    if (room.spectators && room.spectators.has(socket.id)) return;
     
     const playerToMove = room.players.find(player => player.id === socket.id);
     if (!playerToMove || playerToMove.gameover) return;
@@ -1349,6 +1542,26 @@ io.on('connection', (socket) => {
     const room = getRoom(roomId);
     if (!room) return;
     
+    // Remover espectadores
+    if (room.spectators && room.spectators.has(socket.id)) {
+      room.spectators.delete(socket.id);
+      socket.leave(roomId);
+      
+      // Actualizar datos del usuario
+      const userData = connectedUsers.get(socket.id);
+      if (userData) {
+        userData.roomId = null;
+      }
+      
+      // Notificar a la sala
+      io.to(roomId).emit('spectatorLeft', {
+        spectatorCount: room.spectators.size
+      });
+      
+      broadcastOnlinePlayersList();
+      return;
+    }
+    
     const playerIndex = room.players.findIndex(player => player.id === socket.id);
     if (playerIndex !== -1) {
       const playerName = room.players[playerIndex].name;
@@ -1445,7 +1658,11 @@ io.on('connection', (socket) => {
       return;
     }
     
+    // Limpiar espectadores o jugadores
     handlePlayerLeaveRoom(socket, currentRoom);
+    
+    // Limpiar referencia de currentRoom
+    currentRoom = null;
   });
 });
 
