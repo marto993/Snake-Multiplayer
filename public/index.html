@@ -4,1071 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Snake Multiplayer</title>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono:wght@400@700&display=swap');
-        
-        * { 
-            font-family: 'Share Tech Mono', monospace; 
-            box-sizing: border-box;
-        }
-        
-        body {
-            display: flex;
-            justify-content: center;
-            align-items: flex-start;
-            min-height: 100vh;
-            margin: 0;
-            background: #0d1117;
-            color: #58a6ff;
-            padding: 10px;
-            overflow-x: auto;
-            padding-bottom: 32px;
-        }
-        
-        .container {
-            display: flex;
-            gap: 15px;
-            max-width: 100%;
-            width: auto;
-        }
-        
-        .game-panel {
-            background: #161b22;
-            border: 1px solid #30363d;
-            padding: 15px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-        }
-        
-        .left-panel {
-            flex: 0 0 280px;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-        
-        .main-panel {
-            flex: 1;
-            text-align: center;
-            min-width: 0;
-        }
 
-        .right-panel {
-            flex: 0 0 300px;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
+    <!-- Estilos -->
+    <link rel="stylesheet" href="./styles.css">
 
-        .info-canvas-container {
-            margin-bottom: 0;
-            background: #010409;
-            position: relative;
-        }
-
-        #infoCanvas {
-            display: block;
-            background: #010409;
-            border: none;
-            width: 600px;
-            height: 90px;
-        }
-
-        .canvas-separator {
-            height: 1px;
-            background: #30363d;
-            width: 600px;
-            margin: 0;
-        }
-
-        .game-canvas-container {
-            background: #010409;
-            border: 1px solid #30363d;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-            padding: 0;
-            width: 600px;
-            height: 600px;
-            overflow: hidden;
-        }
-
-        .profile-panel {
-            background: #161b22;
-            border: 1px solid #30363d;
-            padding: 15px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-        }
-
-        .profile-stats {
-            background: #0d1117;
-            border: 1px solid #30363d;
-            padding: 15px;
-            margin-bottom: 15px;
-            font-size: 0.9em;
-            line-height: 1.4;
-        }
-
-        .profile-stats strong {
-            color: #58a6ff;
-            display: block;
-            margin-bottom: 8px;
-            font-size: 1.1em;
-        }
-
-        .profile-stats span {
-            display: block;
-            color: #8b949e;
-            margin-bottom: 4px;
-        }
-
-        .profile-actions {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .profile-actions button {
-            margin-bottom: 0;
-            padding: 8px 12px;
-            font-size: 0.9em;
-        }
-
-        /* NUEVO: Estilos para lista de jugadores en línea */
-        .online-players-panel {
-            background: #161b22;
-            border: 1px solid #30363d;
-            padding: 15px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-        }
-
-        .online-players-list {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-
-        .online-player-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 8px;
-            margin-bottom: 6px;
-            background: #0d1117;
-            border: 1px solid #30363d;
-            font-size: 0.85em;
-            transition: all 0.2s ease;
-        }
-
-        .online-player-item:hover {
-            background: #161b22;
-            border-color: #58a6ff;
-        }
-
-        .online-player-info {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-			padding-right: 4px;
-        }
-
-        .online-player-name {
-            color: #fff;
-            font-weight: 600;
-			min-width: 8.75rem;
-        }
-
-        .online-player-status {
-            color: #888;
-            font-size: 0.8em;
-        }
-
-        .online-player-status.in-game {
-            color: #f85149;
-        }
-
-        .online-player-status.available {
-            color: #3fb950;
-        }
-
-        .invite-button {
-            background: #0d1117;
-            color: #58a6ff;
-            border: 1px solid #30363d;
-            padding: 4px 8px;
-            font-size: 0.8em;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            font-family: 'Share Tech Mono', monospace;
-            text-transform: uppercase;
-            margin: 0;
-        }
-
-        .invite-button:hover {
-            background: #1f6feb;
-            color: #fff;
-            border-color: #1f6feb;
-        }
-
-        .invite-button:disabled {
-            background: #161b22;
-            color: #6e7681;
-            border-color: #30363d;
-            cursor: not-allowed;
-        }
-
-        .invite-button:disabled:hover {
-            background: #161b22;
-            color: #6e7681;
-        }
-
-        .online-players-empty {
-            text-align: center;
-            padding: 20px;
-            color: #6e7681;
-            font-style: italic;
-            font-size: 0.9em;
-        }
-        
-        h1 {
-            margin: 0 0 20px 0;
-            color: #58a6ff;
-            font-size: 2.5em;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            font-weight: 400;
-        }
-        
-        h2 {
-            margin: 0 0 15px 0;
-            color: #58a6ff;
-            font-size: 1.4em;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            font-weight: 400;
-        }
-        
-        h3 {
-            margin: 15px 0 10px 0;
-            color: #c9d1d9;
-            font-size: 1.2em;
-            text-transform: uppercase;
-            font-weight: 400;
-            letter-spacing: 0.5px;
-        }
-        
-        .game-info {
-            background: #161b22;
-            color: #c9d1d9;
-            border: 1px solid #30363d;
-            padding: 15px;
-        }
-        
-        .config-panel {
-            background: #0d1117;
-            border: 1px solid #30363d;
-            padding: 15px;
-            margin-bottom: 15px;
-        }
-        
-        .config-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
-        }
-        
-        .config-row:last-child {
-            margin-bottom: 0;
-        }
-        
-        .config-label {
-            font-size: 0.9em;
-            font-weight: 400;
-            flex: 1;
-            color: #c9d1d9;
-        }
-        
-        .config-input {
-            width: 70px;
-            padding: 4px 6px;
-            border: 1px solid #30363d;
-            background: #0d1117;
-            color: #c9d1d9;
-            font-size: 0.9em;
-            text-align: center;
-            font-family: 'Share Tech Mono', monospace;
-        }
-        
-        .config-input:focus {
-            outline: none;
-            border-color: #58a6ff;
-            box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
-        }
-        
-        .config-input:disabled {
-            background: #161b22;
-            color: #6e7681;
-            cursor: not-allowed;
-        }
-        
-        .config-select {
-            width: 70px;
-            padding: 4px;
-            border: 1px solid #30363d;
-            background: #0d1117;
-            color: #c9d1d9;
-            font-size: 0.9em;
-            font-family: 'Share Tech Mono', monospace;
-        }
-        
-        .config-select:disabled {
-            background: #161b22;
-            color: #6e7681;
-            cursor: not-allowed;
-        }
-        
-        .config-checkbox {
-            width: 18px;
-            height: 18px;
-            cursor: pointer;
-            accent-color: #58a6ff;
-        }
-        
-        .config-checkbox:disabled {
-            cursor: not-allowed;
-        }
-        
-        .config-button {
-            background: #0d1117;
-            color: #58a6ff;
-            border: 1px solid #30363d;
-            padding: 8px 12px;
-            font-size: 0.9em;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            margin-bottom: 10px;
-            font-family: 'Share Tech Mono', monospace;
-            text-transform: uppercase;
-        }
-        
-        .config-button:hover {
-            background: #1f6feb;
-            color: #fff;
-            border-color: #1f6feb;
-        }
-
-        .config-divider {
-            margin: 15px 0;
-            border-top: 1px solid #30363d;
-            padding-top: 15px;
-        }
-
-        .config-divider h4 {
-            margin: 0 0 10px 0;
-            color: #c9d1d9;
-            font-size: 0.9em;
-            text-transform: uppercase;
-            font-family: 'Share Tech Mono', monospace;
-            letter-spacing: 0.5px;
-            font-weight: 400;
-        }
-
-        .config-info {
-            font-size: 0.8em;
-            color: #8b949e;
-            margin: 10px 0;
-            padding: 8px;
-            background: #0d1117;
-            border-left: 2px solid #30363d;
-            border-radius: 2px;
-            line-height: 1.3;
-        }
-
-        .config-info strong {
-            color: #58a6ff;
-        }
-        
-        #playerList {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
-        
-        .player-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 6px;
-            margin-bottom: 4px;
-            background: #0d1117;
-            border: 1px solid #30363d;
-            transition: all 0.2s ease;
-            font-size: 0.9em;
-        }
-        
-        .player-item.current-player {
-            background: #1c2128;
-            border: 1px solid #58a6ff;
-            box-shadow: 0 0 0 1px rgba(88, 166, 255, 0.2);
-        }
-        
-        .player-item.eliminated {
-            opacity: 0.5;
-            background: #161b22;
-            border-color: #f85149;
-        }
-        
-        .player-rank {
-            font-weight: 500;
-            min-width: 20px;
-            text-align: center;
-            background: #161b22;
-            color: #c9d1d9;
-            padding: 2px;
-            font-size: 0.8em;
-        }
-        
-        .player-name {
-            flex: 1;
-            text-align: left;
-            font-weight: 400;
-            color: #c9d1d9;
-            font-size: 0.85em;
-        }
-        
-        .player-score {
-            font-weight: 500;
-            min-width: 40px;
-            text-align: right;
-            line-height: 1.1;
-            font-size: 0.8em;
-            color: #58a6ff;
-        }
-        
-        .player-score small {
-            display: block;
-            font-size: 0.8em;
-            color: #8b949e;
-            font-weight: normal;
-        }
-        
-        .player-status {
-            font-size: 1em;
-        }
-        
-        .form-panel {
-            background: #161b22;
-            border: 1px solid #30363d;
-            padding: 15px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-        }
-        
-        .form-panel label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 400;
-            color: #c9d1d9;
-            text-transform: uppercase;
-            font-size: 0.9em;
-        }
-        
-        .form-panel input {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid #30363d;
-            background: #0d1117;
-            color: #c9d1d9;
-            font-size: 16px;
-            margin-bottom: 15px;
-            transition: all 0.2s ease;
-            font-family: 'Share Tech Mono', monospace;
-        }
-        
-        .form-panel input:focus {
-            outline: none;
-            border-color: #58a6ff;
-            box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
-        }
-        
-        button {
-            background: #0d1117;
-            color: #58a6ff;
-            border: 1px solid #30363d;
-            padding: 12px 24px;
-            font-size: 16px;
-            font-weight: 400;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            width: 100%;
-            margin-bottom: 10px;
-            font-family: 'Share Tech Mono', monospace;
-            text-transform: uppercase;
-        }
-        
-        button:hover {
-            background: #1f6feb;
-            color: #fff;
-            border-color: #1f6feb;
-        }
-        
-        button:active {
-            transform: scale(0.98);
-        }
-        
-        button.secondary {
-            background: #0d1117;
-            color: #c9d1d9;
-            border-color: #30363d;
-        }
-        
-        button.secondary:hover {
-            background: #21262d;
-            color: #fff;
-            border-color: #30363d;
-        }
-        
-        #startGameButton {
-            background: #238636;
-            color: #fff;
-            border-color: #238636;
-            font-size: 18px;
-            padding: 15px 30px;
-        }
-        
-        #startGameButton:hover {
-            background: #2ea043;
-            border-color: #2ea043;
-        }
-        
-        #game {
-            border: 0px solid #00ff41;
-            background: #000;
-            display: block;
-        }
-        
-        .game-over-screen {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(13, 17, 23, 0.98);
-            color: #c9d1d9;
-            padding: 40px;
-            border: 1px solid #30363d;
-            text-align: center;
-            font-size: 24px;
-            font-weight: 400;
-            z-index: 1000;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
-        }
-        
-        .game-over-screen h1 {
-            color: #f85149;
-            margin-bottom: 20px;
-            font-size: 3em;
-            font-weight: 400;
-        }
-        
-        .hidden {
-            display: none !important;
-        }
-        
-        .waiting-message {
-            background: #161b22;
-            border: 1px solid #30363d;
-            padding: 20px;
-            margin: 20px 0;
-            text-align: center;
-            color: #8b949e;
-        }
-        
-        .controls-hint {
-            background: #0d1117;
-            border: 1px solid #30363d;
-            padding: 10px;
-            margin-top: 15px;
-            font-size: 0.9em;
-            color: #8b949e;
-        }
-
-        .spectator-banner {
-            background: rgba(88, 166, 255, 0.1);
-            border: 1px solid #30363d;
-            padding: 10px;
-            margin-bottom: 15px;
-            text-align: center;
-            font-weight: 400;
-            color: #58a6ff;
-            font-size: 1.1em;
-        }
-        
-        #roomsList {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-        
-        .room-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px;
-            margin-bottom: 8px;
-            background: #0d1117;
-            border: 1px solid #30363d;
-        }
-        
-        .room-info {
-            flex: 1;
-            font-size: 0.9em;
-            color: #c9d1d9;
-        }
-        
-        .room-config {
-            font-size: 0.8em;
-            color: #8b949e;
-            margin-top: 5px;
-        }
-        
-        .join-room-btn {
-            margin: 0;
-            padding: 6px 12px;
-            font-size: 14px;
-            width: auto;
-        }
-        
-        .empty-room {
-            text-align: center;
-            padding: 20px;
-            color: #6e7681;
-            font-style: italic;
-        }
-        
-        .button-group {
-            display: flex;
-            gap: 10px;
-        }
-        
-        .button-group button {
-            margin-bottom: 0;
-        }
-        
-        #roomInfo {
-            background: #0d1117;
-            border: 1px solid #30363d;
-            padding: 10px;
-            margin-bottom: 15px;
-            font-size: 0.9em;
-            color: #8b949e;
-        }
-        
-        .final-screen {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.98);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1001;
-        }
-        
-        .final-content {
-            background: #161b22;
-            border: 1px solid #30363d;
-            padding: 40px;
-            text-align: center;
-            max-width: 500px;
-            width: 90%;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
-        }
-        
-        .final-content h1 {
-            color: #58a6ff;
-            margin-bottom: 20px;
-            font-size: 2.5em;
-            font-weight: 400;
-        }
-        
-        .final-scores {
-            margin: 30px 0;
-            text-align: left;
-        }
-        
-        .final-scores h3 {
-            text-align: center;
-            color: #c9d1d9;
-            margin-bottom: 20px;
-            font-weight: 400;
-        }
-        
-        #finalScoresList {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
-        
-        .final-score-item {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            padding: 12px;
-            margin-bottom: 8px;
-            background: #0d1117;
-            border-left: 2px solid #30363d;
-        }
-        
-        .final-rank {
-            font-weight: 500;
-            font-size: 1.2em;
-            color: #58a6ff;
-            min-width: 30px;
-        }
-        
-        .final-name {
-            flex: 1;
-            font-weight: 400;
-            color: #c9d1d9;
-        }
-        
-        .final-total {
-            font-weight: 500;
-            color: #3fb950;
-        }
-        
-        .final-wins {
-            font-size: 0.9em;
-            color: #8b949e;
-        }
-
-        .modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.95);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1001;
-        }
-
-        .modal-content {
-            background: #161b22;
-            border: 1px solid #30363d;
-            max-width: 500px;
-            width: 90%;
-            max-height: 80vh;
-            overflow-y: auto;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
-        }
-
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 20px;
-            border-bottom: 1px solid #30363d;
-        }
-
-        .modal-header h2 {
-            margin: 0;
-            color: #58a6ff;
-            font-weight: 400;
-        }
-
-        .modal-close {
-            background: none;
-            border: none;
-            color: #f85149;
-            font-size: 24px;
-            font-weight: 400;
-            cursor: pointer;
-            padding: 0;
-            margin: 0;
-            width: auto;
-            transition: color 0.2s ease;
-        }
-
-        .modal-close:hover {
-            color: #ff6b6b;
-            background: none;
-        }
-
-        .modal-body {
-            padding: 20px;
-        }
-
-        .leaderboard-list {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
-
-        .leaderboard-item {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            padding: 12px;
-            margin-bottom: 8px;
-            background: #0d1117;
-            border-left: 2px solid #30363d;
-            transition: background 0.2s ease;
-        }
-
-        .leaderboard-item:hover {
-            background: #161b22;
-        }
-
-        .leaderboard-item.loading {
-            justify-content: center;
-            color: #6e7681;
-            font-style: italic;
-        }
-
-        .leaderboard-item .rank {
-            font-weight: 500;
-            font-size: 1.1em;
-            color: #58a6ff;
-            min-width: 30px;
-        }
-        
-        .leaderboard-item .name {
-            flex: 1;
-            font-weight: 400;
-            color: #c9d1d9;
-        }
-        
-        .leaderboard-item .wins {
-            font-weight: 500;
-            color: #3fb950;
-            min-width: 35px;
-            text-align: center;
-        }
-        
-        .leaderboard-item .games {
-            color: #8b949e;
-            min-width: 35px;
-            text-align: center;
-            font-size: 0.9em;
-        }
-        
-        .leaderboard-item .winrate {
-            color: #58a6ff;
-            min-width: 45px;
-            text-align: center;
-            font-weight: 500;
-        }
-
-        .leaderboard-item:nth-child(1) .rank {
-            color: #fbbf24;
-        }
-
-        .leaderboard-item:nth-child(2) .rank {
-            color: #94a3b8;
-        }
-
-        .leaderboard-item:nth-child(3) .rank {
-            color: #d97706;
-        }
-
-        .leaderboard-item:nth-child(1) {
-            border-left-color: #fbbf24;
-            background: #1c2128;
-        }
-
-        .leaderboard-item:nth-child(2) {
-            border-left-color: #94a3b8;
-            background: #1c2128;
-        }
-
-        .leaderboard-item:nth-child(3) {
-            border-left-color: #d97706;
-            background: #1c2128;
-        }
-
-        #gameFooter {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 32px;
-            background: rgba(13, 17, 23, 0.95);
-            backdrop-filter: blur(4px);
-            border-top: 1px solid rgba(48, 54, 61, 0.3);
-            z-index: 999;
-            font-family: 'Share Tech Mono', monospace;
-        }
-
-        .footer-content {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            height: 100%;
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 0 20px;
-        }
-
-        .footer-text {
-            font-size: 11px;
-            color: #6e7681;
-            font-weight: 400;
-            letter-spacing: 0.5px;
-        }
-
-        .footer-text .heart {
-            color: #f85149;
-            animation: heartbeat 2s ease-in-out infinite;
-        }
-
-        .footer-links {
-            display: flex;
-            gap: 12px;
-        }
-
-        .footer-links a {
-            font-size: 12px;
-            color: #6e7681;
-            text-decoration: none;
-            transition: all 0.2s ease;
-            padding: 4px;
-            border-radius: 3px;
-        }
-
-        .footer-links a:hover {
-            color: #58a6ff;
-            transform: translateY(-1px);
-            background: rgba(88, 166, 255, 0.1);
-        }
-
-        @keyframes heartbeat {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.1); }
-        }
-
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-        
-        ::-webkit-scrollbar-track {
-            background: #0d1117;
-        }
-        
-        ::-webkit-scrollbar-thumb {
-            background: #30363d;
-        }
-        
-        ::-webkit-scrollbar-thumb:hover {
-            background: #484f58;
-        }
-
-        @media (max-width: 768px) {
-            body {
-                padding-bottom: 28px;
-                padding: 8px;
-            }
-
-            .container {
-                flex-direction: column;
-                gap: 10px;
-            }
-            
-            .left-panel {
-                flex: none;
-                order: 1;
-            }
-
-            .main-panel {
-                order: 2;
-            }
-
-            .right-panel {
-                order: 3;
-                flex: none;
-            }
-            
-            #game, #infoCanvas {
-                max-width: 100%;
-                height: auto;
-            }
-            
-            h1 {
-                font-size: 2em;
-            }
-            
-            .button-group {
-                flex-direction: column;
-            }
-
-            #gameFooter {
-                height: 28px;
-            }
-            
-            .footer-content {
-                padding: 0 10px;
-            }
-            
-            .footer-text {
-                font-size: 10px;
-            }
-            
-            .footer-links {
-                gap: 8px;
-            }
-            
-            .footer-links a {
-                font-size: 11px;
-                padding: 2px;
-            }
-
-            .modal-content {
-                margin: 20px;
-            }
-            
-            .leaderboard-item {
-                gap: 10px;
-                padding: 10px;
-            }
-            
-            .leaderboard-item .rank {
-                min-width: 25px;
-            }
-            
-            .leaderboard-item .wins,
-            .leaderboard-item .games {
-                min-width: 30px;
-            }
-            
-            .leaderboard-item .winrate {
-                min-width: 40px;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .footer-text {
-                font-size: 9px;
-            }
-            
-            .footer-links a {
-                font-size: 10px;
-            }
-        }
-    </style>
-    
+    <!-- Socket.IO -->
     <script src="/socket.io/socket.io.min.js"></script>
+
+    <!-- Snake Class (compartido) -->
     <script src="./snakeClass.js"></script>
 </head>
 <body>
     <div class="container">
+        <!-- === PANEL IZQUIERDO === -->
         <div class="left-panel">
+            <!-- Perfil / Login -->
             <div class="profile-panel" id="userPanel">
+                <!-- Vista de Perfil -->
                 <div id="profileView" class="hidden">
                     <h3>👤 Mi Perfil</h3>
                     <div id="profileInfo">
@@ -1076,26 +28,27 @@
                             <span>Cargando perfil...</span>
                         </div>
                     </div>
-                    
+
                     <div class="profile-actions">
                         <button id="leaderboardButton" class="secondary">🏆 Rankings</button>
-                        <button id="resetProfileButton" class="secondary" onclick="resetPlayerProfile()">🔓 Cerrar Sesión</button>
+                        <button id="resetProfileButton" class="secondary">🔓 Cerrar Sesión</button>
                     </div>
                 </div>
 
+                <!-- Vista de Login -->
                 <div id="loginView">
                     <h2>Entrar al Juego</h2>
                     <label for="username">Tu Nombre:</label>
                     <input type="text" id="username" style="margin-bottom: 24px; padding: 4px 10px" placeholder="Ingresa tu nombre" maxlength="20" required>
                     <button id="joinButton">🎮 Continuar</button>
-                    
+
                     <div class="profile-actions" style="margin-top: 15px;">
                         <button id="loginLeaderboardButton" class="secondary">🏆 Ver Rankings</button>
                     </div>
                 </div>
             </div>
 
-            <!-- NUEVO: Panel de jugadores en línea -->
+            <!-- Jugadores en Línea -->
             <div class="online-players-panel hidden" id="onlinePlayersPanel">
                 <h3>🌐 Jugadores Activos</h3>
                 <ul id="onlinePlayersList" class="online-players-list">
@@ -1103,25 +56,36 @@
                 </ul>
             </div>
         </div>
-        
+
+        <!-- === PANEL CENTRAL === -->
         <div class="main-panel game-panel">
             <h1>🐍 Snake Multiplayer</h1>
+
+            <!-- Canvas de Información -->
             <div class="info-canvas-container" id="infoCanvasContainer">
                 <canvas id="infoCanvas" width="600" height="90"></canvas>
             </div>
             <div class="canvas-separator"></div>
+
+            <!-- Canvas de Juego -->
             <div class="game-canvas-container">
                 <canvas id="game" width="600" height="600"></canvas>
             </div>
         </div>
 
+        <!-- === PANEL DERECHO === -->
         <div class="right-panel">
+            <!-- Interfaz de Juego -->
             <div id="gameInterface" class="game-panel game-info hidden">
+                <!-- Banner de Espectador -->
                 <div id="spectatorBanner" class="spectator-banner hidden">
                     👁️ MODO ESPECTADOR - Solo visualización
                 </div>
+
+                <!-- Info de Sala -->
                 <div id="roomInfo"></div>
 
+                <!-- Panel de Configuración -->
                 <div id="configPanel" class="config-panel hidden">
                     <button id="toggleConfigButton" class="config-button">⚙️ Configuración</button>
                     <div id="configSettings" class="hidden">
@@ -1161,18 +125,16 @@
                             <span class="config-label">🛡️ Inmunidad:</span>
                             <input type="checkbox" id="immunityEnabledInput" class="config-checkbox" checked>
                         </div>
-
                         <div class="config-row">
                             <span class="config-label">⏱️ Intervalo:</span>
                             <select id="immunityIntervalInput" class="config-select">
                                 <option value="3" selected>3s</option>
-								<option value="5">5s</option>
+                                <option value="5">5s</option>
                                 <option value="8">8s</option>
                                 <option value="13">13s</option>
                                 <option value="17">17s</option>
                             </select>
                         </div>
-
                         <div class="config-row">
                             <span class="config-label">⏳ Duración:</span>
                             <select id="immunityDurationInput" class="config-select">
@@ -1190,30 +152,34 @@
                         <button id="saveConfigButton" class="config-button">💾 Guardar</button>
                     </div>
                 </div>
-                
-				<h2>🐍 Jugadores</h2>
+
+                <!-- Lista de Jugadores -->
+                <h2>🐍 Jugadores</h2>
                 <ol id="playerList"></ol>
+
                 <button id="startGameButton" class="hidden">🚀 Iniciar Juego</button>
+
                 <div class="controls-hint">
-				  <strong>Controles:</strong><br>
-				  ⬆️⬇️⬅️➡️ Flechas o WASD<br>
-				  🎯 Espacio - Atacar
-				</div>
+                  <strong>Controles:</strong><br>
+                  ⬆️⬇️⬅️➡️ Flechas o WASD<br>
+                  🎯 Espacio - Atacar
+                </div>
             </div>
-            
+
+            <!-- Selección de Sala -->
             <div id="roomSelection" class="form-panel hidden">
                 <h2>Unirse o Crear Sala</h2>
-                
+
                 <button id="createRoomButton">🏠 Crear Nueva Sala</button>
-                
+
                 <div style="margin: 20px 0; text-align: center; font-weight: bold; color: #666;">O</div>
-                
+
                 <label for="roomId">Unirse por ID de Sala:</label>
                 <input type="text" id="roomId" placeholder="Ingresa ID de sala" maxlength="6" style="text-transform: uppercase;">
                 <button id="joinRoomButton">🚪 Unirse a Sala</button>
-                
+
                 <div style="margin: 20px 0; text-align: center; font-weight: bold; color: #666;">O</div>
-                
+
                 <div>
                     <div class="button-group">
                         <button id="refreshRoomsButton" class="secondary">🔄 Actualizar</button>
@@ -1224,33 +190,39 @@
                     </ul>
                 </div>
             </div>
-            
+
+            <!-- Mensaje de Espera -->
             <div class="waiting-message hidden" id="waitingSpan">
                 ⏳ Esperando más jugadores para iniciar...
             </div>
         </div>
     </div>
 
+    <!-- === PANTALLAS MODALES === -->
+
+    <!-- Pantalla de Game Over -->
     <div id="gameOverScreen" class="game-over-screen hidden">
         <h1>🏆 RONDA TERMINADA</h1>
         <p id="scoreDisplay"></p>
         <button id="restartButton">Continuar</button>
     </div>
 
+    <!-- Pantalla Final -->
     <div id="finalScreen" class="final-screen hidden">
         <div class="final-content">
             <h1 id="finalTitle">🏆 Juego Completo!</h1>
             <p id="finalMessage">Campeón: Nombre Jugador</p>
-            
+
             <div class="final-scores">
                 <h3>Clasificación Final</h3>
                 <ul id="finalScoresList"></ul>
             </div>
-            
+
             <button id="backToMenuButton">🏠 Volver al Menú</button>
         </div>
     </div>
 
+    <!-- Modal de Leaderboard -->
     <div id="leaderboardModal" class="modal hidden">
         <div class="modal-content">
             <div class="modal-header">
@@ -1264,7 +236,8 @@
             </div>
         </div>
     </div>
-    
+
+    <!-- Footer -->
     <footer id="gameFooter">
         <div class="footer-content">
             <span class="footer-text">Hecho con <span class="heart">❤️</span> por El Marto</span>
@@ -1287,7 +260,8 @@
             </div>
         </div>
     </footer>
-    
-    <script src="./SnakeGame.js"></script>
+
+    <!-- Scripts (Módulos ES6) -->
+    <script type="module" src="./js/main.js"></script>
 </body>
 </html>
