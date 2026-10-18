@@ -1619,16 +1619,36 @@ io.on('connection', (socket) => {
       
       const username = data.username.trim();
       
-      const isUserConnected = Array.from(connectedUsers.values()).some(connectedName => 
-        connectedName.name.toLowerCase() === username.toLowerCase()
-      );
+      // Mismo nombre ya conectado en otro socket. Si trae el mismo playerId es la misma sesión que
+      // vuelve (reconexión tras un corte del lado del cliente: el socket viejo sigue registrado hasta
+      // que vence el ping, unos 45 s) o la misma persona en otra pestaña: el socket nuevo toma la
+      // sesión y el viejo se desconecta. Sin playerId (o con otro) sigue siendo un nombre ocupado.
+      let replacedSocketId = null;
+      let nameTaken = false;
+      connectedUsers.forEach((userData, socketId) => {
+        if (socketId === socket.id) return; // re-registro del mismo socket: idempotente
+        if (userData.name.toLowerCase() !== username.toLowerCase()) return;
+        if (data.playerId && userData.playerId === data.playerId) replacedSocketId = socketId;
+        else nameTaken = true;
+      });
       
-      if (isUserConnected) {
+      if (nameTaken) {
         socket.emit('profileError', `El usuario "${username}" ya está conectado. Intenta con otro nombre.`);
         return;
       }
       
       const playerProfile = await getOrCreatePlayer(username, data.playerId);
+      
+      if (replacedSocketId) {
+        const oldSocket = io.sockets.sockets.get(replacedSocketId);
+        connectedUsers.delete(replacedSocketId);
+        if (oldSocket) {
+          oldSocket.emit('sessionReplaced');
+          // Su handler de 'disconnect' lo saca de la sala (handlePlayerLeaveRoom)
+          oldSocket.disconnect(true);
+        }
+        console.log(`Session for "${username}" moved to socket ${socket.id}`);
+      }
       
       // NUEVO: Registrar usuario conectado
       connectedUsers.set(socket.id, {
