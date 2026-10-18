@@ -233,6 +233,13 @@ function generateRoomId() {
   return roomId;
 }
 
+// Override de desarrollo: ROUND_TIME=10 npm run dev permite rondas cortas para QA.
+// Sin la variable (o con un valor inválido) la ronda sigue durando 60 s.
+const ROUND_TIME = (() => {
+  const value = Math.floor(Number(process.env.ROUND_TIME));
+  return value > 0 ? value : 60;
+})();
+
 // MODIFICADO: validateRoomConfig con nuevos valores por defecto
 function validateRoomConfig(config) {
   return {
@@ -244,7 +251,7 @@ function validateRoomConfig(config) {
     canvasHeight: 600, // FIJO: siempre 600x600
     segmentSize: Math.max(5, Math.min(25, parseInt(config.segmentSize) || 20)),
     attacksEnabled: true, // FIJO: siempre activado
-    roundTime: 60, // FIJO
+    roundTime: ROUND_TIME, // FIJO (60 s salvo override de desarrollo ROUND_TIME)
     // Configuración de consumibles (mantenida)
     consumables: {
       immunity: {
