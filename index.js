@@ -280,6 +280,7 @@ function createRoom(hostId, hostName) {
     foods: [],
     consumables: [], // Array de consumibles
     projectiles: [],
+    pendingProjectileEvents: [], // Disparos ocurridos entre ticks; se envían en el próximo gameLogicFrame
     roundScores: {},
     consumableTimers: {}, // NUEVO: Timers para generación de consumibles
     spectators: new Map() // NUEVO: Espectadores activos (socketId -> { name, joinedAt })
@@ -619,19 +620,39 @@ function createProjectile(room, player) {
   player.updateTargets();
   
   room.projectiles.push(projectile);
+
+  // Evento visual: el disparo ocurre entre ticks, se envía en el próximo gameLogicFrame
+  if (!room.pendingProjectileEvents) room.pendingProjectileEvents = [];
+  room.pendingProjectileEvents.push({
+    id: projectile.id,
+    playerId: projectile.playerId,
+    x: projectile.x,
+    y: projectile.y,
+    direction: { ...projectile.direction },
+    color: projectile.color
+  });
   return true;
 }
 
 // MODIFICADO: moveProjectiles para manejar inmunidad
-function moveProjectiles(room) {
+// frameEvents (opcional) acumula los eventos visuales del tick: hitEvents, blockEvents, expiredProjectiles
+function moveProjectiles(room, frameEvents = { hitEvents: [], blockEvents: [], expiredProjectiles: [] }) {
   const { segmentSize, canvasWidth, canvasHeight } = room.config;
   
   room.projectiles = room.projectiles.filter(projectile => {
+    const prevX = projectile.x;
+    const prevY = projectile.y;
     projectile.x += projectile.direction.x * segmentSize;
     projectile.y += projectile.direction.y * segmentSize;
     
     if (projectile.x < 0 || projectile.x >= canvasWidth || 
         projectile.y < 0 || projectile.y >= canvasHeight) {
+      // Última celda dentro de la arena (acotada por si el disparo nació en el borde)
+      frameEvents.expiredProjectiles.push({
+        id: projectile.id,
+        x: Math.max(0, Math.min(canvasWidth - segmentSize, prevX)),
+        y: Math.max(0, Math.min(canvasHeight - segmentSize, prevY))
+      });
       return false;
     }
     
@@ -645,10 +666,18 @@ function moveProjectiles(room) {
             if (player.hasImmunity()) {
               player.useImmunity(); // Consumir inmunidad
               console.log(`${player.name} used immunity to block projectile`);
+              frameEvents.blockEvents.push({
+                playerId: player.id,
+                attackerId: projectile.playerId,
+                projectileId: projectile.id,
+                x: segment.x,
+                y: segment.y
+              });
               return false; // Remover el proyectil
             }
             
             // Sin inmunidad, aplicar daño normal
+            const lengthBefore = player.segments.length;
             if (i === 0) {
               const segmentsToRemove = Math.min(3, player.segments.length - 1);
               for (let j = 0; j < segmentsToRemove; j++) {
@@ -660,6 +689,17 @@ function moveProjectiles(room) {
               player.segments = player.segments.slice(0, i);
             }
             player.updateTargets();
+            frameEvents.hitEvents.push({
+              targetId: player.id,
+              attackerId: projectile.playerId,
+              projectileId: projectile.id,
+              x: segment.x,
+              y: segment.y,
+              segmentsLost: lengthBefore - player.segments.length,
+              headshot: i === 0,
+              color: player.color,
+              attackerColor: projectile.color
+            });
             return false;
           }
         }
@@ -804,6 +844,7 @@ function startNewRound(room) {
   room.gameState.downCounter = 3; // FIJO: siempre 3 segundos
   room.gameState.roundTimeLeft = room.config.roundTime;
   room.projectiles = [];
+  room.pendingProjectileEvents = []; // No filtrar disparos de la ronda anterior
   room.consumables = []; // Limpiar consumibles
   
   room.players.forEach((player, index) => {
@@ -836,6 +877,7 @@ function startGame(room) {
     }
     
     room.gameState.playing = true;
+    room.pendingProjectileEvents = []; // Arranca la ronda sin eventos de disparo viejos
     
     console.log(`Starting round ${room.gameState.round} in room ${room.id}`);
     io.to(room.id).emit('gameStart', {
@@ -875,13 +917,18 @@ function gameLogicLoop(room) {
   const { canvasWidth, canvasHeight, segmentSize } = room.config;
   let portalEvents = [];
   let consumableEvents = [];
+  // Eventos visuales del tick (todos los arrays viajan siempre, aunque estén vacíos)
+  const foodEvents = [];
+  const frameEvents = { hitEvents: [], blockEvents: [], expiredProjectiles: [] };
+  const projectileEvents = room.pendingProjectileEvents || [];
+  room.pendingProjectileEvents = [];
   
   if (!room.gameboard || room.gameboard.length === 0) {
     resetGameBoard(room);
   }
   
   if (room.config.attacksEnabled) {
-    moveProjectiles(room);
+    moveProjectiles(room, frameEvents);
   }
   
   room.players.forEach((player) => {
@@ -904,6 +951,7 @@ function gameLogicLoop(room) {
       let headX = Math.floor(head.x / segmentSize);
       let headY = Math.floor(head.y / segmentSize);
       let portalOccurred = false;
+      const portalEventsStart = portalEvents.length;
       
       // Lógica de portales
       if (headX < 0) {
@@ -930,13 +978,23 @@ function gameLogicLoop(room) {
         portalEvents.push({ playerId: player.id, type: 'vertical', from: 'bottom', to: 'top' });
       }
       
+      // Coordenadas del portal: cabeza antes de moverse y cabeza ya envuelta
+      for (let p = portalEventsStart; p < portalEvents.length; p++) {
+        portalEvents[p].fromX = prevHead.x;
+        portalEvents[p].fromY = prevHead.y;
+        portalEvents[p].toX = head.x;
+        portalEvents[p].toY = head.y;
+      }
+
       // Verificar consumo de consumibles
       const consumedConsumable = checkConsumableConsumption(room, player);
       if (consumedConsumable) {
         consumableEvents.push({
           playerId: player.id,
           playerName: player.name,
-          consumableType: consumedConsumable.type
+          consumableType: consumedConsumable.type,
+          x: consumedConsumable.x,
+          y: consumedConsumable.y
         });
         
         // Reiniciar timer del tipo de consumible consumido
@@ -954,6 +1012,13 @@ function gameLogicLoop(room) {
           const eatenFood = room.foods[eatenFoodIndex];
           player.EatFood(eatenFood.score);
           room.foods.splice(eatenFoodIndex, 1);
+          foodEvents.push({
+            playerId: player.id,
+            x: eatenFood.x,
+            y: eatenFood.y,
+            score: eatenFood.score,
+            color: player.color
+          });
           
           let foodX, foodY;
           let attempts = 0;
@@ -988,6 +1053,11 @@ function gameLogicLoop(room) {
     projectiles: [...room.projectiles],
     portals: portalEvents,
     consumableEvents: consumableEvents,
+    foodEvents: foodEvents,
+    hitEvents: frameEvents.hitEvents,
+    blockEvents: frameEvents.blockEvents,
+    projectileEvents: projectileEvents,
+    expiredProjectiles: frameEvents.expiredProjectiles,
     gameState: {
       playing: room.gameState.playing,
       round: room.gameState.round,
@@ -1569,6 +1639,9 @@ io.on('connection', (socket) => {
       console.log(`Player "${playerName}" left room ${roomId}`);
       
       room.projectiles = room.projectiles.filter(p => p.playerId !== socket.id);
+      if (room.pendingProjectileEvents) {
+        room.pendingProjectileEvents = room.pendingProjectileEvents.filter(e => e.playerId !== socket.id);
+      }
       delete room.roundScores[socket.id];
       
       // NUEVO: Actualizar datos del usuario (ya no está en sala)
