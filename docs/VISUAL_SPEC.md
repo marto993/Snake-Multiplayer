@@ -530,7 +530,7 @@ body[data-scene]
 Notas para LAYOUT:
 
 - `#scenes` es `display: grid` y cada `.scene` ocupa `grid-area: 1 / 1`, así dos escenas se superponen durante la transición sin posicionamiento absoluto, y la página hace scroll normal si una escena es más alta que la pantalla.
-- Se conservan los atributos que el JS actual usa: `onclick="resetPlayerProfile()"` en `#resetProfileButton`, `maxlength` de `#username` (20) y `#roomId` (6), los `value` y `selected` de los selects (velocidad 83 y tamaño 20 seleccionados; intervalo 3 y duración 5 seleccionados), `min`/`max` de los inputs numéricos (2 y 16), `checked` de `#immunityEnabledInput`.
+- Se conservan los atributos que el JS actual usa: `onclick="resetPlayerProfile()"` en `#resetProfileButton`, `maxlength` de `#username` (20) y `#roomId` (6), y los `value` de los radios de `#difficultyPicker` (`easy`, `medium` y `hard`, con `medium` marcado).
 - `#roomId` usa cifras MONO, interletrado 0,12em y `text-transform: uppercase` (es un dato, no una etiqueta).
 - `body` tiene `overflow-x: hidden` y fondo `--bio-abyss-900`.
 - Iconos: SVG en línea, trazo de 1,75 px, extremos redondeados, `currentColor`, retícula de 20 px. Se necesitan: medusa (escudo), ojo (espectador), actualizar, cerrar, chevron, corazón (pie), y los tres logos del pie que ya existen. Sin emojis en ningún lugar.
@@ -994,7 +994,7 @@ Una medusa pequeña que flota en su celda: campana de `0,8·s` de ancho y `0,55�
 
 ### 5.10 Proyectiles
 
-Pulso de luz con estela. Posición: `renderX, renderY` de `ClientProjectile` más `s/2`.
+Pulso de luz con estela. Posición: `x, y` que `Motion.projectileAt` (`js/net/motion.js`) interpola para el instante dibujado, más `s/2`.
 
 - **Núcleo**: cápsula orientada en `direction`, largo `0,9·s` y ancho `0,36·s`, color `core` del tirador (resuelto con `Arena.bioColor(projectile.color)`).
 - **Halo**: sprite `body` de radio `1,6·s` con alpha 0,8 y parpadeo `1 + 0,15 × sin(now × 0,05)`.
