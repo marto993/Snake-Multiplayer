@@ -2,6 +2,8 @@ const http = require('http');
 const express = require('express');
 const socketIO = require('socket.io');
 const Snake = require('./public/snakeClass.js');
+const { buildRoomConfig } = require('./game/difficulty');
+const { traceProjectile } = require('./game/projectiles');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 
@@ -240,27 +242,10 @@ const ROUND_TIME = (() => {
   return value > 0 ? value : 60;
 })();
 
-// MODIFICADO: validateRoomConfig con nuevos valores por defecto
+// La sala solo elige el nivel; el resto de la configuración sale de game/difficulty.js.
+// Los campos que manda un cliente viejo (maxPlayers, gameSpeed, ...) se ignoran.
 function validateRoomConfig(config) {
-  return {
-    maxPlayers: Math.max(2, Math.min(16, parseInt(config.maxPlayers) || 8)),
-    minPlayers: Math.max(2, Math.min(parseInt(config.maxPlayers) || 8, parseInt(config.minPlayers) || 2)),
-    maxRounds: 3, // FIJO: siempre 3 rondas
-    gameSpeed: Math.max(40, Math.min(200, parseInt(config.gameSpeed) || 83)),
-    canvasWidth: 600, // FIJO: siempre 600x600
-    canvasHeight: 600, // FIJO: siempre 600x600
-    segmentSize: Math.max(5, Math.min(25, parseInt(config.segmentSize) || 20)),
-    attacksEnabled: true, // FIJO: siempre activado
-    roundTime: ROUND_TIME, // FIJO (60 s salvo override de desarrollo ROUND_TIME)
-    // Configuración de consumibles (mantenida)
-    consumables: {
-      immunity: {
-        enabled: Boolean(config.consumables?.immunity?.enabled !== false),
-        spawnInterval: Math.max(3, Math.min(30, parseInt(config.consumables?.immunity?.spawnInterval) || 5)),
-        duration: Math.max(3, Math.min(15, parseInt(config.consumables?.immunity?.duration) || 5))
-      }
-    }
-  };
+  return buildRoomConfig(config && config.difficulty, { roundTime: ROUND_TIME });
 }
 
 function createRoom(hostId, hostName) {
@@ -378,17 +363,7 @@ function resetRoomToWaiting(room) {
   room.consumables = [];
   room.roundScores = {};
 
-  room.players.forEach((player, index) => {
-    const spawnPos = getPlayerSpawnPosition(room, index);
-    player.segments = [{ x: spawnPos.x, y: spawnPos.y }];
-    player.direction = { x: 1, y: 0 };
-    player.score = 1;
-    player.gameover = false;
-    player.scoreLeftToGrow = 0;
-    player.moveQueue = [];
-    player.activeConsumable = null;
-    player.updateTargets();
-  });
+  room.players.forEach((player, index) => resetPlayerForRound(room, player, index));
 
   resetGameBoard(room);
   generateFoods(room);
@@ -467,6 +442,14 @@ function getPlayerSpawnPosition(room, playerIndex) {
   };
 }
 
+// Deja al jugador listo para una ronda: largo inicial del nivel, mirando a la derecha,
+// sin consumibles ni movimientos pendientes
+function resetPlayerForRound(room, player, index) {
+  const spawn = getPlayerSpawnPosition(room, index);
+  player.segmentSize = room.config.segmentSize;
+  player.reset(spawn.x, spawn.y, 1, 0, room.config.startLength);
+}
+
 function verifyCoordinate(room, x, y) {
   const { segmentSize } = room.config;
   const gridX = Math.floor(x / segmentSize);
@@ -484,7 +467,7 @@ function verifyCoordinate(room, x, y) {
 function generateFoods(room) {
   const { canvasWidth, canvasHeight, segmentSize } = room.config;
   const playerCount = room.players.length;
-  const foodCount = playerCount === 2 ? 7 : playerCount + 5;
+  const foodCount = playerCount + room.config.foodExtra;
   
   room.foods = [];
   
@@ -713,76 +696,62 @@ function createProjectile(room, player) {
 // MODIFICADO: moveProjectiles para manejar inmunidad
 // frameEvents (opcional) acumula los eventos visuales del tick: hitEvents, blockEvents, expiredProjectiles
 function moveProjectiles(room, frameEvents = { hitEvents: [], blockEvents: [], expiredProjectiles: [] }) {
-  const { segmentSize, canvasWidth, canvasHeight } = room.config;
-  
+  const { segmentSize, canvasWidth, canvasHeight, projectileCells } = room.config;
+  const bounds = { cell: segmentSize, width: canvasWidth, height: canvasHeight };
+
   room.projectiles = room.projectiles.filter(projectile => {
-    const prevX = projectile.x;
-    const prevY = projectile.y;
-    projectile.x += projectile.direction.x * segmentSize;
-    projectile.y += projectile.direction.y * segmentSize;
-    
-    if (projectile.x < 0 || projectile.x >= canvasWidth || 
-        projectile.y < 0 || projectile.y >= canvasHeight) {
-      // Última celda dentro de la arena (acotada por si el disparo nació en el borde)
-      frameEvents.expiredProjectiles.push({
-        id: projectile.id,
-        x: Math.max(0, Math.min(canvasWidth - segmentSize, prevX)),
-        y: Math.max(0, Math.min(canvasHeight - segmentSize, prevY))
+    const result = traceProjectile(projectile, projectileCells, bounds, room.players);
+
+    if (result.outcome === 'alive') {
+      projectile.x = result.x;
+      projectile.y = result.y;
+      return true;
+    }
+
+    if (result.outcome === 'expired') {
+      frameEvents.expiredProjectiles.push({ id: projectile.id, x: result.x, y: result.y });
+      return false;
+    }
+
+    const player = result.player;
+    if (result.outcome === 'block') {
+      player.useImmunity(); // Consumir inmunidad
+      console.log(`${player.name} used immunity to block projectile`);
+      frameEvents.blockEvents.push({
+        playerId: player.id,
+        attackerId: projectile.playerId,
+        projectileId: projectile.id,
+        x: result.x,
+        y: result.y
       });
       return false;
     }
-    
-    for (let player of room.players) {
-      if (!player.gameover && player.segments) {
-        for (let i = 0; i < player.segments.length; i++) {
-          const segment = player.segments[i];
-          if (segment.x === projectile.x && segment.y === projectile.y) {
-            
-            // Verificar inmunidad
-            if (player.hasImmunity()) {
-              player.useImmunity(); // Consumir inmunidad
-              console.log(`${player.name} used immunity to block projectile`);
-              frameEvents.blockEvents.push({
-                playerId: player.id,
-                attackerId: projectile.playerId,
-                projectileId: projectile.id,
-                x: segment.x,
-                y: segment.y
-              });
-              return false; // Remover el proyectil
-            }
-            
-            // Sin inmunidad, aplicar daño normal
-            const lengthBefore = player.segments.length;
-            if (i === 0) {
-              const segmentsToRemove = Math.min(3, player.segments.length - 1);
-              for (let j = 0; j < segmentsToRemove; j++) {
-                if (player.segments.length > 1) {
-                  player.segments.pop();
-                }
-              }
-            } else {
-              player.segments = player.segments.slice(0, i);
-            }
-            player.updateTargets();
-            frameEvents.hitEvents.push({
-              targetId: player.id,
-              attackerId: projectile.playerId,
-              projectileId: projectile.id,
-              x: segment.x,
-              y: segment.y,
-              segmentsLost: lengthBefore - player.segments.length,
-              headshot: i === 0,
-              color: player.color,
-              attackerColor: projectile.color
-            });
-            return false;
-          }
+
+    // Impacto: en la cabeza quita hasta 3 segmentos; en el cuerpo, corta desde ahí
+    const lengthBefore = player.segments.length;
+    if (result.segmentIndex === 0) {
+      const segmentsToRemove = Math.min(3, player.segments.length - 1);
+      for (let j = 0; j < segmentsToRemove; j++) {
+        if (player.segments.length > 1) {
+          player.segments.pop();
         }
       }
+    } else {
+      player.segments = player.segments.slice(0, result.segmentIndex);
     }
-    
-    return true;
+    player.updateTargets();
+    frameEvents.hitEvents.push({
+      targetId: player.id,
+      attackerId: projectile.playerId,
+      projectileId: projectile.id,
+      x: result.x,
+      y: result.y,
+      segmentsLost: lengthBefore - player.segments.length,
+      headshot: result.segmentIndex === 0,
+      color: player.color,
+      attackerColor: projectile.color
+    });
+    return false;
   });
 }
 
@@ -952,19 +921,7 @@ function startNewRound(room) {
   room.pendingProjectileEvents = []; // No filtrar disparos de la ronda anterior
   room.consumables = []; // Limpiar consumibles
   
-  room.players.forEach((player, index) => {
-    const spawnPos = getPlayerSpawnPosition(room, index);
-    
-    player.segments = [{ x: spawnPos.x, y: spawnPos.y }];
-    player.direction = { x: 1, y: 0 };
-    player.score = 1;
-    player.gameover = false;
-    player.scoreLeftToGrow = 0;
-    player.moveQueue = [];
-    player.activeConsumable = null; // Limpiar consumibles activos
-    player.updateInterpolationSpeed(room.config.gameSpeed);
-    player.updateTargets();
-  });
+  room.players.forEach((player, index) => resetPlayerForRound(room, player, index));
   
   generateFoods(room);
   initializeConsumableSystem(room); // Reiniciar sistema de consumibles
@@ -1215,6 +1172,7 @@ io.on('connection', (socket) => {
       player.moveQueue = []; 
       player.playerId = playerProfile.playerId;
       room.players.push(player);
+      resetPlayerForRound(room, player, room.players.length - 1);
       
       socket.emit('roomCreated', { 
         roomId, 
@@ -1288,6 +1246,7 @@ io.on('connection', (socket) => {
       player.moveQueue = [];
       player.playerId = playerProfile.playerId;
       room.players.push(player);
+      resetPlayerForRound(room, player, room.players.length - 1);
       
       initializeRoundScores(room);
       socket.emit('roomJoined', { 
@@ -1329,14 +1288,7 @@ io.on('connection', (socket) => {
     room.gameState.downCounter = 3; // FIJO: siempre 3 segundos
     room.gameState.roundTimeLeft = validConfig.roundTime;
     
-    room.players.forEach((player, index) => {
-      const spawnPos = getPlayerSpawnPosition(room, index);
-      player.segments = [{ x: spawnPos.x, y: spawnPos.y }];
-      player.direction = { x: 1, y: 0 };
-      player.segmentSize = validConfig.segmentSize;
-      player.updateInterpolationSpeed(validConfig.gameSpeed);
-      player.updateTargets();
-    });
+    room.players.forEach((player, index) => resetPlayerForRound(room, player, index));
     
     resetGameBoard(room);
     generateFoods(room);
@@ -1367,6 +1319,10 @@ io.on('connection', (socket) => {
       return;
     }
     
+    // La ronda 1 arranca igual que las siguientes: largo inicial y comida según jugadores
+    room.players.forEach((player, index) => resetPlayerForRound(room, player, index));
+    resetGameBoard(room);
+    generateFoods(room);
     initializeRoundScores(room);
     updateGameBoard(room);
     io.to(currentRoom).emit('updateScores', room.roundScores);
@@ -1529,6 +1485,8 @@ io.on('connection', (socket) => {
             segmentSize: Number(room.config.segmentSize) || 20,
             attacksEnabled: Boolean(room.config.attacksEnabled),
             roundTime: Number(room.config.roundTime) || 60,
+            difficulty: String(room.config.difficulty || 'medium'),
+            projectileCells: Number(room.config.projectileCells) || 1,
             consumables: serializedConsumables
           },
           gameState: {
@@ -1569,6 +1527,7 @@ io.on('connection', (socket) => {
         maxPlayers: room.config.maxPlayers,
         playing: room.gameState.playing,
         config: {
+          difficulty: room.config.difficulty,
           maxRounds: room.config.maxRounds,
           gameSpeed: room.config.gameSpeed,
           canvasWidth: room.config.canvasWidth,
