@@ -26,7 +26,7 @@ Medido con dos jugadores en Chromium headless a 60 cuadros por segundo, durante 
 | Cuadros casi detenidos | hasta 28 | 0 |
 | Velocidad media (esperada: 240 px/s) | 219 a 231 px/s | 240 px/s |
 
-Las pruebas de `test/motion.test.js` simulan la misma serpiente a 60 y 144 Hz: la variación queda por debajo de 1 % (antes, 83 % a 144 Hz). Con jitter de red, cada frame que llega corrige el reloj del render unos milisegundos; esa corrección se reparte en el tiempo, sin cambiar la velocidad visible más de 5 %. Con 30 ms de jitter la variación queda en 2,9 %; aplicada de golpe daba 5,1 %, con cuadros de hasta 28 % de desvío.
+Las pruebas de `test/motion.test.js` simulan la misma serpiente a 60 y 144 Hz: la variación queda por debajo de 1 % (antes, 83 % a 144 Hz). Con jitter de red, cada frame que llega corrige el reloj del render unos milisegundos; esa corrección se reparte en el tiempo, sin cambiar la velocidad visible más de 5 %. Con 30 ms de jitter la variación queda en 2,9 %; aplicada de golpe daba 5,1 %, con cuadros de hasta 28 % de desvío. Tampoco interpola con las horas del servidor tal cual: el servidor no emite justo cada paso, y a 42 ms una diferencia de 3 ms cambia la velocidad un 7 %. Cada frame se ubica un paso después del anterior y se corre de a poco hacia su hora real. En la simulación del nivel difícil, con horas del servidor desparejas y jitter de red, la variación baja de 8,7 % a 3,2 % y el peor cuadro de 29 % a 7 %.
 
 El atraso visual respecto del servidor quedó igual o menor a 60 Hz (94 ms contra 104 ms en red local) y unos 27 ms mayor a 144 Hz con 30 ms de latencia y 15 ms de jitter (129 ms contra 102 ms).
 

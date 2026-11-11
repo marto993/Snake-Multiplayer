@@ -8,6 +8,11 @@
  * margen por jitter), interpolando en línea recta entre los dos frames que lo rodean. La
  * velocidad visible queda constante.
  *
+ * El servidor no emite exactamente cada gameSpeed ms, pero la serpiente avanza una celda por
+ * paso igual. Interpolar con las horas reales cambiaría la velocidad visible en cada paso (a
+ * 42 ms, 3 ms de diferencia son 7 %), así que cada frame se ubica a un paso del anterior y
+ * solo se corre un 10 % hacia su hora real. La hora real (frame.raw) se usa para el reloj.
+ *
  * Si el frame siguiente se atrasa, extrapola hasta medio paso: cada segmento sigue hacia
  * donde estaba el anterior (exacto para el cuerpo) y la cabeza sigue en su dirección.
  *
@@ -18,7 +23,8 @@
  *
  * API:
  *   Motion.createTimeline({ tickMs }) -> timeline
- *     .push(frame, recvNow)  frame: { t (hora del servidor), ... }; recvNow: performance.now() al llegar
+ *     .push(frame, recvNow)  frame: { t (hora del servidor), ... }; recvNow: performance.now() al llegar.
+ *                            Deja la hora real en frame.raw y la suavizada en frame.t
  *     .seed(frame)           estado sin hora (gameStart): queda un paso antes del primer push
  *     .setTick(ms)           duración nominal del paso (config.gameSpeed)
  *     .sample(now, out)      -> out { a, b, f, e, rt } o null si todavía no hay frames
@@ -44,6 +50,7 @@
   var OFFSET_FALL = 0.25;    // ...y baja rápido, pero sin saltar: un salto adelantaría el render de golpe
   var JITTER_EASE = 0.1;
   var TICK_EASE = 0.1;
+  var TIME_EASE = 0.1;       // cuánto se corre la hora suavizada de un frame hacia la real
   var STALE_MS = 300;        // eventos más viejos que esto se descartan (pestaña en segundo plano)
   var SNAP_STEPS = 1.5;      // un salto de más de 1,5 celdas no se interpola (reaparición)
   var SLEW = 0.05;           // el atraso del render se corrige a lo sumo 5 % del tiempo real
@@ -73,7 +80,8 @@
   };
 
   Timeline.prototype.push = function (frame, recvNow) {
-    var lag = recvNow - frame.t;
+    var raw = frame.t;
+    var lag = recvNow - raw;
     if (!this.hasOffset) {
       this.offset = lag;
       this.hasOffset = true;
@@ -86,14 +94,20 @@
     var frames = this.frames;
     var last = frames.length ? frames[frames.length - 1] : null;
     if (last) {
-      if (frame.t <= last.t) return false; // repetido o fuera de orden
-      var dt = frame.t - last.t;
-      if (dt < this.tick * 3) this.tick += (dt - this.tick) * TICK_EASE;
+      if (raw <= last.raw) return false; // repetido o fuera de orden
+      var dt = raw - last.raw;
+      if (dt < this.tick * 3) {
+        this.tick += (dt - this.tick) * TICK_EASE;
+        var expected = last.t + this.tick;
+        frame.t = expected + (raw - expected) * TIME_EASE;
+      }
+      // Un hueco de más de 3 pasos (pestaña dormida, servidor trabado): queda la hora real
     } else if (this.pendingSeed) {
-      this.pendingSeed.t = frame.t - this.tick;
+      this.pendingSeed.t = this.pendingSeed.raw = raw - this.tick;
       frames.push(this.pendingSeed);
       this.pendingSeed = null;
     }
+    frame.raw = raw;
     frame.done = false;
     frames.push(frame);
     if (frames.length > MAX_FRAMES) frames.splice(0, frames.length - MAX_FRAMES);

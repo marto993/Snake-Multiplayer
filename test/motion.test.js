@@ -29,18 +29,19 @@ function rng(seed) {
 }
 
 // Serpiente de 3 que avanza una celda por paso hacia la derecha, dibujada a `hz` cuadros por
-// segundo. El reloj del cliente está corrido 7 s del servidor. Devuelve la velocidad visible
+// segundo. El servidor emite cada `tick` ms, con un desvío de stampOf(k) ms en la hora de cada
+// frame; el frame llega lagOf(k) ms después. El reloj del cliente está corrido 7 s del servidor. Devuelve la velocidad visible
 // de la cabeza (px/s) entre cuadros consecutivos, después de medio segundo de arranque:
 // media, desvío relativo y el peor cuadro (desvío máximo respecto de la media).
-function headSpeeds({ hz, lagOf, seconds = 4 }) {
+function headSpeeds({ hz, lagOf, tick = TICK, stampOf = () => 0, seconds = 4 }) {
   const CLOCK = 7000;
   const T0 = 1000;
-  const tl = Motion.createTimeline({ tickMs: TICK });
+  const tl = Motion.createTimeline({ tickMs: tick });
   const s = {};
   const out = [];
   const arrivals = [];
-  for (let k = 0; k * TICK < seconds * 1000; k++) {
-    const t = T0 + k * TICK;
+  for (let k = 0; k * tick < seconds * 1000; k++) {
+    const t = T0 + k * tick + stampOf(k);
     arrivals.push({ t, k, at: t + lagOf(k) });
   }
   arrivals.sort((p, q) => p.at - q.at);
@@ -48,9 +49,9 @@ function headSpeeds({ hz, lagOf, seconds = 4 }) {
   let next = 0;
   for (let now = T0; now < T0 + seconds * 1000; now += 1000 / hz) {
     while (next < arrivals.length && arrivals[next].at <= now) {
-      const { t, k } = arrivals[next++];
+      const { t, k, at } = arrivals[next++];
       const snake = [0, 1, 2].map(i => ({ x: (k - i) * CELL, y: 0 }));
-      tl.push({ t, snake }, t + lagOf(k) + CLOCK);
+      tl.push({ t, snake }, at + CLOCK);
     }
     if (!tl.sample(now + CLOCK, s)) continue;
     if (s.b) Motion.snakeAt(s.a.snake, s.b.snake, s.f, CELL, 0, out);
@@ -83,6 +84,22 @@ test('velocidad pareja con jitter de red de hasta 30 ms', () => {
   const lags = [];
   const r = headSpeeds({ hz: 60, lagOf: k => (lags[k] ??= 30 + rand() * 30) });
   assert.ok(Math.abs(r.mean - NOMINAL) < 2, `media ${r.mean}`);
+  assert.ok(r.variation < 0.05, `variación ${r.variation}`);
+  assert.ok(r.maxDev < 0.1, `peor cuadro a ${r.maxDev} de la media`);
+});
+
+test('nivel difícil (42 ms): pareja aunque el servidor no emita a intervalos exactos', () => {
+  const rand = rng(11);
+  const stamps = [];
+  const lags = [];
+  const r = headSpeeds({
+    hz: 60,
+    tick: 42,
+    stampOf: k => (stamps[k] ??= (rand() - 0.5) * 10), // ±5 ms: desvío de ~3 ms
+    lagOf: k => (lags[k] ??= 30 + rand() * 15)
+  });
+  const nominal = CELL / 42 * 1000;
+  assert.ok(Math.abs(r.mean - nominal) < 3, `media ${r.mean}`);
   assert.ok(r.variation < 0.05, `variación ${r.variation}`);
   assert.ok(r.maxDev < 0.1, `peor cuadro a ${r.maxDev} de la media`);
 });
