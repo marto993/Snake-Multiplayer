@@ -1299,6 +1299,8 @@ io.on('connection', (socket) => {
     io.to(currentRoom).emit('updatePlayers', serializePlayers(room.players), 
       { playing: room.gameState.playing, round: room.gameState.round }, 
       room.config, { host: room.host, roomId: currentRoom });
+    // Los que miran la lista de salas en el lobby la vuelven a pedir y ven el nivel nuevo
+    broadcastOnlinePlayersList();
   });
 
   socket.on('startGame', () => {
