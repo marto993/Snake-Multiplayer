@@ -922,7 +922,7 @@ No se usa `shadowBlur` en ningún dibujo por frame. Todo brillo sale de sprites 
 
 ### 5.4 Serpiente
 
-Cada serpiente se dibuja como un cuerpo continuo de criatura, a partir de `snake.getRenderSegments()` (posiciones interpoladas por `snakeClass.js`).
+Cada serpiente se dibuja como un cuerpo continuo de criatura, a partir de `snake.getRenderSegments()` (posiciones interpoladas por `js/net/motion.js`).
 
 **Geometría.** `P_i` es el centro del segmento `i`, con `n` segmentos. `t_i = i / max(n - 1, 1)` va de 0 (cabeza) a 1 (cola). El radio del cuerpo es `r(t) = s × (0,46 - 0,22 × t^1,4)`: 0,46·s junto a la cabeza y 0,24·s en la punta de la cola.
 
@@ -954,7 +954,7 @@ Cuando una serpiente cruza un borde, dos puntos consecutivos quedan a más de me
 - Al recorrer los puntos, si `|P_{i+1}.x - P_i.x| > 300` o `|P_{i+1}.y - P_i.y| > 300`, se cierra el tramo actual en `P_i` y se abre otro en `P_{i+1}`. Cada tramo se dibuja por separado en todas las pasadas (halo, cuerpo, filamento, fotóforos), y la ondulación usa solo vecinos del mismo tramo.
 - `t` sigue siendo el índice global del segmento, para que el grosor y el color sean continuos de un lado al otro.
 - En cada extremo de tramo que toca un borde, se dibuja un sprite de glow del color `body` con alpha 0,35 sobre el borde (x o y fijada en 0 o 600), para que la criatura parezca atravesar una membrana.
-- Esto se suma a la detección que ya hace `updateRenderPosition()` (`snakeClass.js:140-148`), que evita que un segmento interpolado viaje de un borde al otro. No se modifica `snakeClass.js`.
+- Esto se suma a la interpolación de `js/net/motion.js`, que lleva cada segmento por el lado corto de la arena: sale por un borde y, cuando su centro lo cruza, pasa al borde opuesto. Nunca viaja de un borde al otro por adentro.
 
 ### 5.6 Jugador propio y etiquetas
 
@@ -1337,7 +1337,7 @@ Responsable: SERVIDOR. Todo es aditivo: no cambia ningún campo existente ni el 
 - **`portals`**: cada evento suma `fromX, fromY` (la cabeza antes de moverse, `prevHead`, `index.js:893`) y `toX, toY` (la cabeza después de envolver).
 - **`consumableEvents`**: cada evento suma `x, y` del consumible recogido.
 
-Detalle de orden útil para el cliente: `moveProjectiles` corre antes de mover a los jugadores (`index.js:883-885`), así que los impactos de un frame se refieren a las posiciones del frame anterior. Por eso INTEGRADOR despacha los eventos antes de aplicar las posiciones nuevas.
+Detalle de orden útil para el cliente: `moveProjectiles` corre antes de mover a los jugadores (`index.js:883-885`), así que los impactos de un frame se refieren a las posiciones del frame anterior. Por eso INTEGRADOR despacha los eventos de un frame cuando el render lo alcanza, antes de dibujar sus posiciones.
 
 ## 10. Integración
 
@@ -1347,7 +1347,7 @@ Responsable: INTEGRADOR. Esta sección resume lo que cambia en `SnakeGame.js` pa
 
 **Bucle de render.** Un único `requestAnimationFrame` siempre activo (reemplaza a `startRenderLoop` y `stopRenderLoop`, que hoy detienen el dibujo al terminar la ronda). Por frame:
 
-1. Si se está jugando una ronda y no hay fin de ronda pendiente: `updateRenderPosition()` de serpientes y proyectiles, y `Arena.render(state, now)` con `state = { snakes, foods, consumables, projectiles: clientProjectiles, myId: socket.id, roundTimeLeft, playing, spectating: isSpectating }`.
+1. Si se está jugando una ronda y no hay fin de ronda pendiente: posiciones de serpientes y proyectiles desde la línea de tiempo (`js/net/motion.js`), y `Arena.render(state, now)` con `state = { snakes, foods, consumables, projectiles: clientProjectiles, myId: socket.id, roundTimeLeft, playing, spectating: isSpectating }`.
 2. Si hay fin de ronda pendiente y no pasaron 2400 ms: `Arena.render` con el último estado congelado.
 3. En sala, entre rondas después del congelamiento, o con la escena 'game' sin ronda: `Arena.renderIdle(now, { snakesPreview, caption })`, con `snakesPreview` armado a partir de `snakes` (id, name, color, `isMe`).
 4. Si la escena actual no es 'room' ni 'game': no se dibuja la arena.

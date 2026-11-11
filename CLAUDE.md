@@ -1,12 +1,13 @@
 # Snake Multiplayer
 
-Real-time multiplayer Snake. Vanilla JS + Socket.IO + SQLite. **No build step, no bundler, no automated tests.** 3 production deps. Deployed on Fly.io.
+Real-time multiplayer Snake. Vanilla JS + Socket.IO + SQLite. **No build step, no bundler.** 3 production deps. Deployed on Fly.io.
 
 ## Commands
 
 ```bash
 npm install
 npm run dev    # nodemon, port 3000
+npm test       # unit tests in test/ (node --test, no dependencies)
 npm start      # production
 fly deploy     # deploy to Fly.io
 ```
@@ -20,21 +21,23 @@ fly deploy     # deploy to Fly.io
 | `public/snakeClass.js` | ~350 | Snake entity — runs on **both** client and server |
 | `public/index.html` | ~360 | Scene markup only (no inline CSS) |
 | `public/css/theme.css` | ~2600 | Bioluminescent theme, `--bio-*` design tokens |
+| `public/js/net/motion.js` | ~250 | `window.Motion`: timeline of server frames, constant-speed interpolation (also loads in Node for tests) |
 | `public/js/fx/particles.js` | ~450 | `window.Particles`: pooled particle systems |
 | `public/js/render/arena.js` | ~3100 | `window.Arena`: game canvas renderer (DPR, glow sprites, effects, idle attract mode, last-10s counter) |
 | `public/js/ui/backdrop.js` | ~1150 | `window.Backdrop`: full-screen ambient canvas behind every scene, moods |
 | `public/js/ui/scenes.js` | ~2300 | `window.Scenes` / `Overlays` / `Toasts` / `HUD`: scene transitions, intro, countdown, round end, final, toasts, DOM HUD |
 | `docs/VISUAL_SPEC.md` | ~1400 | Visual spec: palette, typography, motion, scene map, effects catalog. Read it before touching visuals. |
+| `docs/MOTION_SPEC.md` | ~160 | Design (not implemented yet): fixed difficulty levels and continuous 4000×4000 movement |
 
-Script load order matters (index.html): socket.io → snakeClass → particles → arena → backdrop → scenes → SnakeGame. Each module is an IIFE that exposes its API on `window`; no ES modules.
+Script load order matters (index.html): socket.io → snakeClass → motion → particles → arena → backdrop → scenes → SnakeGame. Each module is an IIFE that exposes its API on `window`; no ES modules.
 
 `game_stats.db` is auto-created. Schema lives in `index.js` near the top.
 
 ## Architecture
 
-**Server-authoritative.** Server runs `gameLogicLoop()` at `config.gameSpeed` (default 83ms ≈ 12 Hz), validates everything, broadcasts `gameLogicFrame`. Client predicts locally for input responsiveness, then reconciles to server state.
+**Server-authoritative.** Server runs `gameLogicLoop()` at `config.gameSpeed` (default 83ms ≈ 12 Hz), validates everything, broadcasts `gameLogicFrame`. The client does not predict: input goes to the server (`newMove`, `attack`) and shows up in the next frames.
 
-**Interpolation.** Client renders at ~60 FPS by lerping `renderSegments` toward `targetSegments` every animation frame. `interpolationSpeed` is auto-derived from `gameSpeed`.
+**Interpolation.** `SnakeGame.js` pushes every `gameLogicFrame` into a `Motion` timeline keyed by the server `timestamp`. Each animation frame renders the instant one tick (plus a jitter margin) behind the newest frame, interpolating linearly between the two frames around it, so visible speed is constant at any monitor refresh rate. Late frames are extrapolated up to half a tick. Clock corrections from each new frame are spread over time (render speed changes at most 5 %), so network jitter doesn't cause micro-stutters. Foods, consumables, immunity and `Arena.on*` effects come from the frame the render has reached, so effects line up with the head. `snakeClass.js` still has the old `updateRenderPosition()` lerp, but the client no longer calls it.
 
 **Room state.** All state lives in `rooms` Map keyed by 6-char room code. Each room owns its own players, gameboard, foods, consumables, projectiles, timers, spectators. No global player state — players exist only inside a room.
 
@@ -46,8 +49,8 @@ Script load order matters (index.html): socket.io → snakeClass → particles �
 - **DB path differs by env.** Dev: `./game_stats.db`. Prod (Fly): `/app/data/game_stats.db` (persistent volume `game_stats_volume`). Logic at `index.js:14`.
 - **Player IDs are compound:** `${username}_${Date.now()}`. Don't query players by `name`.
 - **"Configurable" values that aren't:** `maxRounds=3`, `roundTime=60`, `canvasWidth/Height=600`, `attacksEnabled=true` are hardcoded despite passing through `validateRoomConfig`. Changing them needs code edits, not just UI.
-- **Portal wraparound breaks interpolation.** When a snake teleports edge-to-edge, naive lerp animates across the whole canvas. `updateRenderPosition()` detects jumps > canvas/2 and snaps instantly — preserve this when touching rendering. `arena.js` also cuts the continuous body path wherever consecutive segments are > canvas/2 apart.
-- **Game events for effects.** `gameLogicFrame` carries `foodEvents`, `hitEvents`, `blockEvents`, `projectileEvents`, `expiredProjectiles` (always present, possibly empty), plus coordinates on `portals` and `consumableEvents`. Shots fired between ticks are buffered in `room.pendingProjectileEvents`. `SnakeGame.js` forwards each one to an `Arena.on*` hook.
+- **Portal wraparound breaks interpolation.** When a snake teleports edge-to-edge, naive lerp animates across the whole canvas. `motion.js` interpolates the short way around (`wrapDelta`) and moves a segment to the opposite edge once its center crosses; `arena.js` cuts the continuous body path wherever consecutive segments are > canvas/2 apart. Preserve both when touching rendering.
+- **Game events for effects.** `gameLogicFrame` carries `foodEvents`, `hitEvents`, `blockEvents`, `projectileEvents`, `expiredProjectiles` (always present, possibly empty), plus coordinates on `portals` and `consumableEvents`. Shots fired between ticks are buffered in `room.pendingProjectileEvents`. `SnakeGame.js` forwards each one to an `Arena.on*` hook when the render reaches that frame (`timeline.drain`), not when it arrives.
 - **Rendering performance.** No `shadowBlur` in per-frame drawing: glow comes from cached offscreen sprites + `'lighter'` compositing. `arena.js` drops quality automatically under load. Don't rebuild DOM per frame; `HUD.update` diffs by player id.
 - **Round transition timer.** `endRound` stores the 3s next-round timeout in `room.gameState.nextRoundTimeoutId`. It must be cleared in `deleteRoom`, `endGame` and `abortMatch` (too few players), or a deleted room keeps ticking.
 - **Spectator vs player on join.** `joinRoom` branches on `room.gameState.playing`: in-progress room → spectator (added to `room.spectators` Map), lobby → player. Both paths must be handled when adding join logic.
@@ -58,7 +61,7 @@ Script load order matters (index.html): socket.io → snakeClass → particles �
 
 ## Testing
 
-No automated tests. Validate changes by running `npm run dev` and opening multiple browser windows (use incognito for distinct sessions). Inspect DB with `sqlite3 game_stats.db`.
+`npm test` runs the unit tests in `test/` (Node's built-in runner). They cover pure modules that load in Node without a browser or a server: `motion.js` today. Gameplay still needs a manual check: validate changes by running `npm run dev` and opening multiple browser windows (use incognito for distinct sessions). Inspect DB with `sqlite3 game_stats.db`.
 
 `ROUND_TIME=10 npm run dev` shortens rounds for testing (positive integers only; default 60). Headless browser checks work with `puppeteer-core` + `/snap/bin/chromium` (the snap can't write to host `/tmp`, so use a dir under `~`).
 

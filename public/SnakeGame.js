@@ -1,8 +1,8 @@
 /*
  * SnakeGame.js: cliente de Snake Multiplayer.
  *
- * Mantiene la lógica de red y de estado (socket.io, perfil, salas, predicción e
- * interpolación) y conecta la capa visual del abismo bioluminiscente:
+ * Mantiene la lógica de red y de estado (socket.io, perfil, salas) y conecta:
+ *   - window.Motion    (js/net/motion.js)    línea de tiempo de los frames del servidor
  *   - window.Arena     (js/render/arena.js)  dibuja canvas#game
  *   - window.Backdrop  (js/ui/backdrop.js)   fondo vivo
  *   - window.Scenes / Overlays / Toasts / HUD (js/ui/scenes.js)
@@ -10,7 +10,8 @@
  * Reglas de esta capa (docs/VISUAL_SPEC.md, sección 10):
  *   - Un único requestAnimationFrame siempre vivo. Con ronda en curso: Arena.render;
  *     al terminar la ronda, 2400 ms de estado congelado; el resto del tiempo, Arena.renderIdle.
- *   - Los eventos de gameLogicFrame se despachan a la arena ANTES de aplicar las posiciones nuevas.
+ *   - Los eventos de gameLogicFrame se despachan a la arena cuando el render alcanza su frame,
+ *     ANTES de dibujar las posiciones de ese frame.
  *   - Nada que venga del servidor se inserta con innerHTML: todo va con textContent.
  */
 document.addEventListener('DOMContentLoaded', function () {
@@ -26,6 +27,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const HUD = window.HUD || { update: noop, show: noop, hide: noop, reset: noop };
   const Backdrop = window.Backdrop || { setMood: noop, pulse: noop };
   const Arena = window.Arena || null;
+  const Motion = window.Motion || null; // sin Motion, las posiciones se aplican al llegar (sin interpolar)
 
   const reportedErrors = new Set();
   function reportOnce(err) {
@@ -125,8 +127,7 @@ document.addEventListener('DOMContentLoaded', function () {
   let snakes = [];
   let foods = [];
   let consumables = [];
-  let projectiles = [];
-  let clientProjectiles = [];
+  let clientProjectiles = [];   // lo que dibuja la arena (applyTimelineSample)
   let isConnected = false;
   let hasConnectedOnce = false;
   let isHost = false;
@@ -501,38 +502,130 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // ===========================================================================
-  // Proyectiles del cliente (interpolados)
+  // Línea de tiempo de los frames del servidor (js/net/motion.js)
   // ===========================================================================
-  function lerp(start, end, factor) {
-    return start + (end - start) * factor;
+  // El render dibuja un instante un paso atrás del último frame e interpola en línea recta
+  // entre los dos frames que lo rodean: la velocidad visible queda constante. Comida,
+  // consumibles, escudos y eventos de la arena se toman del frame que el render ya alcanzó,
+  // así el efecto coincide con la cabeza que llega.
+  const timeline = Motion ? Motion.createTimeline({ tickMs: 83 }) : null;
+  const timeSample = { a: null, b: null, f: 0, e: 0, rt: 0 };
+  const projectileViews = new Map(); // id -> objeto que lee la arena (se reutiliza entre cuadros)
+  const projectileList = [];
+
+  function indexById(list) {
+    const map = new Map();
+    (list || []).forEach(function (item) { map.set(item.id, item); });
+    return map;
   }
 
-  function ClientProjectile(serverProjectile) {
-    this.id = serverProjectile.id;
-    this.playerId = serverProjectile.playerId;
-    this.color = serverProjectile.color;
-    this.direction = { x: serverProjectile.direction.x, y: serverProjectile.direction.y };
-
-    this.targetX = serverProjectile.x;
-    this.targetY = serverProjectile.y;
-
-    this.renderX = serverProjectile.prevX || serverProjectile.x;
-    this.renderY = serverProjectile.prevY || serverProjectile.y;
-
-    this.interpolationSpeed = 0.2;
+  function timelineFrame(data, t) {
+    return {
+      t: t,
+      snakes: indexById(data.players),
+      projectiles: indexById(data.projectiles),
+      foods: data.foods || [],
+      consumables: data.consumables || [],
+      payload: data
+    };
   }
 
-  ClientProjectile.prototype.updateRenderPosition = function () {
-    this.renderX = lerp(this.renderX, this.targetX, this.interpolationSpeed);
-    this.renderY = lerp(this.renderY, this.targetY, this.interpolationSpeed);
-  };
+  // Ronda nueva (gameStart o spectatingStarted): el primer frame interpola desde este estado
+  function restartTimeline(data) {
+    resetTimeline();
+    if (!timeline) return;
+    if (roomConfig && roomConfig.gameSpeed) timeline.setTick(roomConfig.gameSpeed);
+    timeline.seed(timelineFrame(data, null));
+  }
 
-  ClientProjectile.prototype.updateTarget = function (serverProjectile) {
-    this.targetX = serverProjectile.x;
-    this.targetY = serverProjectile.y;
-    this.direction = { x: serverProjectile.direction.x, y: serverProjectile.direction.y };
-    this.color = serverProjectile.color;
-  };
+  function resetTimeline() {
+    projectileViews.clear();
+    projectileList.length = 0;
+    clientProjectiles = [];
+    if (timeline) timeline.clear();
+  }
+
+  function dispatchTimelineFrame(frame) {
+    const data = frame.payload;
+    dispatchFrameEvents(data);
+    callEach(data.consumableEvents, function (event) {
+      if (event.consumableType === 'immunity' && event.playerId === socket.id && !isSpectating) {
+        toast('Escudo activo: bloquea un disparo', 'success', 2500);
+      }
+    });
+  }
+
+  function projectileView(p) {
+    let view = projectileViews.get(p.id);
+    if (!view) {
+      view = { id: p.id, playerId: p.playerId, color: p.color, direction: p.direction, x: p.x, y: p.y, seen: 0 };
+      projectileViews.set(p.id, view);
+    }
+    view.color = p.color;
+    view.direction = p.direction;
+    return view;
+  }
+
+  function applyTimelineSample(s, now) {
+    // Efectos del frame recién alcanzado, antes de dibujarlo: la arena todavía tiene el cuerpo
+    // del cuadro anterior, así un corte desprende la parte que se veía
+    timeline.drain(dispatchTimelineFrame);
+
+    const a = s.a, b = s.b;
+    const cell = segmentSize;
+    const period = Math.floor(ARENA_SIZE / cell) * cell;
+    for (let i = 0; i < snakes.length; i++) {
+      const snake = snakes[i];
+      const pa = a.snakes.get(snake.id);
+      const pb = b ? b.snakes.get(snake.id) : null;
+      if (pa && pb) Motion.snakeAt(pa.segments, pb.segments, s.f, cell, period, snake.renderSegments);
+      else if (pa) Motion.snakeAhead(pa.segments, pa.direction, b ? 0 : s.e, cell, period, snake.renderSegments);
+      else if (pb) Motion.snakeAt(null, pb.segments, 0, cell, period, snake.renderSegments);
+      else continue;
+      snake.direction = (pb || pa).direction;
+      if (pa) snake.activeConsumable = pa.activeConsumable;
+    }
+
+    foods = a.foods;
+    consumables = a.consumables;
+
+    // Proyectiles: los de a avanzan hacia b (o siguen de largo si ya no están); los nuevos de b
+    // arrancan donde se crearon
+    const f = b ? s.f : s.e;
+    projectileList.length = 0;
+    a.projectiles.forEach(function (pa) {
+      const pb = b ? b.projectiles.get(pa.id) : null;
+      const view = projectileView(pb || pa);
+      Motion.projectileAt(pa, pb, f, cell, view);
+      view.seen = now;
+      projectileList.push(view);
+    });
+    if (b) {
+      b.projectiles.forEach(function (pb) {
+        if (a.projectiles.has(pb.id)) return;
+        const view = projectileView(pb);
+        Motion.projectileAt(null, pb, s.f, cell, view);
+        view.seen = now;
+        projectileList.push(view);
+      });
+    }
+    projectileViews.forEach(function (view, id) { if (view.seen !== now) projectileViews.delete(id); });
+    clientProjectiles = projectileList;
+  }
+
+  function applyTimeline(now) {
+    if (!timeline) return;
+    const s = timeline.sample(now, timeSample);
+    if (s) applyTimelineSample(s, now);
+  }
+
+  // Fin de ronda: lo congelado es el último frame (coincide con los puntajes finales)
+  function settleTimeline() {
+    if (!timeline) return;
+    const s = timeline.sampleLatest(timeSample);
+    if (s) applyTimelineSample(s, perfNow());
+    timeline.clear();
+  }
 
   // ===========================================================================
   // Teclado
@@ -613,22 +706,6 @@ document.addEventListener('DOMContentLoaded', function () {
     return list.map(function (seg) { return { x: seg.x, y: seg.y }; });
   }
 
-  function syncProjectiles(serverProjectiles) {
-    const list = serverProjectiles || [];
-    clientProjectiles.forEach(function (clientProjectile) {
-      const serverProjectile = list.find(function (p) { return p.id === clientProjectile.id; });
-      if (serverProjectile) clientProjectile.updateTarget(serverProjectile);
-    });
-    clientProjectiles = clientProjectiles.filter(function (clientProjectile) {
-      return list.some(function (p) { return p.id === clientProjectile.id; });
-    });
-    list.forEach(function (serverProjectile) {
-      if (!clientProjectiles.find(function (cp) { return cp.id === serverProjectile.id; })) {
-        clientProjectiles.push(new ClientProjectile(serverProjectile));
-      }
-    });
-  }
-
   function rebuildPreview() {
     const me = isSpectating ? null : socket.id;
     previewList = snakes.map(function (s) {
@@ -689,10 +766,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (scene !== 'room' && scene !== 'game' && scene !== 'final') return;
     try {
       if (roundLive) {
-        for (let i = 0; i < snakes.length; i++) {
-          if (snakes[i].updateRenderPosition) snakes[i].updateRenderPosition();
-        }
-        for (let j = 0; j < clientProjectiles.length; j++) clientProjectiles[j].updateRenderPosition();
+        applyTimeline(now);
         fillArenaState();
         Arena.render(arenaState, now);
       } else if (now < freezeUntil || (roundEndHold && gameOverScreen && !gameOverScreen.classList.contains('hidden'))) {
@@ -857,7 +931,7 @@ document.addEventListener('DOMContentLoaded', function () {
     roundEndHold = false;
     countdownActive = false;
     gameState = Object.assign({}, gameState, { playing: false });
-    clientProjectiles = [];
+    resetTimeline();
     resetTension();
     ui(function () { Overlays.hideAll(); });
     if (isSpectating) {
@@ -1005,9 +1079,6 @@ document.addEventListener('DOMContentLoaded', function () {
     updateConfigInputs(newConfig);
     segmentSize = newConfig.segmentSize;
     applyArenaConfig();
-    snakes.forEach(function (snake) {
-      snake.updateInterpolationSpeed(newConfig.gameSpeed);
-    });
     if (changed) toast('Configuración actualizada', 'success');
   });
 
@@ -1041,10 +1112,8 @@ document.addEventListener('DOMContentLoaded', function () {
     snakes = data.players.map(function (serverPlayer) { return createLocalSnake(serverPlayer); });
     foods = data.foods || [];
     consumables = data.consumables || [];
-    projectiles = data.projectiles || [];
     // Los proyectiles vivos al terminar la ronda anterior desaparecen sin evento
-    clientProjectiles = [];
-    syncProjectiles(projectiles);
+    restartTimeline(data);
     gameState = data.gameState;
     roundTimeLeft = data.gameState.roundTimeLeft !== undefined ? data.gameState.roundTimeLeft : roundTime();
 
@@ -1087,9 +1156,7 @@ document.addEventListener('DOMContentLoaded', function () {
     snakes = data.players.map(function (serverPlayer) { return createLocalSnake(serverPlayer); });
     foods = data.foods || [];
     consumables = data.consumables || [];
-    projectiles = data.projectiles || [];
-    clientProjectiles = [];
-    syncProjectiles(projectiles);
+    restartTimeline(data);
     gameState = data.gameState;
     roundTimeLeft = data.roundTimeLeft || roundTime();
     roomScores = data.roundScores || {};
@@ -1137,47 +1204,35 @@ document.addEventListener('DOMContentLoaded', function () {
   socket.on('gameLogicFrame', function (data) {
     if (!data || !currentRoomId) return;
 
-    // 1. Efectos: antes de aplicar las posiciones nuevas (la arena usa las del frame anterior)
-    dispatchFrameEvents(data);
+    // 1. Posiciones, comida, proyectiles y eventos de la arena: entran a la línea de tiempo y se
+    //    aplican cuando el render alcanza este frame (applyTimelineSample)
+    if (timeline) {
+      timeline.push(timelineFrame(data, data.timestamp), perfNow());
+    } else {
+      dispatchTimelineFrame({ payload: data });
+      foods = data.foods || [];
+      consumables = data.consumables || [];
+      clientProjectiles = data.projectiles || [];
+    }
 
-    // 2. Estado autoritativo del servidor (sin cambios respecto de la versión anterior)
+    // 2. Estado autoritativo para el HUD: al instante
     snakes.forEach(function (localSnake) {
       const serverSnake = data.players.find(function (p) { return p.id === localSnake.id; });
       if (serverSnake) {
-        const portalEvent = data.portals && data.portals.find(function (p) { return p.playerId === localSnake.id; });
-
-        if (portalEvent) {
-          // Portal: se salta la interpolación para no cruzar la arena entera
-          localSnake.targetSegments = copySegments(serverSnake.segments);
-          localSnake.segments = copySegments(serverSnake.segments);
+        localSnake.segments = copySegments(serverSnake.segments);
+        if (!timeline) {
           localSnake.renderSegments = copySegments(serverSnake.segments);
-        } else {
-          localSnake.targetSegments = copySegments(serverSnake.segments);
-          localSnake.segments = copySegments(serverSnake.segments);
+          localSnake.direction = { x: serverSnake.direction.x, y: serverSnake.direction.y };
+          localSnake.activeConsumable = serverSnake.activeConsumable;
         }
-        localSnake.direction = { x: serverSnake.direction.x, y: serverSnake.direction.y };
         localSnake.score = serverSnake.score;
         localSnake.gameover = serverSnake.gameover;
         localSnake.scoreLeftToGrow = serverSnake.scoreLeftToGrow;
         localSnake.color = serverSnake.color;
-        localSnake.activeConsumable = serverSnake.activeConsumable;
       }
     });
 
-    projectiles = data.projectiles || [];
-    syncProjectiles(projectiles);
-
-    foods = data.foods || [];
-    consumables = data.consumables || [];
     gameState = data.gameState;
-
-    if (data.consumableEvents && data.consumableEvents.length > 0) {
-      data.consumableEvents.forEach(function (event) {
-        if (event.consumableType === 'immunity' && event.playerId === socket.id && !isSpectating) {
-          toast('Escudo activo: bloquea un disparo', 'success', 2500);
-        }
-      });
-    }
 
     if (data.gameState && data.gameState.roundTimeLeft !== undefined) {
       roundTimeLeft = data.gameState.roundTimeLeft;
@@ -1190,6 +1245,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   socket.on('roundEnd', function (data) {
     roomScores = data.scores || {};
+    settleTimeline();
     roundLive = false;
     freezeUntil = perfNow() + FREEZE_MS;
     roundEndHold = true;
@@ -1354,8 +1410,7 @@ document.addEventListener('DOMContentLoaded', function () {
     snakes = [];
     foods = [];
     consumables = [];
-    projectiles = [];
-    clientProjectiles = [];
+    resetTimeline();
     roundLive = false;
     freezeUntil = 0;
     roundEndHold = false;
