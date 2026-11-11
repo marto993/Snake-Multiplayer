@@ -50,7 +50,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const INVITE_COOLDOWN_MS = 8000;      // "Enviada" en el botón de invitar
   const PROFILE_RETRY_MAX = 6;          // reintentos del re-registro automático ("ya está conectado")
   const KEY_TO_ARROW = { 37: 37, 38: 38, 39: 39, 40: 40, 87: 38, 65: 37, 83: 40, 68: 39 }; // flechas y WASD
-  const SPEED_LABELS = { 200: 'lenta', 83: 'normal', 50: 'rápida', 40: 'muy rápida' };
+  const DIFFICULTY_NAMES = { easy: 'fácil', medium: 'medio', hard: 'difícil' };
 
   // Mensajes del servidor que llegan en inglés (spec 8.6). Los que ya llegan en español pasan igual.
   const SERVER_ERRORS_ES = {
@@ -95,16 +95,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const configPanel = $('configPanel');
   const toggleConfigButton = $('toggleConfigButton');
   const configSettings = $('configSettings');
-  const saveConfigButton = $('saveConfigButton');
-
-  const maxPlayersInput = $('maxPlayersInput');
-  const minPlayersInput = $('minPlayersInput');
-  const gameSpeedInput = $('gameSpeedInput');
-  const segmentSizeInput = $('segmentSizeInput');
-
-  const immunityEnabledInput = $('immunityEnabledInput');
-  const immunityIntervalInput = $('immunityIntervalInput');
-  const immunityDurationInput = $('immunityDurationInput');
+  const difficultyInputs = Array.prototype.slice.call(document.querySelectorAll('#difficultyPicker input[name="difficulty"]'));
 
   const onlinePlayersList = $('onlinePlayersList');
   const dockCount = $('dockCount');
@@ -574,6 +565,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const a = s.a, b = s.b;
     const cell = segmentSize;
     const period = Math.floor(ARENA_SIZE / cell) * cell;
+    const shotStep = cell * ((roomConfig && +roomConfig.projectileCells) || 1); // lo que avanza un disparo por paso
     for (let i = 0; i < snakes.length; i++) {
       const snake = snakes[i];
       const pa = a.snakes.get(snake.id);
@@ -596,7 +588,7 @@ document.addEventListener('DOMContentLoaded', function () {
     a.projectiles.forEach(function (pa) {
       const pb = b ? b.projectiles.get(pa.id) : null;
       const view = projectileView(pb || pa);
-      Motion.projectileAt(pa, pb, f, cell, view);
+      Motion.projectileAt(pa, pb, f, shotStep, view);
       view.seen = now;
       projectileList.push(view);
     });
@@ -604,7 +596,7 @@ document.addEventListener('DOMContentLoaded', function () {
       b.projectiles.forEach(function (pb) {
         if (a.projectiles.has(pb.id)) return;
         const view = projectileView(pb);
-        Motion.projectileAt(null, pb, s.f, cell, view);
+        Motion.projectileAt(null, pb, s.f, shotStep, view);
         view.seen = now;
         projectileList.push(view);
       });
@@ -1064,13 +1056,10 @@ document.addEventListener('DOMContentLoaded', function () {
     socket.emit('getOnlinePlayers');
   });
 
-  // Firma de los valores editables: el anfitrión reenvía la misma configuración al iniciar
+  // Firma de lo editable (el nivel): el anfitrión reenvía la misma configuración al iniciar
   // y eso no debe disparar el aviso "Configuración actualizada" en toda la sala.
   function configSignature(config) {
-    if (!config) return '';
-    const immunity = (config.consumables && config.consumables.immunity) || {};
-    return [config.maxPlayers, config.minPlayers, config.gameSpeed, config.segmentSize,
-      immunity.enabled !== false, immunity.spawnInterval, immunity.duration].join('|');
+    return config ? String(config.difficulty || '') : '';
   }
 
   socket.on('configUpdated', function (newConfig) {
@@ -1437,11 +1426,9 @@ document.addEventListener('DOMContentLoaded', function () {
     toggleElement(configPanel, visible);
     if (!visible) return;
     if (isHost) {
-      showElement(saveConfigButton);
       setConfigInputsEnabled(true);
       toggleConfigButton.textContent = 'Configuración';
     } else {
-      hideElement(saveConfigButton);
       setConfigInputsEnabled(false);
       toggleConfigButton.textContent = 'Ver configuración';
     }
@@ -1449,59 +1436,18 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function setConfigInputsEnabled(enabled) {
-    maxPlayersInput.disabled = !enabled;
-    minPlayersInput.disabled = !enabled;
-    gameSpeedInput.disabled = !enabled;
-    segmentSizeInput.disabled = !enabled;
-
-    if (immunityEnabledInput) immunityEnabledInput.disabled = !enabled;
-    if (immunityIntervalInput) immunityIntervalInput.disabled = !enabled;
-    if (immunityDurationInput) immunityDurationInput.disabled = !enabled;
+    difficultyInputs.forEach(function (input) { input.disabled = !enabled; });
   }
 
   function updateConfigInputs(config) {
     if (!config) return;
-    if (config.maxPlayers !== undefined) maxPlayersInput.value = config.maxPlayers;
-    if (config.minPlayers !== undefined) minPlayersInput.value = config.minPlayers;
-    if (config.gameSpeed !== undefined) gameSpeedInput.value = config.gameSpeed;
-    if (config.segmentSize !== undefined) segmentSizeInput.value = config.segmentSize;
-
-    if (config.consumables && config.consumables.immunity) {
-      if (immunityEnabledInput) immunityEnabledInput.checked = config.consumables.immunity.enabled !== false;
-      if (immunityIntervalInput) immunityIntervalInput.value = config.consumables.immunity.spawnInterval || 13;
-      if (immunityDurationInput) immunityDurationInput.value = config.consumables.immunity.duration || 5;
-    }
+    const level = difficultyKey(config.difficulty);
+    difficultyInputs.forEach(function (input) { input.checked = input.value === level; });
   }
 
-  function readConfigInputs(defaultInterval) {
-    return {
-      maxPlayers: parseInt(maxPlayersInput.value, 10),
-      minPlayers: parseInt(minPlayersInput.value, 10),
-      gameSpeed: parseInt(gameSpeedInput.value, 10),
-      segmentSize: parseInt(segmentSizeInput.value, 10),
-      consumables: {
-        immunity: {
-          enabled: immunityEnabledInput ? immunityEnabledInput.checked : true,
-          spawnInterval: immunityIntervalInput ? parseInt(immunityIntervalInput.value, 10) : defaultInterval,
-          duration: immunityDurationInput ? parseInt(immunityDurationInput.value, 10) : 5
-        }
-      }
-    };
-  }
-
-  function saveConfiguration() {
-    if (!isHost) {
-      toast('Solo el anfitrión puede cambiar la configuración', 'error');
-      return;
-    }
-    const newConfig = readConfigInputs(5);
-    if (newConfig.minPlayers > newConfig.maxPlayers) {
-      markInvalid(minPlayersInput);
-      toast('El mínimo de jugadores no puede superar al máximo', 'error');
-      return;
-    }
-    clearInvalid(minPlayersInput);
-    socket.emit('updateRoomConfig', newConfig);
+  function readConfigInputs() {
+    const checked = difficultyInputs.filter(function (input) { return input.checked; })[0];
+    return { difficulty: checked ? checked.value : 'medium' };
   }
 
   // Botón de inicio, mensaje de espera y caption del modo atracción
@@ -1628,30 +1574,23 @@ document.addEventListener('DOMContentLoaded', function () {
   // ===========================================================================
   // Lobby: lista de salas
   // ===========================================================================
-  function speedLabel(gameSpeed) {
-    const v = +gameSpeed;
-    if (SPEED_LABELS[v]) return SPEED_LABELS[v];
-    if (v >= 150) return 'lenta';
-    if (v >= 70) return 'normal';
-    if (v >= 45) return 'rápida';
-    return 'muy rápida';
+  // Nivel conocido o "medium" (salas de un servidor viejo, espectador sin el campo)
+  function difficultyKey(difficulty) {
+    return Object.prototype.hasOwnProperty.call(DIFFICULTY_NAMES, difficulty) ? difficulty : 'medium';
   }
 
   function roomConfigText(config) {
     const cfg = config || {};
     const rounds = +cfg.maxRounds || 3;
     const seconds = +cfg.roundTime || 60;
-    const immunity = cfg.consumables && cfg.consumables.immunity && cfg.consumables.immunity.enabled;
-    return rounds + plural(rounds, ' ronda', ' rondas') + ' de ' + seconds + ' s, velocidad ' + speedLabel(cfg.gameSpeed) +
-      ', ' + (immunity ? 'con inmunidad' : 'sin inmunidad');
+    return rounds + plural(rounds, ' ronda', ' rondas') + ' de ' + seconds + ' s, nivel ' + DIFFICULTY_NAMES[difficultyKey(cfg.difficulty)];
   }
 
   // Firma de lo que muestra una fila: si no cambió, la fila (y su botón, con foco o puntero encima) queda intacta
   function roomSignature(room) {
     const cfg = room.config || {};
-    const immunity = cfg.consumables && cfg.consumables.immunity && cfg.consumables.immunity.enabled;
     return [room.playing ? 1 : 0, room.players | 0, room.maxPlayers | 0, room.hostName || '',
-      cfg.maxRounds, cfg.roundTime, cfg.gameSpeed, immunity ? 1 : 0].join('|');
+      cfg.maxRounds, cfg.roundTime, cfg.difficulty || ''].join('|');
   }
 
   // Arma (o actualiza en el lugar) la fila de una sala. El botón de acción se conserva si la acción
@@ -1928,18 +1867,12 @@ document.addEventListener('DOMContentLoaded', function () {
     toggleConfigButton.setAttribute('aria-expanded', opening ? 'true' : 'false');
   });
 
-  saveConfigButton.addEventListener('click', function () {
-    saveConfiguration();
+  // El anfitrión cambia de nivel con un toque: el servidor lo reparte a toda la sala
+  difficultyInputs.forEach(function (input) {
+    input.addEventListener('change', function () {
+      if (isHost && input.checked) socket.emit('updateRoomConfig', readConfigInputs());
+    });
   });
-
-  function clampMinToMax() {
-    const maxVal = parseInt(maxPlayersInput.value, 10);
-    const minVal = parseInt(minPlayersInput.value, 10);
-    if (minVal > maxVal) minPlayersInput.value = maxVal;
-    clearInvalid(minPlayersInput);
-  }
-  maxPlayersInput.addEventListener('change', clampMinToMax);
-  minPlayersInput.addEventListener('change', clampMinToMax);
 
   // #restartButton ("Ocultar") lo maneja Overlays con su salida animada; respaldo si falta scenes.js
   if (!window.Overlays && restartButton) {
@@ -1985,13 +1918,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
   startGameButton.addEventListener('click', function () {
     if (startRequested) return;
-    // Guardar configuración antes de iniciar
-    if (isHost) {
-      const finalConfig = readConfigInputs(13);
-      if (finalConfig.minPlayers <= finalConfig.maxPlayers) {
-        socket.emit('updateRoomConfig', finalConfig);
-      }
-    }
+    // Reenviar el nivel antes de iniciar, por si el último cambio no llegó
+    if (isHost) socket.emit('updateRoomConfig', readConfigInputs());
     startRequested = true;
     startGameButton.disabled = true;
     socket.emit('startGame');

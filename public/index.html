@@ -157,68 +157,14 @@
                             <div id="configPanel" class="config-panel hidden" data-reveal>
                                 <button type="button" id="toggleConfigButton" class="config-toggle" aria-expanded="false" aria-controls="configSettings">Configuración</button>
                                 <div id="configSettings" class="config-settings hidden" data-reveal>
-                                    <div class="config-row">
-                                        <label class="config-label" for="maxPlayersInput">Máximo de jugadores</label>
-                                        <input type="number" id="maxPlayersInput" class="config-input" min="2" max="16" value="8" inputmode="numeric">
-                                    </div>
-                                    <div class="config-row">
-                                        <label class="config-label" for="minPlayersInput">Mínimo de jugadores</label>
-                                        <input type="number" id="minPlayersInput" class="config-input" min="2" max="16" value="2" inputmode="numeric">
-                                    </div>
-                                    <div class="config-row">
-                                        <label class="config-label" for="gameSpeedInput">Velocidad</label>
-                                        <select id="gameSpeedInput" class="config-select">
-                                            <option value="200">Lenta</option>
-                                            <option value="83" selected>Normal</option>
-                                            <option value="50">Rápida</option>
-                                            <option value="40">Muy rápida</option>
-                                        </select>
-                                    </div>
-                                    <div class="config-row">
-                                        <label class="config-label" for="segmentSizeInput">Tamaño de serpiente</label>
-                                        <select id="segmentSizeInput" class="config-select">
-                                            <option value="8">Mínima</option>
-                                            <option value="10">Pequeña</option>
-                                            <option value="15">Mediana</option>
-                                            <option value="20" selected>Grande</option>
-                                            <option value="25">Enorme</option>
-                                        </select>
-                                    </div>
-
-                                    <div class="config-divider">
-                                        <h4>Consumibles</h4>
-                                    </div>
-
-                                    <div class="config-row">
-                                        <label class="config-label config-label-icon" for="immunityEnabledInput">
-                                            <svg class="icon icon-shield" aria-hidden="true"><use href="#i-medusa"/></svg>
-                                            <span>Inmunidad</span>
-                                        </label>
-                                        <input type="checkbox" id="immunityEnabledInput" class="config-checkbox" role="switch" checked>
-                                    </div>
-                                    <div class="config-row">
-                                        <label class="config-label" for="immunityIntervalInput">Aparece cada</label>
-                                        <select id="immunityIntervalInput" class="config-select">
-                                            <option value="3" selected>3 s</option>
-                                            <option value="5">5 s</option>
-                                            <option value="8">8 s</option>
-                                            <option value="13">13 s</option>
-                                            <option value="17">17 s</option>
-                                        </select>
-                                    </div>
-                                    <div class="config-row">
-                                        <label class="config-label" for="immunityDurationInput">Dura</label>
-                                        <select id="immunityDurationInput" class="config-select">
-                                            <option value="3">3 s</option>
-                                            <option value="5" selected>5 s</option>
-                                            <option value="7">7 s</option>
-                                            <option value="9">9 s</option>
-                                        </select>
-                                    </div>
+                                    <fieldset id="difficultyPicker" class="difficulty-picker">
+                                        <legend class="config-label">Nivel</legend>
+                                        <label class="difficulty-option"><input type="radio" name="difficulty" value="easy"><span class="difficulty-name">Fácil</span><span class="difficulty-hint">Más lenta y con más comida</span></label>
+                                        <label class="difficulty-option"><input type="radio" name="difficulty" value="medium" checked><span class="difficulty-name">Medio</span><span class="difficulty-hint">Equilibrado</span></label>
+                                        <label class="difficulty-option"><input type="radio" name="difficulty" value="hard"><span class="difficulty-name">Difícil</span><span class="difficulty-hint">Más rápida, con disparos veloces</span></label>
+                                    </fieldset>
 
                                     <p class="config-info">El escudo de inmunidad bloquea un disparo y se gasta.</p>
-
-                                    <button type="button" id="saveConfigButton" class="btn btn-secondary btn-block">Guardar cambios</button>
                                 </div>
                             </div>
 

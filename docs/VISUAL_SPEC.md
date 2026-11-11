@@ -506,9 +506,7 @@ body[data-scene]
 │        │  ├─ h2.players-heading, ol#playerList
 │        │  ├─ div#waitingSpan, button#startGameButton
 │        │  ├─ div#configPanel > #toggleConfigButton, div#configSettings
-│        │  │     (#maxPlayersInput, #minPlayersInput, #gameSpeedInput, #segmentSizeInput,
-│        │  │      #immunityEnabledInput, #immunityIntervalInput, #immunityDurationInput,
-│        │  │      p.config-info, #saveConfigButton)
+│        │  │     (fieldset#difficultyPicker con tres label.difficulty-option, p.config-info)
 │        │  └─ div.controls-hint[data-variant]
 │        ├─ div#hud  (display: contents)
 │        │  ├─ div.hud-bar
@@ -636,7 +634,7 @@ Layout desde 1280 px. La grilla `.arena-layout` tiene tres columnas: izquierda d
 - `#roomInfo`: código de sala en MONO 21 px turquesa suave y, debajo, el rol ("Eres el anfitrión" o "Anfitrión: {nombre}") en 14 px `--bio-ink-2`.
 - `#playerList`: filas de 40 px con rango, punto del color bio del jugador (10 px con glow de su color), nombre, etiqueta "Anfitrión" si corresponde, total acumulado y rondas ganadas (texto chico debajo del total, ver 4.21). Fila propia (`.current-player`): borde izquierdo de 3 px lima y nombre en `--bio-lime-soft`.
 - `#startGameButton`: principal, ancho completo, respira solo cuando está visible.
-- `#configPanel`: acordeón. `#toggleConfigButton` es la fila cabecera (texto y chevron que rota 180° en 240 ms, con `aria-expanded`); `#configSettings` se despliega con el revelado de 4.20. Filas de configuración de 44 px: etiqueta a la izquierda, control a la derecha. Selects y número con `--bio-radius-md`, fondo `abyss-600`; el checkbox se dibuja como interruptor (pista de 36 × 20 px, perilla de 16 px; encendido: pista lima con glow). Con controles deshabilitados (invitados), opacidad 0,6 y cursor `not-allowed`.
+- `#configPanel`: acordeón. `#toggleConfigButton` es la fila cabecera (texto y chevron que rota 180° en 240 ms, con `aria-expanded`); `#configSettings` se despliega con el revelado de 4.20. Adentro, `#difficultyPicker` (leyenda "Nivel") apila tres opciones de al menos 48 px de alto: nombre en `--bio-ink` y una pista en `--bio-ink-2` a 14 px, con `--bio-radius-md` y fondo `rgba(4, 18, 29, 0.6)`. El radio nativo queda oculto pero recibe el foco, que se ve como el anillo turquesa de los campos. La opción marcada lleva borde turquesa y glow suave. El anfitrión cambia de nivel con un toque, sin botón de guardar: el servidor reparte el nivel a toda la sala. Los invitados ven las opciones deshabilitadas, con opacidad 0,6 y cursor `not-allowed`.
 - `.controls-hint`: tres variantes por `data-variant` (`player`, `spectator`, `touch`), cada una un párrafo que LAYOUT muestra u oculta por CSS. Las teclas van en `<kbd>` (fondo `abyss-600`, borde inferior de 2 px `abyss-500`, `--bio-radius-sm`, cifras MONO). INTEGRADOR elige la variante: `spectator` si mira, `touch` si `matchMedia('(pointer: coarse)')` y no hay teclado conocido, `player` en el resto.
 
 Entre 1024 y 1279 px: dos columnas (izquierda de 260 px y centro); dock como botón flotante. Entre 769 y 1023 px: una columna centrada de hasta 640 px, con la arena arriba y `#gameInterface` debajo en dos columnas internas (jugadores a la izquierda, configuración a la derecha). Hasta 768 px: una columna; arena arriba a ancho completo; debajo, `#gameInterface`. `#startGameButton` queda `position: sticky; bottom: 12px` para que el anfitrión lo alcance sin scroll.
@@ -849,7 +847,7 @@ LAYOUT estiliza estas estructuras; quien las genera (indicado en cada una) las c
     <span class="room-live">En juego</span>            <!-- solo en playing -->
     <span class="room-host">Anfitrión: Ana</span>
     <span class="room-capacity" aria-label="3 de 8 jugadores"><i class="is-on"></i><i class="is-on"></i><i class="is-on"></i><i></i>…</span>
-    <span class="room-config">3 rondas de 60 s, velocidad normal, con inmunidad</span>
+    <span class="room-config">3 rondas de 60 s, nivel medio</span>
   </div>
   <button class="join-room-btn" data-room-id="K3J9QZ" data-action="join">Unirse</button>
   <!-- playing: <button class="join-room-btn is-spectate" data-action="spectate">Mirar</button> ; full: <span class="room-full">Llena</span> -->
@@ -1203,7 +1201,7 @@ Responsables: LAYOUT (textos estáticos del HTML), INTEGRADOR (textos generados)
 | `.room-host` | Anfitrión: {nombre} |
 | `.room-capacity` (`aria-label`) | {n} de {max} jugadores |
 | `.room-live` | En juego |
-| `.room-config` | 3 rondas de 60 s, velocidad {lenta, normal, rápida, muy rápida}, con inmunidad (o "sin inmunidad") |
+| `.room-config` | 3 rondas de 60 s, nivel {fácil, medio, difícil} |
 | Acciones de sala | Unirse / Mirar / Llena |
 | Título del dock, `#dockToggle` | En línea |
 | Dock vacío / cargando | No hay nadie más en línea / Buscando jugadores… |
@@ -1223,14 +1221,9 @@ Responsables: LAYOUT (textos estáticos del HTML), INTEGRADOR (textos generados)
 | `#waitingSpan` (alcanza el mínimo, no soy anfitrión) | Esperando a que el anfitrión inicie la partida |
 | `#startGameButton` | Iniciar partida |
 | `#toggleConfigButton` | Configuración (anfitrión) / Ver configuración (invitados) |
-| Etiquetas | Máximo de jugadores / Mínimo de jugadores / Velocidad / Tamaño de serpiente |
-| Opciones de velocidad (200, 83, 50, 40) | Lenta / Normal / Rápida / Muy rápida |
-| Opciones de tamaño (8, 10, 15, 20, 25) | Mínima / Pequeña / Mediana / Grande / Enorme |
-| Sección de consumibles | Consumibles |
-| Etiquetas de inmunidad | Inmunidad / Aparece cada / Dura |
-| Opciones de tiempo | 3 s, 5 s, 8 s, 13 s, 17 s (intervalo); 3 s, 5 s, 7 s, 9 s (duración) |
+| Leyenda de `#difficultyPicker` | Nivel |
+| Opciones de nivel (nombre y pista) | Fácil: Más lenta y con más comida / Medio: Equilibrado / Difícil: Más rápida, con disparos veloces |
 | `.config-info` | El escudo de inmunidad bloquea un disparo y se gasta. |
-| `#saveConfigButton` | Guardar cambios |
 | `.controls-hint` `player` | Flechas o WASD para moverte. Espacio para disparar: cada disparo cuesta un segmento. |
 | `.controls-hint` `spectator` | Estás viendo la partida en vivo. |
 | `.controls-hint` `touch` | Para jugar necesitas un teclado. Desde el móvil puedes mirar partidas en curso. |
