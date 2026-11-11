@@ -319,13 +319,18 @@ class Snake {
       this.activeConsumable = null;
     }
     
-    // Nuevo método para reiniciar la snake sin "morir"
-    reset(startX, startY, directionX = 1, directionY = 0) {
-      this.segments = [{ x: startX, y: startY }];
-      this.targetSegments = [{ x: startX, y: startY }];
-      this.renderSegments = [{ x: startX, y: startY }];
+    // Reinicia la snake sin "morir": `length` segmentos en línea, el cuerpo detrás de la cabeza
+    reset(startX, startY, directionX = 1, directionY = 0, length = 1) {
+      const body = () => Array.from({ length }, (_, i) => ({
+        x: startX - directionX * this.segmentSize * i,
+        y: startY - directionY * this.segmentSize * i
+      }));
+      // Arrays con objetos propios: el cliente escribe renderSegments en el lugar
+      this.segments = body();
+      this.targetSegments = body();
+      this.renderSegments = body();
       this.direction = { x: directionX, y: directionY };
-      this.score = 1;
+      this.score = length;
       this.gameover = false;
       this.scoreLeftToGrow = 0;
       this.moveQueue = [];
