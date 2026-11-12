@@ -14,7 +14,7 @@ test('valores por nivel', () => {
   assert.deepEqual(levels.map(c => c.difficulty), ['easy', 'medium', 'hard']);
   assert.deepEqual(levels.map(c => c.gameSpeed), [70, 54, 42]);
   assert.deepEqual(levels.map(c => c.projectileCells), [2, 2, 3]);
-  assert.deepEqual(levels.map(c => c.foodExtra), [8, 5, 3]);
+  assert.deepEqual(levels.map(c => c.foodExtra), [14, 10, 7]);
   assert.deepEqual(levels.map(c => c.consumables.immunity), [
     { enabled: true, spawnInterval: 6, duration: 7 },
     { enabled: true, spawnInterval: 10, duration: 5 },
