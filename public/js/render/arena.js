@@ -504,9 +504,12 @@
   }
   function digitReady(n) { return digitSprites[n] && digitEpoch[n] === textEpoch; }
 
-  // Sprites de comida (5.8): disco con degradado y dígito horneado, por valor.
-  var FOOD_COL = ['#4FD8FF', '#1FF2D2', '#7CFFB2', '#C8FF3C', '#FFF27A'];
-  var FOOD_R = [0.20, 0.24, 0.28, 0.32, 0.36];
+  // Sprites de comida (5.8): disco con contorno oscuro, degradado y dígito horneado, por valor.
+  // Colores de verde menta a ámbar, sin el celeste de la nieve ni del escudo. Radios en px de la
+  // arena (600), fijos: no dependen del tamaño de celda, para que la comida se lea a cualquier escala.
+  var FOOD_COL = ['#7CFFB2', '#B8FF5A', '#E8F24A', '#FFD447', '#FFA347'];
+  var FOOD_R = [4.0, 4.4, 4.8, 5.2, 5.6];
+  var FOOD_GLOW = 1.9;         // radio del glow = FOOD_GLOW × r × (1 + 0,1 × valor)
   var foodOrbs = new Array(5);
   var foodGlows = new Array(5);
   var foodKey = '';            // '' fuerza la regeneración
@@ -515,15 +518,20 @@
     if (foodKey !== '' && foodKS === s && foodKK === K && foodKE === textEpoch && foodKA === arenaScale) return;
     foodKey = 'ok';
     foodKS = s; foodKK = K; foodKE = textEpoch; foodKA = arenaScale;
-    var showDigit = 0.5 * s * arenaScale >= 7;
     for (var v = 0; v < 5; v++) {
-      var r = FOOD_R[v] * s;
+      var r = FOOD_R[v];
+      var showDigit = 1.15 * r * arenaScale >= 7;
       var dev = r * K;
-      var size = Math.ceil(dev * 2 + 4);
+      var rim = Math.max(1.2, 1.3 * K); // contorno oscuro: lo separa del glow y de la nieve
+      var size = Math.ceil((dev + rim) * 2 + 4);
       var c = foodOrbs[v] || makeCanvas(size, size);
       c.width = size; c.height = size;
       var g = c.getContext('2d');
       var cx = size / 2;
+      g.fillStyle = 'rgba(2, 19, 28, 0.85)';
+      g.beginPath();
+      g.arc(cx, cx, dev + rim, 0, TAU);
+      g.fill();
       var rgb = parseHex(FOOD_COL[v]);
       var grad = g.createRadialGradient(cx - dev * 0.25, cx - dev * 0.25, 0, cx, cx, dev);
       grad.addColorStop(0, '#E8FBFF');
@@ -535,14 +543,14 @@
       g.fill();
       if (showDigit) {
         g.fillStyle = '#02131C';
-        g.font = '700 ' + (0.5 * s * K).toFixed(2) + 'px ' + FONT_UI;
+        g.font = '700 ' + (1.15 * r * K).toFixed(2) + 'px ' + FONT_UI;
         g.textAlign = 'center';
         g.textBaseline = 'middle';
         g.fillText(String(v + 1), cx, cx + 0.04 * s * K);
       }
       c._r = size / 2 / K;
       foodOrbs[v] = c;
-      foodGlows[v] = Particles.glowSprite(FOOD_COL[v], 2.2 * r * 1.5 > 24);
+      foodGlows[v] = Particles.glowSprite(FOOD_COL[v], FOOD_GLOW * r * 1.5 > 24);
     }
   }
 
@@ -718,15 +726,18 @@
     }
   }
 
-  function drawSnow() {
+  // En partida (`inGame`) la nieve queda más chica y tenue: es fondo, no tiene que competir con la
+  // comida ni con el escudo.
+  function drawSnow(inGame) {
     var c = ctx;
+    var sizeK = inGame ? 0.7 : 1, alphaK = inGame ? 0.55 : 1;
     c.globalCompositeOperation = 'lighter';
     for (var i = 0; i < snowActive; i++) {
       var z = snowZ[i];
       var x = snowX[i] + 4 * Math.sin(animT * snowW[i] + snowPh[i]);
       var y = snowY[i];
-      var size = 0.6 + (z - 0.3) / 0.7 * 1.2;
-      var a = 0.08 + (z - 0.3) / 0.7 * 0.27;
+      var size = (0.6 + (z - 0.3) / 0.7 * 1.2) * sizeK;
+      var a = (0.08 + (z - 0.3) / 0.7 * 0.27) * alphaK;
       var g = snowGlow[i];
       var R = size * 2.6;
       c.globalAlpha = a * (1 - g * 0.5);
@@ -1908,6 +1919,12 @@
     return ((((x * 73856093) ^ (y * 19349663)) & 1023) / 1023) * TAU;
   }
 
+  // Los restos (comida que suelta un corte) se desvanecen en sus últimos 2 s: `fade` lo calcula
+  // SnakeGame.js con la hora del servidor del instante dibujado.
+  function foodAlpha(f) {
+    return f.fade === undefined ? 1 : f.fade;
+  }
+
   function drawFoods(foods, now) {
     if (!foods || foods.length === 0) return;
     ensureFoodSprites();
@@ -1917,22 +1934,25 @@
     c.globalCompositeOperation = 'lighter';
     for (var i = 0; i < n; i++) {
       var f = foods[i];
+      var fa = foodAlpha(f);
+      if (fa <= 0.01) continue;
       var v = clamp((f.score | 0) - 1, 0, 4);
       var ph = foodPhase(f.x, f.y);
       var sc = spawnScale(f.x * 1000 + f.y, now);
       if (sc <= 0.01) continue;
       var br = 1 + 0.06 * Math.sin(animT * w + ph);
       var cx = f.x + half, cy = f.y + half + 0.06 * s * Math.sin(animT * w * 0.9 + ph * 1.3);
-      var r = FOOD_R[v] * s;
-      var R = 2.2 * r * (1 + 0.1 * (v + 1)) * br * sc;
-      c.globalAlpha = 0.9;
+      var r = FOOD_R[v];
+      var R = FOOD_GLOW * r * (1 + 0.1 * (v + 1)) * br * sc;
+      c.globalAlpha = 0.9 * fa;
       c.drawImage(foodGlows[v], cx - R, cy - R, R * 2, R * 2);
     }
-    // discos (con el dígito horneado)
+    // discos (con contorno y dígito horneados)
     c.globalCompositeOperation = 'source-over';
-    c.globalAlpha = 1;
     for (i = 0; i < n; i++) {
       f = foods[i];
+      fa = foodAlpha(f);
+      if (fa <= 0.01) continue;
       v = clamp((f.score | 0) - 1, 0, 4);
       ph = foodPhase(f.x, f.y);
       sc = spawnScale(f.x * 1000 + f.y, now);
@@ -1941,6 +1961,7 @@
       cx = f.x + half; cy = f.y + half + 0.06 * s * Math.sin(animT * w * 0.9 + ph * 1.3);
       var orb = foodOrbs[v];
       var hr = orb._r * br * sc;
+      c.globalAlpha = fa;
       c.drawImage(orb, cx - hr, cy - hr, hr * 2, hr * 2);
     }
     // satélites y anillo exterior del 5
@@ -1948,22 +1969,24 @@
     var satR = Math.max(1, 0.06 * s) * 3;
     for (i = 0; i < n; i++) {
       f = foods[i];
+      fa = foodAlpha(f);
+      if (fa <= 0.01) continue;
       v = clamp((f.score | 0) - 1, 0, 4);
       ph = foodPhase(f.x, f.y);
       sc = spawnScale(f.x * 1000 + f.y, now);
       if (sc <= 0.01) continue;
       cx = f.x + half; cy = f.y + half + 0.06 * s * Math.sin(animT * w * 0.9 + ph * 1.3);
-      r = FOOD_R[v] * s * sc;
-      var orbit = 1.6 * r + 1;
+      r = FOOD_R[v] * sc;
+      var orbit = 1.6 * r + 1.5;
       var count = v + 1;
       var base = animT * 0.0016 + ph;
-      c.globalAlpha = 0.95;
+      c.globalAlpha = 0.95 * fa;
       for (var k = 0; k < count; k++) {
         var a = base + k * TAU / count;
         c.drawImage(pearlSprite, cx + Math.cos(a) * orbit - satR, cy + Math.sin(a) * orbit - satR, satR * 2, satR * 2);
       }
       if (v === 4) {
-        c.globalAlpha = 0.45;
+        c.globalAlpha = 0.5 * fa;
         c.strokeStyle = FOOD_COL[4];
         c.lineWidth = 1;
         c.beginPath();
@@ -1975,6 +1998,10 @@
     c.globalCompositeOperation = 'source-over';
   }
 
+  // Escudo en el mapa (5.9): medusa violeta de tamaño fijo con un anillo que se expande cada 2 s,
+  // para que se distinga de la comida y de la nieve a cualquier escala. Medidas en px de la arena.
+  var CONS_BELL_W = 7.5, CONS_BELL_H = 9;   // semiancho y alto de la campana
+  var CONS_SONAR_MS = 2000;
   function drawConsumables(cons, now) {
     if (!cons || cons.length === 0) return;
     var c = ctx, half = s / 2;
@@ -1985,28 +2012,36 @@
       if (sc <= 0.01) continue;
       var ph = foodPhase(it.x, it.y);
       var cx = it.x + half;
-      var cy = it.y + half + 0.08 * s * Math.sin(animT * 0.0012 * TAU / 1.2 + ph) - 0.1 * s;
+      var cy = it.y + half + 1.2 * Math.sin(animT * 0.0012 * TAU / 1.2 + ph) - 2;
       var beat = Math.sin(animT * 0.001 * 1.4 * TAU + ph);
-      // glows
+      // sonar: un anillo que nace en la campana y se abre hasta 26 px mientras se apaga
+      var st = ((animT + ph * 318) % CONS_SONAR_MS) / CONS_SONAR_MS;
       c.globalCompositeOperation = 'lighter';
-      var g1 = 1.4 * s * sc;
-      c.globalAlpha = 0.5;
-      c.drawImage(shieldSprite, cx - g1, cy - g1, g1 * 2, g1 * 2);
-      var g2 = 1.8 * s * sc * (1 + 0.08 * Math.sin(animT * 0.001 * 0.7 * TAU + ph));
-      c.globalAlpha = 0.2 + 0.08 * Math.sin(animT * 0.001 * 0.7 * TAU + ph);
+      c.globalAlpha = 0.6 * (1 - st) * (1 - st) * sc;
+      c.strokeStyle = '#B9A6FF';
+      c.lineWidth = 1.5;
+      c.beginPath();
+      c.arc(cx, cy + 2, 9 + 17 * easeOutCubic(st), 0, TAU);
+      c.stroke();
+      // glows: violeta amplio y celeste cerca del núcleo
+      var g2 = 20 * sc * (1 + 0.08 * Math.sin(animT * 0.001 * 0.7 * TAU + ph));
+      c.globalAlpha = 0.5 + 0.1 * Math.sin(animT * 0.001 * 0.7 * TAU + ph);
       c.drawImage(violetSprite, cx - g2, cy - g2, g2 * 2, g2 * 2);
+      var g1 = 12 * sc;
+      c.globalAlpha = 0.35;
+      c.drawImage(shieldSprite, cx - g1, cy - g1, g1 * 2, g1 * 2);
       // tentáculos
       c.globalCompositeOperation = 'source-over';
-      var bw = 0.4 * s * sc * (1 + 0.06 * beat), bh = 0.55 * s * sc * (1 - 0.06 * beat);
-      c.globalAlpha = 0.75;
-      c.strokeStyle = '#9FF4FF';
-      c.lineWidth = Math.max(0.8, 0.05 * s);
+      var bw = CONS_BELL_W * sc * (1 + 0.06 * beat), bh = CONS_BELL_H * sc * (1 - 0.06 * beat);
+      c.globalAlpha = 0.85;
+      c.strokeStyle = '#D6CCFF';
+      c.lineWidth = 1.2;
       c.beginPath();
       for (var k = 0; k < 3; k++) {
         var tx = cx + (k - 1) * bw * 0.55;
-        var sway = Math.sin(animT * 0.004 + k) * 0.15 * s * sc;
+        var sway = Math.sin(animT * 0.004 + k) * 1.8 * sc;
         c.moveTo(tx, cy);
-        c.quadraticCurveTo(tx + sway, cy + 0.3 * s * sc, tx - sway * 0.6, cy + 0.6 * s * sc);
+        c.quadraticCurveTo(tx + sway, cy + 4 * sc, tx - sway * 0.6, cy + 8 * sc);
       }
       c.stroke();
       // campana (sprite horneado con su degradado y su borde)
@@ -2015,21 +2050,21 @@
       c.drawImage(bell, cx - bw * bell._sx, cy - bh * bell._sy, bw * 2 * bell._sx, bh * bell._sy * bell._hy);
       // núcleo
       c.globalCompositeOperation = 'lighter';
-      c.globalAlpha = 0.8;
-      var nr = 0.35 * s * sc;
+      c.globalAlpha = 0.9;
+      var nr = 4 * sc;
       c.drawImage(pearlSprite, cx - nr, cy - bh * 0.45 - nr, nr * 2, nr * 2);
     }
     c.globalAlpha = 1;
     c.globalCompositeOperation = 'source-over';
   }
 
-  // Campana del consumible: media elipse con degradado #C9F8FF -> #7FE7FF (alpha 0,55)
-  // y borde #E8FBFF al 80 %, horneada en un sprite por tamaño de celda y escala.
-  var consSprite = null, consKS = 0, consKK = 0;
+  // Campana del escudo: media elipse con degradado violeta (#D9CCFF -> #9C82FF, alpha 0,75) y
+  // borde #F3EEFF al 90 %, horneada en un sprite por escala.
+  var consSprite = null, consKK = 0;
   function ensureConsSprite() {
-    if (consSprite && consKS === s && consKK === K) return consSprite;
-    consKS = s; consKK = K;
-    var rx = 0.4 * s * K, ry = 0.55 * s * K;
+    if (consSprite && consKK === K) return consSprite;
+    consKK = K;
+    var rx = CONS_BELL_W * K, ry = CONS_BELL_H * K;
     var pad = 2;
     var cw = Math.ceil(rx * 2 + pad * 2), ch = Math.ceil(ry + pad * 2);
     var cnv = consSprite || makeCanvas(cw, ch);
@@ -2037,15 +2072,15 @@
     var g = cnv.getContext('2d');
     var cx = cw / 2, base = ry + pad;
     var lg = g.createLinearGradient(0, pad, 0, base);
-    lg.addColorStop(0, 'rgba(201,248,255,0.55)');
-    lg.addColorStop(1, 'rgba(127,231,255,0.55)');
+    lg.addColorStop(0, 'rgba(217,204,255,0.75)');
+    lg.addColorStop(1, 'rgba(156,130,255,0.75)');
     g.beginPath();
     g.ellipse(cx, base, rx, ry, 0, Math.PI, TAU);
     g.closePath();
     g.fillStyle = lg;
     g.fill();
-    g.strokeStyle = 'rgba(232,251,255,0.8)';
-    g.lineWidth = Math.max(1, K);
+    g.strokeStyle = 'rgba(243,238,255,0.9)';
+    g.lineWidth = Math.max(1, 1.2 * K);
     g.stroke();
     // factores para dibujarlo con el tamaño lógico de la campana
     cnv._sx = cw / (rx * 2);
@@ -2380,7 +2415,7 @@
       }
       if (rec.isMe) meRec = rec;
       else if (visCount < 31) visRecs[visCount++] = rec;
-      pushHead(rec.x[0], rec.y[0], 3 * s, rec.paint);
+      // En partida las cabezas no encienden la nieve: esos destellos de color parecían comida
     }
     if (meRec) visRecs[visCount++] = meRec;
   }
@@ -2464,7 +2499,7 @@
     // Dibujo, en el orden de capas de 5.1
     beginDraw();
     drawBase(dt, 1);               // 1-4: sacudida, fondo (+grilla), cáusticas
-    drawSnow();                    // 5
+    drawSnow(true);                // 5
     drawCountdown(state, now);     // 6
     drawFxLayer(0, now);           //   columna de luz del ganador (debajo de lo jugable)
     drawFoods(state.foods, now);   // 7

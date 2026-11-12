@@ -51,6 +51,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const PROFILE_RETRY_MAX = 6;          // reintentos del re-registro automático ("ya está conectado")
   const KEY_TO_ARROW = { 37: 37, 38: 38, 39: 39, 40: 40, 87: 38, 65: 37, 83: 40, 68: 39 }; // flechas y WASD
   const DIFFICULTY_NAMES = { easy: 'fácil', medium: 'medio', hard: 'difícil' };
+  const REMAINS_FADE_MS = 2000;         // los restos de un corte se apagan en sus últimos 2 s
 
   // Mensajes del servidor que llegan en inglés (spec 8.6). Los que ya llegan en español pasan igual.
   const SERVER_ERRORS_ES = {
@@ -580,6 +581,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
     foods = a.foods;
     consumables = a.consumables;
+    // Restos de un corte: se desvanecen en sus últimos 2 s (hora del servidor del instante dibujado)
+    for (let i = 0; i < foods.length; i++) {
+      const food = foods[i];
+      if (food.expiresAt) food.fade = Math.max(0, Math.min(1, (food.expiresAt - s.rt) / REMAINS_FADE_MS));
+    }
 
     // Proyectiles: los de a avanzan hacia b (o siguen de largo si ya no están); los nuevos de b
     // arrancan donde se crearon
