@@ -20,6 +20,7 @@ fly deploy     # deploy to Fly.io
 | `game/difficulty.js` | ~50 | Difficulty table: `buildRoomConfig(difficulty, { roundTime })` builds the whole `room.config` |
 | `game/projectiles.js` | ~45 | `traceProjectile()`: moves a shot several cells per tick, checking every cell (pure, no side effects) |
 | `game/remains.js` | ~55 | `cutSnake()` (hit damage) and `dropRemains()`: what a hit cuts off stays as food for 10 s (pure) |
+| `game/match.js` | ~25 | `matchResult()`: ranking by length and winners (ties all win) at the end of the match |
 | `public/SnakeGame.js` | ~2000 | Client glue: socket handlers, game/UI state, wiring events into the modules below. No drawing code. |
 | `public/snakeClass.js` | ~350 | Snake entity — runs on **both** client and server |
 | `public/index.html` | ~360 | Scene markup only (no inline CSS) |
@@ -28,10 +29,10 @@ fly deploy     # deploy to Fly.io
 | `public/js/fx/particles.js` | ~450 | `window.Particles`: pooled particle systems |
 | `public/js/render/arena.js` | ~3100 | `window.Arena`: game canvas renderer (DPR, glow sprites, effects, idle attract mode, last-10s counter) |
 | `public/js/ui/backdrop.js` | ~1150 | `window.Backdrop`: full-screen ambient canvas behind every scene, moods |
-| `public/js/ui/scenes.js` | ~2300 | `window.Scenes` / `Overlays` / `Toasts` / `HUD`: scene transitions, intro, countdown, round end, final, toasts, DOM HUD |
+| `public/js/ui/scenes.js` | ~2300 | `window.Scenes` / `Overlays` / `Toasts` / `HUD`: scene transitions, intro, countdown, final screen, toasts, DOM HUD |
 | `docs/VISUAL_SPEC.md` | ~1400 | Visual spec: palette, typography, motion, scene map, effects catalog. Read it before touching visuals. |
 | `docs/MOTION_SPEC.md` | ~160 | Design: fixed difficulty levels (implemented) and continuous 4000×4000 movement (not yet) |
-| `test/` | | Unit tests (`node --test`): motion timeline, `Snake.reset`, difficulty table, projectile trace, remains |
+| `test/` | | Unit tests (`node --test`): motion timeline, `Snake.reset`, difficulty table, projectile trace, remains, match result |
 
 Script load order matters (index.html): socket.io → snakeClass → motion → particles → arena → backdrop → scenes → SnakeGame. Each module is an IIFE that exposes its API on `window`; no ES modules.
 
@@ -45,19 +46,19 @@ Script load order matters (index.html): socket.io → snakeClass → motion → 
 
 **Room state.** All state lives in `rooms` Map keyed by 6-char room code. Each room owns its own players, gameboard, foods, consumables, projectiles, timers, spectators. No global player state — players exist only inside a room.
 
-**Round flow.** `startGame` → 3s countdown → `gameLogicLoop` interval + 60s round timer → `endRound` → repeat 3× → `endGame` → room deleted after 30s.
+**Match flow.** One match per start, no rounds. `startGame` → 3s countdown → `gameLogicLoop` interval + 120 s timer → `endMatch` → stats saved, `gameEnd` with `{ ranking, winners }` → `resetRoomToWaiting` (same players and level). The client freezes the arena on the winner for 2 s, then shows the final screen: the host gets "Jugar de nuevo" (emits `startGame` again), everyone gets "Volver a la sala" and "Salir a las salas". A room is deleted only when its last player leaves.
 
 ## Non-obvious gotchas
 
 - **Timer cleanup is mandatory.** `deleteRoom()` must `clearInterval` the game loop, round timer, **and** every entry in `consumableTimers`. Missed timers = memory leak + ghost game ticks.
 - **DB path differs by env.** Dev: `./game_stats.db`. Prod (Fly): `/app/data/game_stats.db` (persistent volume `game_stats_volume`). Logic at `index.js:14`.
 - **Player IDs are compound:** `${username}_${Date.now()}`. Don't query players by `name`.
-- **Room config comes from the difficulty table.** The host only picks `difficulty` (`easy` / `medium` / `hard`); `validateRoomConfig` passes it to `game/difficulty.js`, which builds the whole `room.config` and falls back to `medium` for anything unknown. Speed, shot cells per tick, extra food and shield timing vary by level; arena 600, 12 px cells, 2 to 8 players, 3 rounds, start length 3 are fixed. `roundTime` is 60 unless `ROUND_TIME` is set. Every round reset goes through `resetPlayerForRound()`.
+- **Room config comes from the difficulty table.** The host only picks `difficulty` (`easy` / `medium` / `hard`); `validateRoomConfig` passes it to `game/difficulty.js`, which builds the whole `room.config` and falls back to `medium` for anything unknown. Speed, shot cells per tick, extra food and shield timing vary by level; arena 600, 12 px cells, 2 to 8 players, start length 3 are fixed. `roundTime` (the match length) is 120 unless `ROUND_TIME` is set. Every round reset goes through `resetPlayerForRound()`.
 - **Portal wraparound breaks interpolation.** When a snake teleports edge-to-edge, naive lerp animates across the whole canvas. `motion.js` interpolates the short way around (`wrapDelta`) and moves a segment to the opposite edge once its center crosses; `arena.js` cuts the continuous body path wherever consecutive segments are > canvas/2 apart. Preserve both when touching rendering.
 - **Game events for effects.** `gameLogicFrame` carries `foodEvents`, `hitEvents`, `blockEvents`, `projectileEvents`, `expiredProjectiles` (always present, possibly empty), plus coordinates on `portals` and `consumableEvents`. Shots fired between ticks are buffered in `room.pendingProjectileEvents`. `SnakeGame.js` forwards each one to an `Arena.on*` hook when the render reaches that frame (`timeline.drain`), not when it arrives.
 - **Remains are foods with an expiry.** A hit drops the lost segments as foods with `remains: true` and `expiresAt` (server ms). They don't respawn when eaten (base food does, via `respawnFood`) and `gameLogicLoop` drops them once expired. The client fades them out in their last 2 s using the timeline's render time (`food.fade`).
 - **Rendering performance.** No `shadowBlur` in per-frame drawing: glow comes from cached offscreen sprites + `'lighter'` compositing. `arena.js` drops quality automatically under load. Don't rebuild DOM per frame; `HUD.update` diffs by player id.
-- **Round transition timer.** `endRound` stores the 3s next-round timeout in `room.gameState.nextRoundTimeoutId`. It must be cleared in `deleteRoom`, `endGame` and `abortMatch` (too few players), or a deleted room keeps ticking.
+- **Match end keeps the room.** `endMatch` resets the room to waiting right after emitting `gameEnd`, so the `updatePlayers` that follows already carries length-3 snakes. The client keeps the frozen arena and the HUD board on the final result while `matchFinished` is set (cleared by the next `countdown`/`gameStart`). `roundTime`, `roundLive`, `roundTimeUpdate` and `Arena.onRound*` keep their old names but mean the single match.
 - **Spectator vs player on join.** `joinRoom` branches on `room.gameState.playing`: in-progress room → spectator (added to `room.spectators` Map), lobby → player. Both paths must be handled when adding join logic.
 - **Host migration on disconnect.** If the disconnecting socket is `room.host`, promote `room.players[0]` and emit `newHost`. If no players remain, delete the room.
 - **Shared snake class.** `snakeClass.js` is loaded by both server (`require`) and client (`<script>`). Don't add browser-only or Node-only APIs to it.
@@ -68,7 +69,7 @@ Script load order matters (index.html): socket.io → snakeClass → motion → 
 
 `npm test` runs the unit tests in `test/` (Node's built-in runner). They cover the pieces that load in Node without a browser or a running server: `motion.js`, `Snake.reset`, `game/difficulty.js`, `game/projectiles.js` and `game/remains.js`. Gameplay still needs a manual check: validate changes by running `npm run dev` and opening multiple browser windows (use incognito for distinct sessions). Inspect DB with `sqlite3 game_stats.db`.
 
-`ROUND_TIME=10 npm run dev` shortens rounds for testing (positive integers only; default 60). Headless browser checks work with `puppeteer-core` + `/snap/bin/chromium` (the snap can't write to host `/tmp`, so use a dir under `~`).
+`ROUND_TIME=10 npm run dev` shortens the match for testing (positive integers only; default 120). Headless browser checks work with `puppeteer-core` + `/snap/bin/chromium` (the snap can't write to host `/tmp`, so use a dir under `~`).
 
 ## Deployment
 

@@ -2,7 +2,7 @@
 
 Este documento define dos cambios al juego. El primero reemplaza la configuración libre de la sala por tres niveles de dificultad con valores fijos. El segundo reemplaza la grilla por un espacio continuo de 4000 × 4000 unidades, donde la serpiente puede doblar en cualquier punto y que habilita, en una etapa visual posterior, dibujarla como un cuerpo de partículas. Primero va la dificultad y después el espacio continuo: fijar la configuración reduce lo que el modelo nuevo tiene que soportar (un solo grosor, tres velocidades) y se puede jugar y ajustar por separado.
 
-Los controles siguen siendo de 4 direcciones. Las reglas básicas se mantienen: rondas por tiempo, sin choques entre serpientes, disparos que cuestan largo y escudo que bloquea un disparo. Cambian valores como la velocidad del disparo y la cantidad de comida, que pasan a depender del nivel.
+Los controles siguen siendo de 4 direcciones. Las reglas básicas se mantienen: partida por tiempo, sin choques entre serpientes, disparos que cuestan largo y escudo que bloquea un disparo. Cambian valores como la velocidad del disparo y la cantidad de comida, que pasan a depender del nivel.
 
 ## Punto de partida
 
@@ -40,9 +40,9 @@ Quedan fijos para todos los niveles:
 
 - **Arena**: 600 × 600 lógicos, como hoy.
 - **Grosor de la serpiente**: 12 px, que en la grilla actual da 50 × 50 celdas. Se fija ya en esta etapa, así la escala visual no cambia al pasar al espacio continuo.
-- **Rondas**: 3 de 60 s. Se conserva el override de desarrollo `ROUND_TIME`.
+- **Partida**: una sola, de 2 minutos; gana la serpiente más larga cuando se acaba el tiempo, y si empatan ganan todas las empatadas (`game/match.js`). Al terminar, la sala vuelve a espera con los mismos jugadores y el anfitrión puede jugar de nuevo. Antes eran 3 rondas de 60 s y la partida la ganaba quien sumaba más largo entre las tres, mientras la interfaz mostraba las rondas ganadas: no quedaba claro qué había que ganar. Se conserva el override de desarrollo `ROUND_TIME`.
 - **Jugadores**: mínimo 2, máximo 8. Hoy el máximo configurable es 16, y 16 serpientes en una arena fija quedan apretadas.
-- **Largo inicial**: 3 segmentos, en línea detrás de la cabeza, para que la serpiente se vea como criatura desde el arranque. Hoy arranca con 1. Con 3 se puede disparar desde el inicio, y el puntaje de cada ronda sube 2 por jugador respecto de hoy.
+- **Largo inicial**: 3 segmentos, en línea detrás de la cabeza, para que la serpiente se vea como criatura desde el arranque. Hoy arranca con 1. Con 3 se puede disparar desde el inicio.
 - **Escudo**: siempre activo.
 
 Los valores por nivel son un punto de partida para ajustar jugando. La velocidad se expresa como el tiempo que tarda la serpiente en cruzar la arena, para que valga igual en la grilla y en el espacio continuo:
@@ -150,7 +150,7 @@ Con el cuerpo como línea continua, las partículas son una forma de dibujarlo y
 Cada etapa se valida con las mismas mediciones que se usaron para la animación, más las propias del cambio:
 
 - **Geometría** (espacio continuo): pruebas en Node de giros con distancia mínima, recorte de cola, colisiones barridas (incluido el cruce perpendicular del punto de partida), cortes por impacto y envoltorio en los cuatro bordes.
-- **Fluidez**: dos jugadores en Chromium headless, midiendo la velocidad dibujada de la cabeza dentro de cada ronda. Variación por debajo del 5 % y ningún cuadro detenido, como hoy.
+- **Fluidez**: dos jugadores en Chromium headless, midiendo la velocidad dibujada de la cabeza durante la partida. Variación por debajo del 5 % y ningún cuadro detenido, como hoy.
 - **Efectos**: cada evento llega una sola vez a su gancho de la arena, sin errores de consola.
 - **Red**: tamaño promedio de `gameLogicFrame` con 8 jugadores, a 20 frames por segundo.
 - **Rendimiento**: 8 serpientes con la CPU ralentizada 4 veces, como en las pruebas del rediseño.

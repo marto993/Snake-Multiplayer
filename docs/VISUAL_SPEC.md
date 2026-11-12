@@ -37,7 +37,7 @@ Principios que ordenan todas las decisiones:
 - **Nada aparece en seco.** Toda entrada y salida de escena, overlay y toast se anima. Los elementos chicos que el código alterna con `.hidden` tienen animación de entrada (sección 4.20).
 - **El movimiento responde.** La animación que no fue disparada por el usuario o por el juego se limita a la lista de la sección 3.5.
 
-El momento firma es uno solo: **el agua reacciona**. En intro, login, lobby y sala, el puntero (o el dedo) enciende el plancton a su paso y deja una estela que se apaga en un segundo. En la arena de espera, cada criatura enciende la nieve marina cerca de su cabeza. Durante la ronda no: esos destellos del color de cada serpiente se confundían con la comida. Es la única "magia" ambiental; lo demás se mantiene sobrio para que esto se note.
+El momento firma es uno solo: **el agua reacciona**. En intro, login, lobby y sala, el puntero (o el dedo) enciende el plancton a su paso y deja una estela que se apaga en un segundo. En la arena de espera, cada criatura enciende la nieve marina cerca de su cabeza. Durante la partida no: esos destellos del color de cada serpiente se confundían con la comida. Es la única "magia" ambiental; lo demás se mantiene sobrio para que esto se note.
 
 ## 2. Tokens de diseño
 
@@ -205,7 +205,7 @@ Las formas son orgánicas: los paneles principales usan radios asimétricos, com
 | `--bio-radius-sm` | `8px` | Pips, chips chicos, badges |
 | `--bio-radius-md` | `14px` | Inputs, selects, filas de lista |
 | `--bio-radius-lg` | `22px` | Tarjetas secundarias, popover de perfil |
-| `--bio-radius-membrane` | `28px 22px 30px 20px / 24px 30px 20px 28px` | Paneles principales: tarjeta de login, `#roomSelection`, `#gameInterface`, fin de ronda, final, modal |
+| `--bio-radius-membrane` | `28px 22px 30px 20px / 24px 30px 20px 28px` | Paneles principales: tarjeta de login, `#roomSelection`, `#gameInterface`, final, modal |
 | `--bio-radius-toast` | `18px 22px 18px 22px` | Toasts |
 | `--bio-radius-pill` | `999px` | Botones, chip de perfil |
 | `--bio-radius-arena` | `12px` | Marco de la arena (máximo: más radio tapa celdas de las esquinas) |
@@ -327,7 +327,7 @@ const smoothstep    = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) /
 | `--bio-dur-hover` | 180 | Hover y foco |
 | `--bio-dur-quick` | 240 | Salidas chicas, colapso de toasts |
 | `--bio-dur-base` | 360 | Entrada de toasts, revelado de elementos `.hidden` |
-| `--bio-dur-panel` | 520 | HUD, paneles, modal, overlay de fin de ronda |
+| `--bio-dur-panel` | 520 | HUD, paneles, modal |
 | `--bio-dur-scene-out` | 420 | Salida de escena |
 | `--bio-dur-scene-in` | 720 | Entrada de escena |
 | `--bio-dur-mood` | 1200 | Cambio de ambiente del fondo vivo |
@@ -375,21 +375,21 @@ Con `prefers-reduced-motion: reduce` cada módulo aplica esta tabla. ESCENAS y A
 
 ### 4.1 Mapa
 
-Hay seis escenas. Las de sala ('room') y partida ('game') comparten el contenedor `#scene-arena` y se distinguen por `data-mode`. Los overlays de cuenta regresiva, inicio y fin de ronda viven dentro de la escena de partida.
+Hay seis escenas. Las de sala ('room') y partida ('game') comparten el contenedor `#scene-arena` y se distinguen por `data-mode`. Los overlays de cuenta regresiva e inicio viven dentro de la escena de partida. Hay una sola partida por inicio, sin rondas: al terminar, la sala vuelve a espera con los mismos jugadores.
 
 ```
                   sin sesión guardada
    intro ───────────────────────────────▶ login
      │                                      │ profileLoaded
      │ con sesión (profileLoaded)           ▼
-     └────────────────────────────────▶  lobby ◀──────────────── final
-                                           │ roomCreated / roomJoined    ▲
-                                           ▼                             │ gameEnd
-                                         room ──── gameStart ────▶ game ─┘
-                                           ▲                        │  ▲
-                                           └ playing=false sin ─────┘  │ countdown, gameStart
-                                             fin de partida            │ (rondas 2 y 3)
-                                                                 fin de ronda
+     └────────────────────────────────▶  lobby ◀── Salir a las salas ── final
+                                           │ roomCreated / roomJoined     ▲  │
+                                           ▼                              │  │ Volver a la sala,
+                                         room ──── gameStart ────▶ game ──┘  │ countdown
+                                           ▲  ▲                     │ gameEnd │ (Jugar de nuevo)
+                                           │  └ playing=false sin ──┘         │
+                                           │    fin de partida                │
+                                           └──────────────────────────────────┘
    lobby ── spectatingStarted ──▶ game (modo espectador)
    cualquier escena con sesión ── resetPlayerProfile / profileError ──▶ login
 ```
@@ -403,10 +403,12 @@ Eventos y llamadas a `Scenes.go` que hace INTEGRADOR:
 | `profileLoaded` | `Scenes.go('lobby', { greeting: nombre })` | Si la intro sigue, queda en cola |
 | `profileError`, cerrar sesión | `Scenes.go('login')` | |
 | `roomCreated`, `roomJoined` | `Scenes.go('room')` | |
-| `gameStart`, `spectatingStarted` | `Scenes.go('game')` | Ya en 'game' entre rondas: no-op |
-| `updatePlayers` con `playing=false` estando en 'game' y sin fin de ronda pendiente | `Scenes.go('room')` | Caso "No quedan jugadores suficientes" |
-| `gameEnd` | `Overlays.final(...)` | Llama a `Scenes.go('final')` internamente |
-| `#backToMenuButton`, `backToMenuSuccess` | `Scenes.go('lobby')` | |
+| `gameStart`, `spectatingStarted` | `Scenes.go('game')` | |
+| `updatePlayers` con `playing=false` estando en 'game' y sin fin de partida pendiente | `Scenes.go('room')` | Caso "No quedan jugadores suficientes" |
+| `gameEnd` | `Overlays.final(...)` a los 2000 ms | Llama a `Scenes.go('final')` internamente; antes, la arena se congela sobre el ganador |
+| `countdown` estando en 'final' | `Scenes.go('room')` | El anfitrión tocó "Jugar de nuevo": todos vuelven a la arena para ver la cuenta |
+| `#backToRoomButton` | `Scenes.go('room')` | La sala ya está en espera |
+| `#backToMenuButton`, `#leaveRoomButton`, `backToMenuSuccess` | `Scenes.go('lobby')` | |
 
 ### 4.2 Motor de escenas
 
@@ -630,9 +632,9 @@ Layout desde 1280 px. La grilla `.arena-layout` tiene tres columnas: izquierda d
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
-- `#gameInterface` es una membrana con este orden: `#spectatorBanner` (oculto en sala), `#roomInfo`, título "Jugadores" con contador, `#playerList`, `#waitingSpan`, `#startGameButton`, `#configPanel`, `.controls-hint`.
+- `#gameInterface` es una membrana con este orden: `#spectatorBanner` (oculto en sala), `#roomInfo`, título "Jugadores" con contador, `#playerList`, `#waitingSpan`, `#startGameButton`, `#leaveRoomButton` ("Salir de la sala", botón silencioso de ancho completo, visible en la sala fuera de la cuenta regresiva y oculto en modo game), `#configPanel`, `.controls-hint`.
 - `#roomInfo`: código de sala en MONO 21 px turquesa suave y, debajo, el rol ("Eres el anfitrión" o "Anfitrión: {nombre}") en 14 px `--bio-ink-2`.
-- `#playerList`: filas de 40 px con rango, punto del color bio del jugador (10 px con glow de su color), nombre, etiqueta "Anfitrión" si corresponde, total acumulado y rondas ganadas (texto chico debajo del total, ver 4.21). Fila propia (`.current-player`): borde izquierdo de 3 px lima y nombre en `--bio-lime-soft`.
+- `#playerList`: filas de 40 px con rango, punto del color bio del jugador (10 px con glow de su color), nombre, etiqueta "Anfitrión" si corresponde y, durante la partida, el largo actual (en la sala, la columna de puntaje queda vacía). Fila propia (`.current-player`): borde izquierdo de 3 px lima y nombre en `--bio-lime-soft`.
 - `#startGameButton`: principal, ancho completo, respira solo cuando está visible.
 - `#configPanel`: acordeón. `#toggleConfigButton` es la fila cabecera (texto y chevron que rota 180° en 240 ms, con `aria-expanded`); `#configSettings` se despliega con el revelado de 4.20. Adentro, `#difficultyPicker` (leyenda "Nivel") apila tres opciones de al menos 48 px de alto: nombre en `--bio-ink` y una pista en `--bio-ink-2` a 14 px, con `--bio-radius-md` y fondo `rgba(4, 18, 29, 0.6)`. El radio nativo queda oculto pero recibe el foco, que se ve como el anillo turquesa de los campos. La opción marcada lleva borde turquesa y glow suave. El anfitrión cambia de nivel con un toque, sin botón de guardar: el servidor reparte el nivel a toda la sala. Los invitados ven las opciones deshabilitadas, con opacidad 0,6 y cursor `not-allowed`.
 - `.controls-hint`: tres variantes por `data-variant` (`player`, `spectator`, `touch`), cada una un párrafo que LAYOUT muestra u oculta por CSS. Las teclas van en `<kbd>` (fondo `abyss-600`, borde inferior de 2 px `abyss-500`, `--bio-radius-sm`, cifras MONO). INTEGRADOR elige la variante: `spectator` si mira, `touch` si `matchMedia('(pointer: coarse)')` y no hay teclado conocido, `player` en el resto.
@@ -659,7 +661,7 @@ Disparador: `gameStart` o `spectatingStarted`. La sala se transforma en la parti
 3. **240 a 760 ms.** `.hud-bar` entra desde `translateY(-16px)` y opacidad 0 en 520 ms con `--bio-ease-out`. `.hud-board` entra con sus filas escalonadas (60 ms).
 4. **500 a 900 ms.** Si `#gameInterface` es visible en ese ancho, reaparece en su nueva columna con opacidad en 400 ms. El glow del marco de la arena sube.
 
-El camino inverso (partida a sala) usa los mismos pasos en orden inverso. Entre rondas no hay cambio de modo: la escena sigue en 'game'.
+El camino inverso (partida a sala) usa los mismos pasos en orden inverso.
 
 ### 4.12 Partida (game)
 
@@ -668,7 +670,7 @@ Propósito: la arena es la protagonista; todo lo demás se aparta. Desde 1280 px
 ```
 ┌───────────────────────────────────────────────────────────────────────────┐
 │                ┌ .hud-bar ──────────────────────────────┐                 │
-│ ┌ .hud-board ─┐│ Ronda 2 de 3 ●◐○      (42)      Escudo │┌ #gameInterface┐│
+│ ┌ .hud-board ─┐│ Gana la más larga    (1:42)     Escudo │┌ #gameInterface┐│
 │ │ 1 ● Ana  34 │└────────────────────────────────────────┘│ Sala K3J9QZ   ││
 │ │ 2 ● Tú   21 │┌ canvas#game ───────────────────────────┐│ Flechas o WASD││
 │ │ 3 ● Leo  12 ││                                        ││ Espacio       ││
@@ -692,20 +694,19 @@ En partida y con `pointer: coarse` la página no debe hacer scroll al tocar la a
 
 ### 4.13 Cuenta regresiva 3, 2, 1
 
-Responsable: ESCENAS (`Overlays.countdown(n, round)`). `#overlay-countdown` cubre `.arena-frame` (`position: absolute; inset: 0`), `pointer-events: none`.
+Responsable: ESCENAS (`Overlays.countdown(n)`). `#overlay-countdown` cubre `.arena-frame` (`position: absolute; inset: 0`), `pointer-events: none`.
 
-- Al primer número aparece un velo radial (`radial-gradient` de `rgba(1,5,9,0.55)` en el centro a `rgba(1,5,9,0.2)` en los bordes) con fundido de 300 ms. Arriba del número, "Ronda {n} de 3" en Recursive 600 18 px `--bio-ink-2`.
+- Al primer número aparece un velo radial (`radial-gradient` de `rgba(1,5,9,0.55)` en el centro a `rgba(1,5,9,0.2)` en los bordes) con fundido de 300 ms. Arriba del número, la meta de la partida, "Gana la serpiente más larga", en Recursive 600 18 px `--bio-ink-2`.
 - El número va en Fraunces itálica 300, tamaño `calc(var(--arena-size) * 0.42)`. Colores: 3 en `--bio-turquoise`, 2 en `--bio-cyan`, 1 en `--bio-lime`, con el glow de texto display.
 - Cada número entra con escala 1,5 a 1, opacidad 0 a 1 y `blur(14px)` a 0 en 480 ms con `--bio-ease-out`. Detrás, un anillo (`span.countdown-ring`, borde de 2 px del mismo color) crece de 0,4 a 1,6 veces el tamaño del número mientras su opacidad baja de 0,6 a 0, en 900 ms.
 - Cuando llega el número siguiente, el anterior sale con escala 1 a 0,7, opacidad a 0 y `blur(8px)` en 260 ms con `--bio-ease-in`, y el nuevo entra a la vez.
 - Con cada número: `Backdrop.pulse('#1FF2D2', 0.2)`.
-- Si había un overlay de fin de ronda visible, `countdown()` lo cierra.
 
-### 4.14 Inicio de ronda
+### 4.14 Inicio de la partida
 
-Responsable: ESCENAS (`Overlays.roundStart(round, maxRounds)`) y ARENA (`Arena.onRoundStart()`), en el mismo instante (`gameStart`).
+Responsable: ESCENAS (`Overlays.roundStart()`) y ARENA (`Arena.onRoundStart()`), en el mismo instante (`gameStart`).
 
-`#overlay-round` muestra "¡Ya!" en Fraunces itálica 400, `--bio-lime`, tamaño `calc(var(--arena-size) * 0.28)` (mínimo 72 px), y encima "Ronda {n} de {maxRounds}" en Recursive 600 18 px. El velo de la cuenta regresiva se va en 400 ms. "¡Ya!" entra con escala 0,8 a 1 con `--bio-ease-jelly` en 420 ms, se sostiene 380 ms y sale con opacidad a 0, escala 1,15 y `blur(10px)` en 380 ms. Total: 1180 ms. En la arena, la ola de inicio (5.12). `Backdrop.pulse('#C8FF3C', 0.35)`.
+`#overlay-round` muestra "¡Ya!" en Fraunces itálica 400, `--bio-lime`, tamaño `calc(var(--arena-size) * 0.28)` (mínimo 72 px), y encima "Gana la serpiente más larga" en Recursive 600 18 px. El velo de la cuenta regresiva se va en 400 ms. "¡Ya!" entra con escala 0,8 a 1 con `--bio-ease-jelly` en 420 ms, se sostiene 380 ms y sale con opacidad a 0, escala 1,15 y `blur(10px)` en 380 ms. Total: 1180 ms. En la arena, la ola de inicio (5.12). `Backdrop.pulse('#C8FF3C', 0.35)`.
 
 ### 4.15 Últimos 10 segundos
 
@@ -716,29 +717,31 @@ Disparador: `roundTimeLeft` llega a 10. Lo pinta cada responsable en lo suyo:
 - **ESCENAS (Backdrop)**: ambiente `tension` (INTEGRADOR llama a `Backdrop.setMood('tension')` al llegar a 10 y `Backdrop.pulse('#FF4D6D', 0.15)` en cada segundo).
 - **LAYOUT**: borde coral del marco de la arena con `[data-phase="tension"]`.
 
-### 4.16 Fin de ronda
+### 4.16 Fin de la partida
 
-Responsables: ARENA (`Arena.onRoundEnd({ winnerId })`) y ESCENAS (`Overlays.roundEnd(data, opts)`; el segundo parámetro, `{ colorsById }`, es **extensión**).
+Responsables: ARENA (`Arena.onRoundEnd({ winnerId })`, con `winnerId` nulo si hay empate) e INTEGRADOR.
 
-- **0 ms.** La arena congela el último estado y enfoca al ganador (5.14). El HUD pasa a mostrar totales.
-- **700 ms.** `#gameOverScreen` aparece centrado sobre la arena: `.round-end-card` es una membrana de `min(420px, var(--arena-size) - 32px)` de ancho, fondo `rgba(4,18,29,0.9)`, borde de 1 px `rgba(31,242,210,0.35)`. Entra desde `translateY(40px)`, escala 0,96, opacidad 0 y `blur(8px)` en 620 ms con `--bio-ease-out`; las filas de la tabla entran escalonadas a 70 ms.
-- Contenido: `#roundEndTitle` "Fin de la ronda {n}" en Fraunces 48 px (36 en móvil); en `#scoreDisplay`, la línea del ganador con su punto de color, las 5 primeras posiciones por total acumulado con pips de rondas ganadas, y la línea de lo que sigue. Estructura en 4.21.
-- `#restartButton` ("Ocultar") cierra el panel: sale con `translateY(-20px)` y opacidad a 0 en 320 ms con `--bio-ease-in`.
-- El panel se cierra solo cuando llega la cuenta regresiva siguiente. Si era la última ronda, el final espera a que este panel lleve 1800 ms visible antes de entrar (el servidor emite `gameEnd` justo después de `roundEnd`, ver `index.js:738-749` y `index.js:792`).
+- **0 ms.** Llega `gameEnd` con `{ ranking: [{ id, name, color, length }], winners: [id] }`. La arena congela el último estado y enfoca al ganador (5.14). El marcador del HUD conserva el resultado: la sala ya volvió a espera en el servidor y el `updatePlayers` que sigue trae las serpientes con largo 3, pero el HUD no se actualiza con eso.
+- **2000 ms.** Entra el final (4.17).
+
+No hay panel intermedio: la partida es una sola.
 
 ### 4.17 Final
 
-Responsable: ESCENAS (`Overlays.final(data, opts)`; el segundo parámetro, `{ colorsByName }`, es **extensión**). `#finalScreen` cubre la pantalla (`position: fixed; inset: 0`), fondo `rgba(1,5,9,0.6)`. Llama a `Scenes.go('final', { color })`, que pone el fondo vivo en `celebration` con el color `body` del campeón. `#finalScreen` no es un contenedor `.scene`: se muestra encima de `#scene-arena`, que queda debajo sin animarse.
+Responsable: ESCENAS (`Overlays.final(data)`, con los datos de `gameEnd`; los colores salen de `ranking`). `#finalScreen` cubre la pantalla (`position: fixed; inset: 0`), fondo `rgba(1,5,9,0.6)`. Llama a `Scenes.go('final', { color })`, que pone el fondo vivo en `celebration` con el color `body` del campeón. `#finalScreen` no es un contenedor `.scene`: se muestra encima de `#scene-arena`, que queda debajo sin animarse.
 
 - **0 ms.** El fondo de `#finalScreen` aparece en 600 ms.
-- **300 ms.** `#finalTitle` muestra el nombre del campeón en Fraunces itálica 300, `clamp(48px, 9vw, 112px)`, color `body` de su color bio con glow, `text-wrap: balance`. Cada letra es un `span.final-letter` (creado con `textContent`) que sube 30 px desde `blur(10px)` y opacidad 0, 700 ms con `--bio-ease-out`, escalonadas a 40 ms. Después, el glow del nombre respira.
-- **900 ms.** `#finalMessage` ("Gana la partida con…") aparece subiendo 10 px.
-- **1200 ms.** Las filas de `#finalScoresList` entran escalonadas a 90 ms desde `translateY(20px)`. La primera (`.is-champion`) tiene borde izquierdo de 3 px del color del campeón, fondo teñido con ese color al 8 % y el rango en Fraunces.
-- **1800 ms.** `#backToMenuButton` aparece y empieza a respirar.
+- **300 ms.** `#finalTitle` muestra el nombre del ganador (si hay empate, "Empate", sin animación por letra) en Fraunces itálica 300, `clamp(48px, 9vw, 112px)`, color `body` de su color bio con glow, `text-wrap: balance`. Cada letra es un `span.final-letter` (creado con `textContent`) que sube 30 px desde `blur(10px)` y opacidad 0, 700 ms con `--bio-ease-out`, escalonadas a 40 ms. Después, el glow del nombre respira.
+- **900 ms.** `#finalMessage` ("Gana con la serpiente más larga: {n} segmentos." o, en empate, "{A} y {B} terminan con {n} segmentos.") aparece subiendo 10 px.
+- **1200 ms.** Las filas de `#finalScoresList` (largo final de cada serpiente, de mayor a menor) entran escalonadas a 90 ms desde `translateY(20px)`. Las ganadoras (`.is-champion`) tienen borde izquierdo de 3 px de su color, fondo teñido con ese color al 8 % y el rango en Fraunces.
+- **1700 ms.** `#finalHint` aparece con fundido: a un invitado le dice "{anfitrión} puede iniciar otra partida"; al anfitrión, solo si faltan jugadores ("Falta 1 jugador para jugar de nuevo").
+- **1800 ms.** `.final-actions` sube 10 px. Para el anfitrión: `#playAgainButton` ("Jugar de nuevo", principal, respira; deshabilitado si faltan jugadores), `#backToRoomButton` ("Volver a la sala", secundario) y `#backToMenuButton` ("Salir a las salas", silencioso). Para un invitado, lo mismo sin "Jugar de nuevo". Para un espectador, solo `#backToMenuButton` como principal, con el texto "Volver a las salas". El foco va al título, no a los botones: Espacio es la tecla de disparo.
+
+"Jugar de nuevo" emite `startGame`: la sala ya está en espera con los mismos jugadores y el mismo nivel. Cuando llega la cuenta regresiva, quien siga en el final pasa a la sala (`Scenes.go('room')`) para verla. "Volver a la sala" sale del final sin salir de la sala; ahí el anfitrión puede cambiar el nivel o esperar a más gente.
 
 Con `reason` (sala cerrada): `#finalTitle` es "Sala cerrada" en `--bio-ink`, sin animación por letra, el fondo vivo pasa a `lobby` (no `celebration`). Con movimiento reducido: todo con fundido de 300 ms. `#finalScreen` admite `backdrop-filter: blur(6px)` solo desde 769 px y sin `pointer: coarse`.
 
-Salida del final (`Scenes.go('lobby')`): `#finalScreen` baja a opacidad 0 con `blur(6px)` en 420 ms con `--bio-ease-in` y luego recibe `.hidden`; `#scene-arena` pasa a `hidden` en ese mismo momento (está tapada y no necesita animación); el lobby entra con la inmersión estándar y el empuje del fondo hacia abajo.
+Salida del final a la sala o a la partida: `#finalScreen` se va con el mismo fundido y la arena queda activa. Salida a las salas (`Scenes.go('lobby')`): `#finalScreen` baja a opacidad 0 con `blur(6px)` en 420 ms con `--bio-ease-in` y luego recibe `.hidden`; `#scene-arena` pasa a `hidden` en ese mismo momento (está tapada y no necesita animación); el lobby entra con la inmersión estándar y el empuje del fondo hacia abajo.
 
 ### 4.18 Modal de ranking
 
@@ -783,9 +786,8 @@ LAYOUT estiliza estas estructuras; quien las genera (indicado en cada una) las c
 
 ```html
 <div class="hud-bar">
-  <div class="hud-round">
-    <span class="hud-round-label">Ronda 2 de 3</span>
-    <span class="hud-pips"><i class="hud-pip is-done"></i><i class="hud-pip is-current" style="--p:.4"></i><i class="hud-pip"></i></span>
+  <div class="hud-goal">
+    <span class="hud-goal-label">Gana la más larga</span>
   </div>
   <div class="hud-timer" data-phase="calm">          <!-- calm | warn | tension -->
     <svg class="hud-timer-ring" viewBox="0 0 64 64" aria-hidden="true">
@@ -793,7 +795,7 @@ LAYOUT estiliza estas estructuras; quien las genera (indicado en cada una) las c
       <circle class="hud-timer-cilia" cx="32" cy="32" r="29"/>
       <circle class="hud-timer-progress" cx="32" cy="32" r="26"/>
     </svg>
-    <span class="hud-timer-value" aria-label="42 segundos">42</span>
+    <span class="hud-timer-value" aria-label="1 minuto y 42 segundos">1:42</span>
   </div>
   <div class="hud-status">
     <span class="hud-shield"><svg/>Escudo <b class="hud-shield-time">3,2 s</b><i class="hud-shield-bar" style="--p:.64"></i></span>
@@ -805,7 +807,7 @@ LAYOUT estiliza estas estructuras; quien las genera (indicado en cada una) las c
     <li class="hud-row is-me is-immune" data-id="socketId" style="--c:#7DFF6A; --t:#ABECA1; --w:.62">
       <span class="hud-rank">2</span><i class="hud-dot"></i><span class="hud-name">Ana</span>
       <span class="hud-me-tag">Tú</span><svg class="hud-immune-icon"/>
-      <span class="hud-score">21</span><span class="hud-wins"><i class="is-won"></i><i></i><i></i></span>
+      <span class="hud-score">21</span>
       <i class="hud-len"></i>
     </li>
   </ol>
@@ -825,18 +827,9 @@ LAYOUT estiliza estas estructuras; quien las genera (indicado en cada una) las c
 </div>
 ```
 
-**Overlays** (LAYOUT da los contenedores; ESCENAS llena el texto): `#overlay-countdown` contiene `p.overlay-kicker`, `span.countdown-ring` y `span.countdown-number`; `#overlay-round` contiene `p.overlay-kicker` y `p.round-go`. `#scoreDisplay` (ESCENAS) contiene:
+**Overlays** (LAYOUT da los contenedores; ESCENAS llena el texto): `#overlay-countdown` contiene `p.overlay-kicker`, `span.countdown-ring` y `span.countdown-number`; `#overlay-round` contiene `p.overlay-kicker` y `p.round-go`.
 
-```html
-<p class="round-winner" style="--c:#FF5FC8"><i class="round-winner-dot"></i><span>Ana gana la ronda con 34 segmentos</span></p>
-<ol class="round-standings">
-  <li class="round-standing" style="--c:#FF5FC8"><span class="rs-rank">1</span><i class="rs-dot"></i>
-    <span class="rs-name">Ana</span><span class="rs-total">58</span><span class="rs-wins"><i class="is-won"></i><i class="is-won"></i><i></i></span></li>
-</ol>
-<p class="round-next">La ronda 3 empieza en unos segundos</p>
-```
-
-**Final** (ESCENAS) en `#finalScoresList`: `li.final-score-item` (más `.is-champion` en el primero) con `--c`, y dentro `span.final-rank`, `i.final-dot`, `span.final-name`, `span.final-total`, `span.final-wins`.
+**Final** (ESCENAS) en `#finalScoresList`: `li.final-score-item` (más `.is-champion` en cada ganadora) con `--c`, y dentro `span.final-rank`, `i.final-dot`, `span.final-name` y `span.final-total` ("{n} segmentos"). Debajo de la lista, LAYOUT deja `p#finalHint` y `div.final-actions` con los tres botones de 4.17.
 
 **Salas** (INTEGRADOR) en `#roomsList`. Sin `onclick` en línea: delegación de eventos sobre la lista con `data-room-id` y `data-action`.
 
@@ -847,7 +840,7 @@ LAYOUT estiliza estas estructuras; quien las genera (indicado en cada una) las c
     <span class="room-live">En juego</span>            <!-- solo en playing -->
     <span class="room-host">Anfitrión: Ana</span>
     <span class="room-capacity" aria-label="3 de 8 jugadores"><i class="is-on"></i><i class="is-on"></i><i class="is-on"></i><i></i>…</span>
-    <span class="room-config">3 rondas de 60 s, nivel medio</span>
+    <span class="room-config">Partida de 2 min, nivel medio</span>
   </div>
   <button class="join-room-btn" data-room-id="K3J9QZ" data-action="join">Unirse</button>
   <!-- playing: <button class="join-room-btn is-spectate" data-action="spectate">Mirar</button> ; full: <span class="room-full">Llena</span> -->
@@ -856,7 +849,7 @@ LAYOUT estiliza estas estructuras; quien las genera (indicado en cada una) las c
 
 Estado vacío: `li.empty-room` con el texto de la sección 8.
 
-**Jugadores de la sala** (INTEGRADOR) en `#playerList`: `li.player-item` (más `.current-player`, `.eliminated`) con `--c`, y dentro `span.player-rank`, `i.player-dot`, `span.player-name`, `span.player-host` (solo el anfitrión), `span.player-score` (total, con `small` para las rondas ganadas) y `span.player-status` (icono de medusa con `aria-label="Con escudo"` si tiene inmunidad; vacío si no).
+**Jugadores de la sala** (INTEGRADOR) en `#playerList`: `li.player-item` (más `.current-player`, `.eliminated`) con `--c`, y dentro `span.player-rank`, `i.player-dot`, `span.player-name`, `span.player-host` (solo el anfitrión), `span.player-score` (el largo durante la partida; vacío en la sala) y `span.player-status` (icono de medusa con `aria-label="Con escudo"` si tiene inmunidad; vacío si no).
 
 **Jugadores en línea** (INTEGRADOR) en `#onlinePlayersList`: la estructura actual (`li.online-player-item` > `div.online-player-info` > `div.online-player-name` y `div.online-player-status` con `.available` o `.in-game`; `button.invite-button`) más un `i.online-dot` al principio del `li`. Tras invitar, el botón queda deshabilitado con el texto "Enviada" durante 8 segundos. Vacío: `li.online-players-empty`.
 
@@ -904,7 +897,7 @@ Cada frame de `Arena.render` dibuja, en este orden:
 - **Fondo abisal** (caché a resolución del backing store, se regenera solo al cambiar el tamaño): relleno `#020A12`; degradado radial centrado en (300, 120) con radio 520, de `rgba(7,37,54,0.55)` a transparente (luz difusa desde arriba); degradado lineal en el 35 % inferior hacia `rgba(1,5,9,0.6)`.
 - **Cáusticas**: al iniciar se genera una textura de 256 × 256 una sola vez. Es un diagrama de Voronoi de 12 puntos al azar con distancia envolvente (para que la textura sea repetible sin costura); el valor de cada píxel es `1 - smoothstep(0, 0.06, F2 - F1)` (dibuja las venas entre celdas), elevado a 1,5 y usado como alpha (máximo 0,9). Se guardan dos copias teñidas: cian `#4FD8FF` y coral `#FF4D6D`. Cada frame se dibujan dos capas como `createPattern` en modo `'lighter'`: capa A con escala 2,4, deriva de (6, 3) px/s y alpha 0,055; capa B con escala 3,4, deriva de (-4, 5) px/s y alpha 0,035. En tensión, la copia coral se mezcla con alpha `0,6 × nivel de tensión` y la deriva se multiplica por 1,6. En renderIdle el alpha baja al 70 %.
 - **Grilla**: un punto de 0,6 px de radio en cada esquina de celda, color `#4FD8FF` con alpha 0,07. Con `s` igual a 8, un punto cada dos celdas. Se prerenderiza en un canvas fuera de pantalla al llamar a `setConfig` o al cambiar el tamaño; cada frame es un solo `drawImage`.
-- **Nieve marina**: 70 partículas (45 en calidad Q1, 25 en Q0; ×0,6 con `pointer: coarse`). Cada una tiene profundidad `z` entre 0,3 y 1 que define tamaño (0,6 a 1,8 px) y alpha (0,08 a 0,35); deriva horizontal de ±3 px/s, sube a 2 a 6 px/s, vaivén de ±4 px con período de 6 a 11 segundos, y reaparece por el borde opuesto. **Durante la ronda** (`Arena.render`), la nieve se dibuja al 70 % de tamaño y al 55 % de alpha y no se enciende: es fondo, y no tiene que competir con la comida ni con el escudo. **Estela de dinoflagelados**, solo en la arena de espera (`renderIdle`): si una partícula está a menos de `3·s` de la cabeza de una criatura (o del puntero), su encendido sube a 1 y toma el color `body` de esa criatura; el encendido decae en 900 ms. Con encendido, el alpha llega a 0,8 y se dibuja con sprite de glow. El costo es de 70 × 8 comparaciones de distancia por frame.
+- **Nieve marina**: 70 partículas (45 en calidad Q1, 25 en Q0; ×0,6 con `pointer: coarse`). Cada una tiene profundidad `z` entre 0,3 y 1 que define tamaño (0,6 a 1,8 px) y alpha (0,08 a 0,35); deriva horizontal de ±3 px/s, sube a 2 a 6 px/s, vaivén de ±4 px con período de 6 a 11 segundos, y reaparece por el borde opuesto. **Durante la partida** (`Arena.render`), la nieve se dibuja al 70 % de tamaño y al 55 % de alpha y no se enciende: es fondo, y no tiene que competir con la comida ni con el escudo. **Estela de dinoflagelados**, solo en la arena de espera (`renderIdle`): si una partícula está a menos de `3·s` de la cabeza de una criatura (o del puntero), su encendido sube a 1 y toma el color `body` de esa criatura; el encendido decae en 900 ms. Con encendido, el alpha llega a 0,8 y se dibuja con sprite de glow. El costo es de 70 × 8 comparaciones de distancia por frame.
 - **Viñeta**: degradado radial cacheado, transparente hasta el 55 % de la diagonal y `rgba(1,5,9,0.75)` en las esquinas. **Viñeta de tensión**: segunda caché igual con `rgba(255,77,109,0.18)`, dibujada con alpha igual al nivel de tensión (`(10 - roundTimeLeft) / 10` cuando quedan 10 segundos o menos), más un golpe de +0,25 en cada cambio de segundo que decae en 400 ms.
 - **Membrana de bordes**: los bordes de la arena son portales. Cuatro franjas cacheadas de 14 px con degradado de `#1FF2D2` hacia adentro, alpha entre 0,08 y 0,12 en `--bio-dur-breath-slow`. Cuando una serpiente cruza, la franja se enciende en su color en un tramo de `6·s` centrado en el cruce durante 600 ms.
 
@@ -958,7 +951,7 @@ Cuando una serpiente cruza un borde, dos puntos consecutivos quedan a más de me
 
 - La serpiente con `id === state.myId` se dibuja última en cada pasada, con halo × 1,25.
 - **Sonar**: cada 2400 ms, un anillo `#E8FBFF` de 1,5 px crece de radio `0,8·s` a `2,2·s` alrededor de su cabeza con alpha de 0,35 a 0, en 900 ms. Es la forma de encontrarse sin depender del color.
-- **Etiqueta "Tú"** en `--bio-lime` sobre la cabeza propia durante los primeros 2500 ms de cada ronda; después, la propia no lleva etiqueta.
+- **Etiqueta "Tú"** en `--bio-lime` sobre la cabeza propia durante los primeros 2500 ms de la partida; después, la propia no lleva etiqueta.
 - **Etiquetas de otros**: el nombre sobre la cabeza, centrado en `P_0.y - (0,9·s + 8)`; si queda a menos de 16 px del borde superior, va debajo. Alpha 0,8. Tamaño lógico `max(11, 10 / escala)` para que nunca baje de 10 px CSS. Recursive 600.
 - **Espectador** (`state.spectating`): no hay serpiente propia; ninguna lleva "Tú" ni sonar.
 
@@ -1006,7 +999,7 @@ Pulso de luz con estela. Posición: `x, y` que `Motion.projectileAt` (`js/net/mo
 
 ### 5.11 Apariciones
 
-El servidor no avisa cuando aparece comida o un consumible, así que la arena lo detecta. Cuando `state.foods` cambia de referencia (el integrador reemplaza el array en cada frame del servidor), se compara contra el conjunto anterior con claves numéricas `x × 1000 + y` (sin strings). Lo nuevo entra con escala 0 a 1 en 450 ms con `easeOutBack` y un anillo que crece de `0,3·s` a `1,4·s` en 360 ms. Los consumibles se comparan por `id`. La primera vez que llega un estado (inicio de ronda o entrada como espectador) no hay animación de aparición.
+El servidor no avisa cuando aparece comida o un consumible, así que la arena lo detecta. Cuando `state.foods` cambia de referencia (el integrador reemplaza el array en cada frame del servidor), se compara contra el conjunto anterior con claves numéricas `x × 1000 + y` (sin strings). Lo nuevo entra con escala 0 a 1 en 450 ms con `easeOutBack` y un anillo que crece de `0,3·s` a `1,4·s` en 360 ms. Los consumibles se comparan por `id`. La primera vez que llega un estado (inicio de la partida o entrada como espectador) no hay animación de aparición.
 
 ### 5.12 Catálogo de efectos por evento
 
@@ -1022,8 +1015,8 @@ Valores de partículas: `count` es la cantidad; `speed` en px/s; `life` en ms; `
 - **Disparo** (`onProjectileFired`). En el punto de salida: 6 `spark` en cono (dirección del disparo, apertura 0,9 rad), color `body` del tirador, `speed` [80, 180], `life` [180, 320]. **Costo visible**: en la punta de la cola del tirador (último punto de render), una gota de luz de radio `0,35·s` se desprende, se hunde y se apaga en 500 ms, con 4 partículas chicas. La cabeza del tirador retrocede `0,15·s` durante 90 ms (solo visual). Si soy el tirador: sacudida de 1,5 px durante 80 ms.
 - **Proyectil expirado** (`onProjectileExpired`, **extensión**, `expiredProjectiles`). En la última celda dentro de la arena: 7 `dot` del color del proyectil (la arena recuerda el color por id; si no lo encuentra, `#4FD8FF`), `speed` [20, 60], `life` [300, 500]; anillo de `0,3·s` a `1·s` en 240 ms; la membrana del borde parpadea en ese punto.
 - **Consumible recogido** (`onConsumablePicked`, con `x`, `y`). Anillo `#9FF4FF` de `0,5·s` a `2,4·s` en 420 ms; 18 `dot` alternando `#C9F8FF` y `#B9A6FF`, `speed` [40, 120], `life` [500, 900], `gravity` -30; la campana del jugador se infla (5.7). Si soy yo: `Backdrop.pulse('#9FF4FF', 0.2)` (el toast lo pone INTEGRADOR).
-- **Inicio de ronda** (`onRoundStart`). Ola: un anillo desde el centro que crece de radio 0 a 450 en 800 ms con `easeOutExpo`, `lineWidth` de 40 a 2, turquesa con alpha 0,25 en `'lighter'`. Los halos de todas las serpientes se multiplican por 1,6 y vuelven a 1 en 600 ms. Serpiente propia: tres anillos de sonar seguidos (0, 200 y 400 ms), de `0,5·s` a `4·s` en 700 ms cada uno, y la etiqueta "Tú" (5.6). Se descartan las colas desprendidas y estelas de la ronda anterior.
-- **Fin de ronda** (`onRoundEnd({ winnerId })`). Ver 5.14.
+- **Inicio de la partida** (`onRoundStart`; el nombre viene de cuando había rondas). Ola: un anillo desde el centro que crece de radio 0 a 450 en 800 ms con `easeOutExpo`, `lineWidth` de 40 a 2, turquesa con alpha 0,25 en `'lighter'`. Los halos de todas las serpientes se multiplican por 1,6 y vuelven a 1 en 600 ms. Serpiente propia: tres anillos de sonar seguidos (0, 200 y 400 ms), de `0,5·s` a `4·s` en 700 ms cada uno, y la etiqueta "Tú" (5.6). Se descartan las colas desprendidas y estelas de la partida anterior.
+- **Fin de la partida** (`onRoundEnd({ winnerId })`). Ver 5.14.
 
 **Sacudida** (`Arena.shake(intensity, ms)`): desplazamiento `dx = I × k × sin(now × 0,071)`, `dy = I × k × cos(now × 0,053)` con `k = (1 - t)²` y `t` el progreso. Si hay varias activas, manda la de mayor intensidad restante. Solo mueve el contenido de la arena (no el HUD ni el marco). Con movimiento reducido no hace nada.
 
@@ -1041,7 +1034,7 @@ Reemplaza a `drawCountdown`. Con `state.playing` verdadero y `roundTimeLeft` ent
 
 En cada cambio de número: escala de 1,18 a 1 en 450 ms con `easeOutExpo` y alpha que arranca en el doble de la base y baja a la base. Con movimiento reducido, sin escala.
 
-### 5.14 Fin de ronda en la arena
+### 5.14 Fin de la partida en la arena
 
 Al recibir `onRoundEnd({ winnerId })`, la arena entra en congelamiento durante 2400 ms (las llamadas a `render` siguen llegando con el último estado congelado):
 
@@ -1050,13 +1043,13 @@ Al recibir `onRoundEnd({ winnerId })`, la arena entra en congelamiento durante 2
 - Sobre el ganador baja una columna de luz (sprite de degradado vertical de ancho `6·s`, de alpha 0 a 0,35 en 500 ms) y brota una fuente de plancton: 80 partículas repartidas en 1200 ms desde su cabeza, en sus colores `body` y `core`, ángulo hacia arriba con apertura de 1,2 rad, `speed` [40, 140], `gravity` -20, `life` [900, 1600]. Su etiqueta de nombre crece a 1,4 veces.
 - Si el ganador soy yo: `Backdrop.pulse('#C8FF3C', 0.5)`.
 - La viñeta de tensión y el contador gigante se desvanecen en 800 ms.
-- Si `winnerId` es nulo, solo la cámara lenta.
+- Si `winnerId` es nulo (empate), solo la cámara lenta.
 
-Después del congelamiento, el integrador pasa a `Arena.renderIdle` (la escena sigue en 'game' y la cuenta regresiva aparece encima).
+A los 2000 ms entra la pantalla final encima (4.17). Después del congelamiento, el integrador pasa a `Arena.renderIdle` debajo del final.
 
 ### 5.15 Modo atracción (renderIdle)
 
-`Arena.renderIdle(nowMs, { snakesPreview, caption })` mantiene la arena viva cuando no hay ronda en curso: en la sala de espera y entre rondas. Dibuja las capas de fondo (cáusticas al 70 %), la nieve marina, y una criatura por jugador de `snakesPreview` (**extensión** de forma: `[{ id, name, color, isMe }]`; `caption` es un texto opcional, también extensión).
+`Arena.renderIdle(nowMs, { snakesPreview, caption })` mantiene la arena viva cuando no hay partida en curso: en la sala de espera y debajo de la pantalla final. Dibuja las capas de fondo (cáusticas al 70 %), la nieve marina, y una criatura por jugador de `snakesPreview` (**extensión** de forma: `[{ id, name, color, isMe }]`; `caption` es un texto opcional, también extensión).
 
 - Cada criatura nada libre: rumbo que cambia suave (ruido de valor con período de 3 a 5 segundos), velocidad de 38 px/s, giro de evasión cuando se acerca a menos de 40 px de un borde (no cruza portales en este modo). El cuerpo se arma con un historial de posiciones muestreado cada `0,8 × s_idle` de recorrido, 10 puntos, con `s_idle = clamp(segmentSize, 14, 22)`. Se dibuja con el mismo renderizador de 5.4, incluidos fotóforos, señuelo y etiqueta con el nombre.
 - La propia (`isMe`) lleva etiqueta "Tú" en lima permanente y sonar.
@@ -1096,11 +1089,11 @@ Responsable: ESCENAS (`HUD.update`, `HUD.show`, `HUD.hide`); LAYOUT estiliza el 
 
 Membrana de 64 px de alto (48 en móvil) del ancho de la arena, en tres zonas.
 
-- **Ronda** (izquierda): "Ronda {n} de {maxRounds}" en Recursive 600 16 px y tres pips de 10 px separados 6 px. Ronda terminada: relleno turquesa con glow. Ronda actual: anillo lima de 2 px cuyo relleno crece con el avance de la ronda (`--p = 1 - timeLeft / roundTime`). Ronda futura: anillo de 1,5 px en `abyss-500`. Al empezar una ronda, el pip nuevo late con `--bio-ease-jelly` en 360 ms.
-- **Temporizador** (centro): SVG de 64 × 64 a 56 px CSS. Pista de radio 26 y trazo de 4 px en `rgba(255,255,255,0.08)`; progreso de radio 26 y 4 px con extremos redondeados, `stroke-dasharray` de 163,4 (2π × 26) y `stroke-dashoffset = 163,4 × (1 - timeLeft / roundTime)`, con transición lineal de 1000 ms (así el anillo baja continuo entre los ticks de segundo). Un tercer círculo de radio 29 y trazo de 1 px con `stroke-dasharray: 2 6` gira una vuelta cada 40 segundos: son los cilios. La cifra va en el centro en Recursive MONO 700 24 px.
+- **Meta** (izquierda): "Gana la más larga" en Recursive 600 14 px `--bio-ink-2` (12 px en móvil), truncado con elipsis si no entra. Reemplaza a la ronda y sus pips: la partida es una sola.
+- **Temporizador** (centro): SVG de 64 × 64 a 56 px CSS. Pista de radio 26 y trazo de 4 px en `rgba(255,255,255,0.08)`; progreso de radio 26 y 4 px con extremos redondeados, `stroke-dasharray` de 163,4 (2π × 26) y `stroke-dashoffset = 163,4 × (1 - timeLeft / roundTime)`, con transición lineal de 1000 ms (así el anillo baja continuo entre los ticks de segundo). Un tercer círculo de radio 29 y trazo de 1 px con `stroke-dasharray: 2 6` gira una vuelta cada 40 segundos: son los cilios. La cifra va en el centro en Recursive MONO 700 24 px, como minutos y segundos ("1:42") desde un minuto y solo segundos por debajo; su `aria-label` lo dice en palabras ("1 minuto y 42 segundos").
 - **Estado** (derecha): indicador de escudo propio o badge de espectador.
 
-Fases del temporizador (`data-phase`, también reflejado en `#scene-arena[data-phase]`). Con `playing` falso (entre rondas, o espectador antes de una ronda) la fase vuelve a `calm`.
+Fases del temporizador (`data-phase`, también reflejado en `#scene-arena[data-phase]`). Con `playing` falso (fin de la partida, o espectador antes de que empiece) la fase vuelve a `calm`.
 
 | Fase | Segundos restantes | Color | Comportamiento |
 |---|---|---|---|
@@ -1120,7 +1113,7 @@ Lista ordenada de los jugadores, en filas de 36 px. Cada jugador llega con el co
 - Fila propia: borde izquierdo de 3 px lima, etiqueta "Tú" en lima 12 px después del nombre.
 - Con inmunidad: icono de medusa de 14 px en `#9FF4FF` después del nombre.
 - `gameover`: opacidad 0,4.
-- Métrica: durante la ronda (`data-metric="live"`) el puntaje es el largo actual (`score`) y la caption dice "Largo actual". Entre rondas (`playing` falso) muestra `totalScore`, los pips de `roundWins` (tres pips de 6 px) y la caption "Puntos totales".
+- Métrica: siempre el largo actual (`score`), con la caption "Largo actual". Al terminar la partida conserva el último valor (ver 4.16).
 - Reordenamiento: FLIP de 280 ms con `--bio-ease-standard`, reutilizando los mismos `li` por `data-id` (nunca se reconstruye la lista con `innerHTML`). La fila que sube de posición recibe un glow de su color durante 400 ms.
 - Más de 8 jugadores: los 7 primeros más la fila propia con su rango real, separada por un espacio de 8 px con tres puntos tenues.
 
@@ -1129,11 +1122,11 @@ Lista ordenada de los jugadores, en filas de 36 px. Cada jugador llega con el co
 - `HUD.update(data)` se llama en cada `gameLogicFrame` (unas 12 veces por segundo) y en cada `roundTimeUpdate`. HUD compara con el valor anterior y solo toca el DOM si algo cambió.
 - `HUD.update` acepta en cada jugador el campo **extensión** `immuneUntil` (marca de tiempo en ms del fin del escudo, tomada de `activeConsumable.endTime`).
 - `HUD.show()`: `.hud-bar` entra desde `translateY(-16px)` y el marcador con filas escalonadas, 520 ms. `HUD.hide()`: opacidad a 0 en 240 ms y luego oculto.
-- El HUD es visible solo en modo game (incluido entre rondas y como espectador).
+- El HUD es visible solo en modo game (incluido como espectador).
 
 ### 6.4 Móvil (hasta 1023 px)
 
-- `.hud-bar` de 48 px sobre la arena: a la izquierda los pips y "2 de 3"; en el centro el temporizador a 44 px con la cifra en 18 px; a la derecha el largo propio (punto de color y cifra MONO) o el badge de espectador. El escudo propio reemplaza al largo mientras dura.
+- `.hud-bar` de 48 px sobre la arena: a la izquierda la meta en 12 px; en el centro el temporizador a 44 px con la cifra en 18 px; a la derecha el largo propio (punto de color y cifra MONO) o el badge de espectador. El escudo propio reemplaza al largo mientras dura.
 - `.hud-board` debajo de la arena como fila horizontal con scroll (`overflow-x: auto`, `scroll-snap-type: x proximity`): chips de 32 px con punto, nombre truncado a 8 caracteres y puntaje. El chip propio tiene borde lima y queda siempre visible (si está fuera de vista, se fija al final de la fila). Caption oculta.
 
 ## 7. Accesibilidad y rendimiento
@@ -1160,7 +1153,7 @@ Objetivo: 60 FPS con 8 serpientes de unos 60 segmentos más partículas, en una 
 - Movimiento reducido: tabla 3.6. Fotosensibilidad: máximo 3 destellos por segundo, siempre locales, alpha máximo 0,7 (0,25 con movimiento reducido).
 - `prefers-contrast: more`: paneles con alpha 0,96, `--bio-ink-3` pasa a valer `--bio-ink-2`, sin cáusticas en la arena.
 - Teclado: todo se puede operar con Tab, Enter y Escape. Foco visible (3.4). El modal atrapa el foco. Las escenas inactivas tienen `inert`.
-- Lectores de pantalla: `<html lang="es">`; toasts con `role="status"` o `role="alert"`; `#overlay-round` con `aria-live="polite"` (anuncia "Ronda 2 de 3, ¡Ya!"); el temporizador del HUD con `aria-label` y sin `aria-live` (sería ruido cada segundo); `#gameOverScreen` y `#finalScreen` con `role="dialog"` y `aria-labelledby`; el canvas con `aria-label="Arena de juego"`.
+- Lectores de pantalla: `<html lang="es">`; toasts con `role="status"` o `role="alert"`; `#overlay-round` con `aria-live="polite"` (anuncia "Gana la serpiente más larga, ¡Ya!"); el temporizador del HUD con `aria-label` y sin `aria-live` (sería ruido cada segundo); `#gameOverScreen` y `#finalScreen` con `role="dialog"` y `aria-labelledby`; el canvas con `aria-label="Arena de juego"`.
 - Táctil: objetivos de 44 × 44 px como mínimo; `touch-action: none` en la arena.
 - Las flechas, WASD y Espacio solo hacen `preventDefault` en partida, jugando y sin ser espectador (como hoy, `SnakeGame.js:745-769`), para no romper el scroll ni los inputs.
 - Escapar HTML: todo nombre de usuario, código de sala o texto que llegue del servidor se pone con `textContent`. Hoy hay `innerHTML` con nombres sin escapar en `SnakeGame.js:1353-1363` (salas), `1656-1661` (final) y `1781-1787` (ranking); el rediseño los reemplaza.
@@ -1205,7 +1198,7 @@ Responsables: LAYOUT (textos estáticos del HTML), INTEGRADOR (textos generados)
 | `.room-host` | Anfitrión: {nombre} |
 | `.room-capacity` (`aria-label`) | {n} de {max} jugadores |
 | `.room-live` | En juego |
-| `.room-config` | 3 rondas de 60 s, nivel {fácil, medio, difícil} |
+| `.room-config` | Partida de {duración}, nivel {fácil, medio, difícil} (duración: "2 min", "1 min 30 s", "10 s") |
 | Acciones de sala | Unirse / Mirar / Llena |
 | Título del dock, `#dockToggle` | En línea |
 | Dock vacío / cargando | No hay nadie más en línea / Buscando jugadores… |
@@ -1220,7 +1213,6 @@ Responsables: LAYOUT (textos estáticos del HTML), INTEGRADOR (textos generados)
 | `#roomInfo` espectador | Sala {código} + Estás mirando como espectador |
 | Título de jugadores | Jugadores ({n} de {max}) |
 | `.player-host` | Anfitrión |
-| `.player-score small` | {k} rondas (1 ronda) |
 | `#waitingSpan` | Faltan {n} jugadores para empezar (Falta 1 jugador para empezar) |
 | `#waitingSpan` (alcanza el mínimo, no soy anfitrión) | Esperando a que el anfitrión inicie la partida |
 | `#startGameButton` | Iniciar partida |
@@ -1237,23 +1229,23 @@ Responsables: LAYOUT (textos estáticos del HTML), INTEGRADOR (textos generados)
 
 | Elemento | Texto |
 |---|---|
-| HUD ronda | Ronda {n} de 3 (móvil: {n} de 3) |
-| HUD caption | Largo actual / Puntos totales |
+| HUD meta | Gana la más larga |
+| HUD temporizador | {m}:{ss} desde un minuto, {s} debajo (`aria-label`: "{m} minutos y {s} segundos") |
+| HUD caption | Largo actual |
 | HUD fila propia, etiqueta en arena | Tú |
 | HUD escudo | Escudo {x,y} s |
 | HUD espectador | Espectador |
-| Cuenta regresiva | Ronda {n} de 3, luego 3, 2, 1 |
-| Inicio de ronda | ¡Ya! |
-| `#roundEndTitle` | Fin de la ronda {n} |
-| `.round-winner` | {nombre} gana la ronda con {k} segmentos (1 segmento) |
-| `.round-winner` sin ganador | Nadie gana esta ronda |
-| `.round-next` | La ronda {n + 1} empieza en unos segundos / Calculando el resultado final… |
-| `#restartButton` | Ocultar |
-| `#finalTitle` | {nombre del campeón} (o "Sala cerrada") |
-| `#finalMessage` | Gana la partida con {total} puntos y {k} rondas ganadas. (singulares: 1 punto, 1 ronda ganada; con 0: "y ninguna ronda ganada") |
+| Cuenta regresiva | Gana la serpiente más larga, luego 3, 2, 1 |
+| Inicio de la partida | Gana la serpiente más larga, ¡Ya! |
+| `#finalTitle` | {nombre del ganador} (en empate, "Empate"; o "Sala cerrada") |
+| `#finalMessage` | Gana con la serpiente más larga: {n} segmentos. / En empate: {A} y {B} terminan con {n} segmentos. (singular: 1 segmento) |
 | Título de la clasificación | Clasificación final |
-| `.final-total` / `.final-wins` | {n} puntos / {k} rondas ganadas (1 ronda ganada; Sin rondas ganadas) |
-| `#backToMenuButton` | Volver a las salas |
+| `.final-total` | {n} segmentos (1 segmento) |
+| `#finalHint` | {anfitrión} puede iniciar otra partida / Falta 1 jugador para jugar de nuevo / Faltan {n} jugadores para jugar de nuevo |
+| `#playAgainButton` | Jugar de nuevo |
+| `#backToRoomButton` | Volver a la sala |
+| `#backToMenuButton` | Salir a las salas (espectador: Volver a las salas) |
+| `#leaveRoomButton` | Salir de la sala |
 | Título del modal | Ranking global |
 | `.leaderboard-head` | Jugador / Victorias / Partidas / Efectividad |
 | `.winrate` | {p} % |
@@ -1288,7 +1280,7 @@ Reemplazo de cada `addCanvasNotification` actual. "Sin toast" significa que el c
 | `backToMenuSuccess` | Sin toast | |
 | `invitationSent` | Invitación enviada a {nombre} | success |
 | `invitationReceived` | {nombre} te invita a la sala {código} | invitation, acción "Unirse" |
-| Invitar durante una ronda | No puedes invitar durante una ronda | error |
+| Invitar durante una partida | No puedes invitar durante una partida | error |
 | Guardar sin ser anfitrión | Solo el anfitrión puede cambiar la configuración | error |
 | Mínimo mayor que máximo | El mínimo de jugadores no puede superar al máximo | error |
 | Mirar sin sesión | Inicia sesión para mirar partidas | error |
@@ -1342,14 +1334,14 @@ Responsable: INTEGRADOR. Esta sección resume lo que cambia en `SnakeGame.js` pa
 
 **Arranque.** `Backdrop.init(document.getElementById('backdrop'))`, `Arena.init(canvas)`, `Scenes.go('intro', { immediate: true })`. Con perfil guardado se pide el perfil como hoy y se navega en `profileLoaded`; sin perfil, `Scenes.go('login')` enseguida (queda en cola, 4.2).
 
-**Bucle de render.** Un único `requestAnimationFrame` siempre activo (reemplaza a `startRenderLoop` y `stopRenderLoop`, que hoy detienen el dibujo al terminar la ronda). Por frame:
+**Bucle de render.** Un único `requestAnimationFrame` siempre activo (reemplazó a `startRenderLoop` y `stopRenderLoop`, que detenían el dibujo al terminar). Por frame:
 
-1. Si se está jugando una ronda y no hay fin de ronda pendiente: posiciones de serpientes y proyectiles desde la línea de tiempo (`js/net/motion.js`), y `Arena.render(state, now)` con `state = { snakes, foods, consumables, projectiles: clientProjectiles, myId: socket.id, roundTimeLeft, playing, spectating: isSpectating }`.
-2. Si hay fin de ronda pendiente y no pasaron 2400 ms: `Arena.render` con el último estado congelado.
-3. En sala, entre rondas después del congelamiento, o con la escena 'game' sin ronda: `Arena.renderIdle(now, { snakesPreview, caption })`, con `snakesPreview` armado a partir de `snakes` (id, name, color, `isMe`).
+1. Si se está jugando la partida: posiciones de serpientes y proyectiles desde la línea de tiempo (`js/net/motion.js`), y `Arena.render(state, now)` con `state = { snakes, foods, consumables, projectiles: clientProjectiles, myId: socket.id, roundTimeLeft, playing, spectating: isSpectating }`.
+2. Si la partida terminó y no pasaron 2400 ms: `Arena.render` con el último estado congelado.
+3. En sala, debajo del final después del congelamiento, o con la escena 'game' sin partida: `Arena.renderIdle(now, { snakesPreview, caption })`, con `snakesPreview` armado a partir de `snakes` (id, name, color, `isMe`).
 4. Si la escena actual no es 'room' ni 'game': no se dibuja la arena.
 
-Un detalle del servidor condiciona estas reglas: `endRound` no pone `gameState.playing` en falso (`index.js:701-750`) y la ronda siguiente arranca sola a los 3 segundos (`index.js:741`), con su cuenta regresiva también marcada como `playing` verdadero. El cliente necesita su propio estado de "fin de ronda pendiente", que se activa en `roundEnd` y se limpia recién en el siguiente `gameStart`; mientras está activo, la regla 1 no aplica aunque `gameState.playing` sea verdadero. Entre rondas no se muestra `#startGameButton`.
+Al terminar, el servidor (`endMatch`) emite `gameEnd` y enseguida vuelve la sala a espera, así que el `updatePlayers` que sigue trae `playing` falso y serpientes de largo 3. El cliente marca `matchFinished` al recibir `gameEnd` y lo limpia con la siguiente `countdown` o `gameStart`; mientras está marcado, no vuelve a la sala por su cuenta (eso es solo para "No quedan jugadores suficientes") y el HUD conserva el resultado.
 
 **`gameLogicFrame`**, en este orden: despachar `foodEvents`, `hitEvents`, `blockEvents`, `portals`, `projectileEvents`, `expiredProjectiles` y `consumableEvents` a sus hooks de Arena; aplicar jugadores, proyectiles, comida y consumibles (como hoy); llamar a `HUD.update`; si `roundTimeLeft` llegó a 10, `Backdrop.setMood('tension')`, y desde ahí `Backdrop.pulse('#FF4D6D', 0.15)` en cada segundo nuevo.
 
