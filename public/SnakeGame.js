@@ -8,8 +8,8 @@
  *   - window.Scenes / Overlays / Toasts / HUD (js/ui/scenes.js)
  *
  * Reglas de esta capa (docs/VISUAL_SPEC.md, sección 10):
- *   - Un único requestAnimationFrame siempre vivo. Con ronda en curso: Arena.render;
- *     al terminar la ronda, 2400 ms de estado congelado; el resto del tiempo, Arena.renderIdle.
+ *   - Un único requestAnimationFrame siempre vivo. Con partida en curso: Arena.render;
+ *     al terminar la partida, 2400 ms de estado congelado; el resto del tiempo, Arena.renderIdle.
  *   - Los eventos de gameLogicFrame se despachan a la arena cuando el render alcanza su frame,
  *     ANTES de dibujar las posiciones de ese frame.
  *   - Nada que venga del servidor se inserta con innerHTML: todo va con textContent.
@@ -46,7 +46,8 @@ document.addEventListener('DOMContentLoaded', function () {
   // ===========================================================================
   const SVGNS = 'http://www.w3.org/2000/svg';
   const ARENA_SIZE = 600;               // coordenadas lógicas fijas del servidor
-  const FREEZE_MS = 2400;               // congelamiento de la arena al terminar la ronda (arena.js, 5.14)
+  const FREEZE_MS = 2400;               // congelamiento de la arena al terminar la partida (arena.js, 5.14)
+  const FINAL_DELAY_MS = 2000;          // la pantalla final entra cuando la arena ya enfocó al ganador
   const INVITE_COOLDOWN_MS = 8000;      // "Enviada" en el botón de invitar
   const PROFILE_RETRY_MAX = 6;          // reintentos del re-registro automático ("ya está conectado")
   const KEY_TO_ARROW = { 37: 37, 38: 38, 39: 39, 40: 40, 87: 38, 65: 37, 83: 40, 68: 39 }; // flechas y WASD
@@ -78,8 +79,6 @@ document.addEventListener('DOMContentLoaded', function () {
   const $ = function (id) { return document.getElementById(id); };
   const canvas = $('game');
 
-  const gameOverScreen = $('gameOverScreen');
-  const restartButton = $('restartButton');
   const joinButton = $('joinButton');
   const createRoomButton = $('createRoomButton');
   const joinRoomButton = $('joinRoomButton');
@@ -106,6 +105,10 @@ document.addEventListener('DOMContentLoaded', function () {
   const leaderboardModal = $('leaderboardModal');
   const leaderboardList = $('leaderboardList');
   const backToMenuButton = $('backToMenuButton');
+  const backToRoomButton = $('backToRoomButton');
+  const playAgainButton = $('playAgainButton');
+  const finalHint = $('finalHint');
+  const leaveRoomButton = $('leaveRoomButton');
 
   // ===========================================================================
   // Estado de red y de juego
@@ -128,18 +131,18 @@ document.addEventListener('DOMContentLoaded', function () {
   let roomHostId = null;
   let roomHostName = '';
   let roomConfig = {};
-  let roomScores = {};
   let roundTimeLeft = 0;
 
   let onlinePlayers = [];
   const pendingInvitations = [];
 
   // Estado propio de la presentación
-  let roundLive = false;        // ronda en curso: entre gameStart (o spectatingStarted) y roundEnd
+  let roundLive = false;        // partida en curso: entre gameStart (o spectatingStarted) y gameEnd
   let freezeUntil = 0;          // performance.now() hasta el que la arena muestra el último estado congelado
   let countdownActive = false;  // cuenta regresiva 3, 2, 1 en pantalla
   let startRequested = false;   // el anfitrión pidió iniciar y el servidor todavía no arrancó
-  let matchFinished = false;    // llegó gameEnd: la escena final está por entrar
+  let matchFinished = false;    // llegó gameEnd: la escena final está por entrar o a la vista
+  let finalTimer = 0;           // espera entre gameEnd y la pantalla final
   let tensionOn = false;        // últimos 10 segundos
   let lastPulseSecond = -1;
   let keyboardSeen = false;
@@ -150,7 +153,6 @@ document.addEventListener('DOMContentLoaded', function () {
   let knownPlayerIds = new Set();
   const invitedAt = new Map();  // socketId -> momento de la invitación
   let roomsRefreshTimer = 0;
-  let roundEndHold = false;     // el panel de fin de ronda sigue abierto: la arena mantiene el estado congelado
   let autoProfilePending = false; // el último getOrCreateProfile lo mandó el cliente solo (sesión guardada o reconexión)
   let profileRetryTimer = 0;
   let profileRetryCount = 0;
@@ -199,8 +201,7 @@ document.addEventListener('DOMContentLoaded', function () {
     return { body: hex || '#1FF2D2', text: '#E8FBFF' };
   }
 
-  function maxRounds() { return (roomConfig && +roomConfig.maxRounds) || 3; }
-  function roundTime() { return (roomConfig && +roomConfig.roundTime) || 60; }
+  function roundTime() { return (roomConfig && +roomConfig.roundTime) || 120; }
 
   function translateServerMessage(message) {
     const text = String(message === undefined || message === null ? '' : message).trim();
@@ -426,7 +427,7 @@ document.addEventListener('DOMContentLoaded', function () {
       playerInfo.appendChild(el('div', 'online-player-status ' + statusClass, statusText));
       listItem.appendChild(playerInfo);
 
-      // Botón de invitar solo si: estoy en una sala, no hay ronda y el jugador está disponible
+      // Botón de invitar solo si: estoy en una sala, no hay partida y el jugador está disponible
       const showInviteButton = currentRoomId && !isSpectating && !gameState.playing && !roundLive && player.canInvite;
       if (showInviteButton) {
         const inviteButton = el('button', 'invite-button');
@@ -452,7 +453,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function invitePlayer(targetSocketId, targetPlayerName, button) {
     if (!currentRoomId || gameState.playing || roundLive) {
-      toast('No puedes invitar durante una ronda', 'error');
+      toast('No puedes invitar durante una partida', 'error');
       return;
     }
     socket.emit('invitePlayer', { targetSocketId: targetSocketId });
@@ -522,7 +523,7 @@ document.addEventListener('DOMContentLoaded', function () {
     };
   }
 
-  // Ronda nueva (gameStart o spectatingStarted): el primer frame interpola desde este estado
+  // Partida nueva (gameStart o spectatingStarted): el primer frame interpola desde este estado
   function restartTimeline(data) {
     resetTimeline();
     if (!timeline) return;
@@ -617,7 +618,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (s) applyTimelineSample(s, now);
   }
 
-  // Fin de ronda: lo congelado es el último frame (coincide con los puntajes finales)
+  // Fin de la partida: lo congelado es el último frame (coincide con la clasificación final)
   function settleTimeline() {
     if (!timeline) return;
     const s = timeline.sampleLatest(timeSample);
@@ -631,7 +632,7 @@ document.addEventListener('DOMContentLoaded', function () {
   document.addEventListener('keydown', handleKeyPress);
 
   // Espacio y flechas son teclas de juego: mientras hay partida (o su cuenta regresiva) no desplazan
-  // la página ni activan el botón enfocado, aunque la ronda todavía no corra (roundLive en false).
+  // la página ni activan el botón enfocado, aunque la partida todavía no corra (roundLive en false).
   function swallowsGameKeys(target) {
     if (!currentRoomId) return false;
     const scene = Scenes.current();
@@ -655,7 +656,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // No permitir controles si se está mirando
     if (isSpectating) return;
-    // Solo con una ronda en curso (entre rondas el servidor sigue en playing=true)
+    // Solo con una partida en curso (no durante la cuenta regresiva)
     if (!isConnected || !gameState.playing || !roundLive) return;
     if (inField) return;
 
@@ -711,17 +712,6 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  function colorsById() {
-    const map = {};
-    snakes.forEach(function (s) { map[s.id] = s.color; });
-    return map;
-  }
-  function colorsByName() {
-    // Los nombres son únicos dentro de una sala (index.js, joinRoom)
-    const map = {};
-    snakes.forEach(function (s) { map[s.name] = s.color; });
-    return map;
-  }
 
   // ===========================================================================
   // Arena: configuración y bucle de render (un único requestAnimationFrame)
@@ -767,10 +757,9 @@ document.addEventListener('DOMContentLoaded', function () {
         applyTimeline(now);
         fillArenaState();
         Arena.render(arenaState, now);
-      } else if (now < freezeUntil || (roundEndHold && gameOverScreen && !gameOverScreen.classList.contains('hidden'))) {
-        // Fin de ronda: el último estado queda congelado (sin interpolar) mientras la arena enfoca al ganador.
-        // Sigue congelado mientras el panel de fin de ronda esté abierto
-        // (hasta la cuenta regresiva siguiente o "Ocultar"), así el ganador no se reemplaza por el modo atracción.
+      } else if (now < freezeUntil) {
+        // Fin de la partida: el último estado queda congelado (sin interpolar) mientras la arena enfoca
+        // al ganador, antes de la pantalla final.
         fillArenaState();
         Arena.render(arenaState, now);
       } else {
@@ -810,7 +799,6 @@ document.addEventListener('DOMContentLoaded', function () {
   function hudPlayers() {
     const now = Date.now();
     return snakes.map(function (s) {
-      const sc = roomScores && roomScores[s.id];
       const ac = s.activeConsumable;
       const immune = !!(ac && ac.type === 'immunity' && (!ac.endTime || now < ac.endTime));
       return {
@@ -818,8 +806,6 @@ document.addEventListener('DOMContentLoaded', function () {
         name: s.name,
         color: s.color,
         score: s.score,
-        totalScore: sc ? sc.totalScore : 0,
-        roundWins: sc ? sc.roundWins : 0,
         immune: immune,
         immuneUntil: immune && ac.endTime ? ac.endTime : 0,
         isMe: !isSpectating && s.id === socket.id,
@@ -832,8 +818,6 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!currentRoomId) return;
     ui(function () {
       HUD.update({
-        round: gameState.round || 1,
-        maxRounds: maxRounds(),
         timeLeft: roundTimeLeft,
         roundTime: roundTime(),
         players: hudPlayers(),
@@ -926,7 +910,6 @@ document.addEventListener('DOMContentLoaded', function () {
   function handleRoundAborted() {
     roundLive = false;
     freezeUntil = 0;
-    roundEndHold = false;
     countdownActive = false;
     gameState = Object.assign({}, gameState, { playing: false });
     resetTimeline();
@@ -955,10 +938,8 @@ document.addEventListener('DOMContentLoaded', function () {
     roomConfig = data.config || {};
     segmentSize = roomConfig.segmentSize || segmentSize;
     if (isHost) { roomHostId = socket.id; roomHostName = currentUsername(); }
-    roomScores = {};
     roundLive = false;
     freezeUntil = 0;
-    roundEndHold = false;
     countdownActive = false;
     startRequested = false;
     matchFinished = false;
@@ -1040,12 +1021,12 @@ document.addEventListener('DOMContentLoaded', function () {
       if (hostSnake) roomHostName = hostSnake.name;
     }
 
-    // La cuenta regresiva de la ronda 1 se cancela si alguien se va y no alcanza el mínimo
+    // La cuenta regresiva se cancela si alguien se va y no alcanza el mínimo
     if (countdownActive && !state.playing && players.length < (config.minPlayers || 2)) {
       countdownActive = false;
       ui(function () { Overlays.hideAll(); });
     }
-    // "No quedan jugadores suficientes" estando en partida y sin fin de ronda pendiente (spec 4.1)
+    // "No quedan jugadores suficientes" estando en partida y sin fin de partida pendiente (spec 4.1)
     if (!state.playing && Scenes.current() === 'game' && !isSpectating && !matchFinished && freezeUntil <= perfNow() && !countdownActive) {
       roundLive = false;
       ui(function () { Scenes.go('room'); });
@@ -1056,7 +1037,9 @@ document.addEventListener('DOMContentLoaded', function () {
     updateRoomInfo();
     syncRoomControls();
     updateConfigPanel();
-    if (Scenes.current() === 'game') updateHUD();
+    // Al terminar la partida el servidor ya reinició la sala (largo 3): el marcador conserva el
+    // resultado mientras la arena congelada y la pantalla final lo muestran
+    if (Scenes.current() === 'game' && !matchFinished) updateHUD();
 
     // Actualizar lista de jugadores en línea cuando cambie el estado
     socket.emit('getOnlinePlayers');
@@ -1077,29 +1060,27 @@ document.addEventListener('DOMContentLoaded', function () {
     if (changed) toast('Configuración actualizada', 'success');
   });
 
-  socket.on('updateScores', function (scores) {
-    roomScores = scores || {};
-    updatePlayerList();
-    if (Scenes.current() === 'game') updateHUD();
-  });
-
   // ===========================================================================
-  // Socket: rondas
+  // Socket: partida
   // ===========================================================================
   socket.on('countdown', function (count, state) {
     if (state) gameState = state;
     countdownActive = true;
-    roundEndHold = false;
     startRequested = false;
-    roundTimeLeft = roundTime(); // el anillo del HUD arranca lleno para la ronda que viene
-    ui(function () { Overlays.countdown(count, state ? state.round : gameState.round); });
+    matchFinished = false;
+    roundTimeLeft = roundTime(); // el anillo del HUD arranca lleno para la partida que viene
+    // "Jugar de nuevo": quien sigue en la pantalla final vuelve a la arena para ver la cuenta
+    ui(function () {
+      if (Scenes.current() === 'final') Scenes.go('room');
+      Overlays.countdown(count);
+    });
     syncRoomControls();
     updateConfigPanel();
     if (Scenes.current() === 'game') updateHUD();
   });
 
   socket.on('gameStart', function (data) {
-    // Un espectador sigue siéndolo en las rondas siguientes: solo es jugador si figura en la lista
+    // Un espectador sigue siéndolo en las partidas siguientes: solo es jugador si figura en la lista
     isSpectating = !!currentRoomId && !data.players.some(function (p) { return p.id === socket.id; });
     roomConfig = data.config;
     segmentSize = data.config.segmentSize;
@@ -1107,14 +1088,13 @@ document.addEventListener('DOMContentLoaded', function () {
     snakes = data.players.map(function (serverPlayer) { return createLocalSnake(serverPlayer); });
     foods = data.foods || [];
     consumables = data.consumables || [];
-    // Los proyectiles vivos al terminar la ronda anterior desaparecen sin evento
+    // Los proyectiles vivos al terminar la partida anterior desaparecen sin evento
     restartTimeline(data);
     gameState = data.gameState;
     roundTimeLeft = data.gameState.roundTimeLeft !== undefined ? data.gameState.roundTimeLeft : roundTime();
 
     roundLive = true;
     freezeUntil = 0;
-    roundEndHold = false;
     countdownActive = false;
     startRequested = false;
     matchFinished = false;
@@ -1125,7 +1105,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (Arena) ui(function () { Arena.onRoundStart(); });
     ui(function () {
       Scenes.go('game');
-      Overlays.roundStart(gameState.round, maxRounds());
+      Overlays.roundStart();
       HUD.show();
       Backdrop.setMood('game');
     });
@@ -1154,11 +1134,9 @@ document.addEventListener('DOMContentLoaded', function () {
     restartTimeline(data);
     gameState = data.gameState;
     roundTimeLeft = data.roundTimeLeft || roundTime();
-    roomScores = data.roundScores || {};
 
     roundLive = !!(data.gameState && data.gameState.playing);
     freezeUntil = 0;
-    roundEndHold = false;
     countdownActive = false;
     matchFinished = false;
     resetTension();
@@ -1238,45 +1216,37 @@ document.addEventListener('DOMContentLoaded', function () {
     checkTension();
   });
 
-  socket.on('roundEnd', function (data) {
-    roomScores = data.scores || {};
-    settleTimeline();
-    roundLive = false;
-    freezeUntil = perfNow() + FREEZE_MS;
-    roundEndHold = true;
-    resetTension();
-
-    const winnerId = data.winner ? data.winner.id : null;
-    if (Arena) ui(function () { Arena.onRoundEnd({ winnerId: winnerId }); });
-    ui(function () {
-      Overlays.roundEnd(data, { colorsById: colorsById() });
-      Backdrop.setMood('game'); // sale de tension
-    });
-    updateHUD();   // con playing=false muestra totales y rondas ganadas
-    updatePlayerList();
-    syncRoomControls();
-
-    // Actualizar lista con botones (ronda terminada)
-    socket.emit('getOnlinePlayers');
-  });
-
+  // Fin de la partida: la arena se congela sobre el ganador y después entra la pantalla final.
+  // La sala ya volvió a espera en el servidor: el anfitrión puede jugar de nuevo desde ahí.
   socket.on('gameEnd', function (data) {
+    data = data || {};
+    settleTimeline();
     roundLive = false;
     countdownActive = false;
     matchFinished = true;
+    freezeUntil = perfNow() + FREEZE_MS;
     resetTension();
     gameState = Object.assign({}, gameState, { playing: false });
+
+    const winners = Array.isArray(data.winners) ? data.winners : [];
+    if (Arena) ui(function () { Arena.onRoundEnd({ winnerId: winners.length === 1 ? winners[0] : null }); });
+    ui(function () { Backdrop.setMood('game'); }); // sale de tension
+    clearTimeout(finalTimer);
+    finalTimer = setTimeout(function () {
+      finalTimer = 0;
+      if (!matchFinished) return; // ya arrancó otra partida
+      ui(function () { Overlays.final(data, { isMe: function (id) { return !isSpectating && id === socket.id; } }); });
+      syncFinalControls();
+    }, FINAL_DELAY_MS);
 
     if (currentPlayerId) {
       socket.emit('getPlayerStats', currentPlayerId);
     }
-
-    // Overlays espera a que el panel de fin de ronda lleve 1800 ms visible y pasa a la escena 'final'
-    // (con el fondo en 'celebration' del color del campeón)
-    ui(function () { Overlays.final(data || {}, { colorsByName: colorsByName() }); });
+    updateHUD();
+    updatePlayerList();
     syncRoomControls();
 
-    // Actualizar lista con botones (juego terminado)
+    // Actualizar lista con botones (partida terminada)
     socket.emit('getOnlinePlayers');
   });
 
@@ -1286,7 +1256,7 @@ document.addEventListener('DOMContentLoaded', function () {
     countdownActive = false;
     resetTension();
     ui(function () {
-      Overlays.final({ finalScores: (data && data.finalScores) || {}, reason: (data && data.reason) || 'La sala se cerró' }, { colorsByName: colorsByName() });
+      Overlays.final({ ranking: [], winners: [], reason: (data && data.reason) || 'La sala se cerró' }, {});
     });
   });
 
@@ -1394,13 +1364,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // Estado local al salir de una sala (vuelta al lobby, cierre de sesión o reconexión)
   function leaveRoomLocally() {
+    clearTimeout(finalTimer); finalTimer = 0;
     currentRoomId = null;
     isHost = false;
     isSpectating = false;
     roomHostId = null;
     roomHostName = '';
     roomConfig = {};
-    roomScores = {};
     gameState = { playing: false, round: 1 };
     snakes = [];
     foods = [];
@@ -1408,7 +1378,6 @@ document.addEventListener('DOMContentLoaded', function () {
     resetTimeline();
     roundLive = false;
     freezeUntil = 0;
-    roundEndHold = false;
     countdownActive = false;
     startRequested = false;
     matchFinished = false;
@@ -1486,17 +1455,39 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!idleRoom) idleCaption = '';
     else if (count < min) idleCaption = 'Esperando jugadores';
     else idleCaption = isHost ? 'Todo listo: inicia la partida cuando quieras' : 'Esperando al anfitrión';
+
+    if (leaveRoomButton) toggleElement(leaveRoomButton, idleRoom);
+    syncFinalControls();
+  }
+
+  // Botones de la pantalla final. El anfitrión puede jugar de nuevo con los que sigan en la sala; los
+  // invitados vuelven a la sala o esperan; un espectador solo puede volver a las salas.
+  function syncFinalControls() {
+    if (!playAgainButton) return;
+    const player = !!currentRoomId && !isSpectating;
+    const min = (roomConfig && roomConfig.minPlayers) || 2;
+    const missing = Math.max(0, min - snakes.length);
+    toggleElement(playAgainButton, player && isHost);
+    playAgainButton.disabled = startRequested || missing > 0;
+    toggleElement(backToRoomButton, player);
+    const leaveText = player ? 'Salir a las salas' : 'Volver a las salas';
+    if (backToMenuButton.textContent !== leaveText) backToMenuButton.textContent = leaveText;
+    backToMenuButton.classList.toggle('btn-quiet', player);
+    backToMenuButton.classList.toggle('btn-primary', !player);
+    let hint = '';
+    if (player) {
+      if (missing > 0) hint = missing === 1 ? 'Falta 1 jugador para jugar de nuevo' : 'Faltan ' + missing + ' jugadores para jugar de nuevo';
+      else if (!isHost) hint = (roomHostName || 'El anfitrión') + ' puede iniciar otra partida';
+    }
+    if (finalHint.textContent !== hint) finalHint.textContent = hint;
+    toggleElement(finalHint, !!hint);
   }
 
   function updatePlayerList() {
     if (!playerList) return;
     const playing = !!gameState.playing && roundLive;
-    const sortedPlayers = snakes.slice().sort(function (a, b) {
-      if (playing) return b.score - a.score;
-      const aTotal = (roomScores && roomScores[a.id]) ? roomScores[a.id].totalScore : 0;
-      const bTotal = (roomScores && roomScores[b.id]) ? roomScores[b.id].totalScore : 0;
-      return bTotal - aTotal;
-    });
+    // En partida, por largo; en la sala, en el orden en que entraron
+    const sortedPlayers = playing ? snakes.slice().sort(function (a, b) { return b.score - a.score; }) : snakes.slice();
 
     const nextIds = new Set();
     const frag = document.createDocumentFragment();
@@ -1520,15 +1511,7 @@ document.addEventListener('DOMContentLoaded', function () {
       if (player.id === roomHostId) listItem.appendChild(el('span', 'player-host', 'Anfitrión'));
 
       const score = el('span', 'player-score');
-      if (playing) {
-        score.textContent = String(player.score);
-      } else {
-        const sc = roomScores && roomScores[player.id];
-        const totalScore = sc ? sc.totalScore : 0;
-        const roundWins = sc ? sc.roundWins : 0;
-        score.appendChild(document.createTextNode(String(totalScore)));
-        score.appendChild(el('small', null, roundWins + plural(roundWins, ' ronda', ' rondas')));
-      }
+      if (playing) score.textContent = String(player.score);
       listItem.appendChild(score);
 
       const status = el('span', 'player-status');
@@ -1585,18 +1568,23 @@ document.addEventListener('DOMContentLoaded', function () {
     return Object.prototype.hasOwnProperty.call(DIFFICULTY_NAMES, difficulty) ? difficulty : 'medium';
   }
 
+  // 120 -> "2 min", 90 -> "1 min 30 s", 10 -> "10 s"
+  function durationText(seconds) {
+    const m = Math.floor(seconds / 60), r = seconds % 60;
+    if (!m) return r + ' s';
+    return m + ' min' + (r ? ' ' + r + ' s' : '');
+  }
+
   function roomConfigText(config) {
     const cfg = config || {};
-    const rounds = +cfg.maxRounds || 3;
-    const seconds = +cfg.roundTime || 60;
-    return rounds + plural(rounds, ' ronda', ' rondas') + ' de ' + seconds + ' s, nivel ' + DIFFICULTY_NAMES[difficultyKey(cfg.difficulty)];
+    return 'Partida de ' + durationText(+cfg.roundTime || 120) + ', nivel ' + DIFFICULTY_NAMES[difficultyKey(cfg.difficulty)];
   }
 
   // Firma de lo que muestra una fila: si no cambió, la fila (y su botón, con foco o puntero encima) queda intacta
   function roomSignature(room) {
     const cfg = room.config || {};
     return [room.playing ? 1 : 0, room.players | 0, room.maxPlayers | 0, room.hostName || '',
-      cfg.maxRounds, cfg.roundTime, cfg.difficulty || ''].join('|');
+      cfg.roundTime, cfg.difficulty || ''].join('|');
   }
 
   // Arma (o actualiza en el lugar) la fila de una sala. El botón de acción se conserva si la acción
@@ -1880,11 +1868,6 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   });
 
-  // #restartButton ("Ocultar") lo maneja Overlays con su salida animada; respaldo si falta scenes.js
-  if (!window.Overlays && restartButton) {
-    restartButton.addEventListener('click', function () { hideElement(gameOverScreen); });
-  }
-
   joinButton.addEventListener('click', function (event) {
     event.preventDefault();
     submitLogin();
@@ -1939,15 +1922,32 @@ document.addEventListener('DOMContentLoaded', function () {
     refreshRooms();
   });
 
-  // "Volver a las salas": jugadores y espectadores salen por el mismo evento del servidor
-  // (antes el espectador llamaba a socket.leave, que no existe en socket.io-client)
-  backToMenuButton.addEventListener('click', function () {
+  // Salir de la sala ("Salir de la sala", y en el final "Salir a las salas" o, para un espectador,
+  // "Volver a las salas"): jugadores y espectadores salen por el mismo evento del servidor
+  function leaveRoom() {
     socket.emit('backToMenu');
     leaveRoomLocally();
     ui(function () {
       Overlays.hideAll();
       Scenes.go('lobby');
     });
+  }
+  backToMenuButton.addEventListener('click', leaveRoom);
+  if (leaveRoomButton) leaveRoomButton.addEventListener('click', leaveRoom);
+
+  // Pantalla final: la sala ya está en espera; "Volver a la sala" solo cambia de escena
+  if (backToRoomButton) backToRoomButton.addEventListener('click', function () {
+    ui(function () { Scenes.go('room'); });
+  });
+  if (playAgainButton) playAgainButton.addEventListener('click', function () {
+    if (!isHost || startRequested) return;
+    startRequested = true;
+    syncFinalControls();
+    socket.emit('startGame');
+    // Si el servidor no arranca (por ejemplo, alguien se fue) el botón vuelve con el gameError
+    setTimeout(function () {
+      if (startRequested && !countdownActive && !roundLive) { startRequested = false; syncRoomControls(); }
+    }, 3000);
   });
 
   $('leaderboardButton').addEventListener('click', function () {

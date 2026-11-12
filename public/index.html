@@ -152,6 +152,7 @@
                             </div>
                             <div id="waitingSpan" class="waiting-message hidden" data-reveal role="status">Faltan jugadores para empezar</div>
                             <button type="button" id="startGameButton" class="btn btn-primary btn-block btn-lg hidden" data-reveal data-breathe>Iniciar partida</button>
+                            <button type="button" id="leaveRoomButton" class="btn btn-quiet btn-block hidden" data-reveal>Salir de la sala</button>
                         </div>
                         <div class="room-panel-aside">
                             <div id="configPanel" class="config-panel hidden" data-reveal>
@@ -199,13 +200,6 @@
                         <p class="overlay-kicker"></p>
                         <p class="round-go"></p>
                     </div>
-                    <div id="gameOverScreen" class="round-end hidden" role="dialog" aria-labelledby="roundEndTitle">
-                        <div class="round-end-card">
-                            <h2 id="roundEndTitle" class="round-end-title">Fin de la ronda</h2>
-                            <div id="scoreDisplay" class="score-display"></div>
-                            <button type="button" id="restartButton" class="btn btn-quiet round-end-hide">Ocultar</button>
-                        </div>
-                    </div>
                 </div>
             </div>
         </section>
@@ -241,7 +235,12 @@
                 <h2 id="finalScoresTitle" class="panel-title">Clasificación final</h2>
                 <ol id="finalScoresList" class="final-scores-list"></ol>
             </section>
-            <button type="button" id="backToMenuButton" class="btn btn-primary btn-lg" data-breathe>Volver a las salas</button>
+            <p id="finalHint" class="final-hint hidden" role="status"></p>
+            <div class="final-actions">
+                <button type="button" id="playAgainButton" class="btn btn-primary btn-lg hidden" data-breathe>Jugar de nuevo</button>
+                <button type="button" id="backToRoomButton" class="btn btn-secondary btn-lg">Volver a la sala</button>
+                <button type="button" id="backToMenuButton" class="btn btn-quiet">Salir a las salas</button>
+            </div>
         </div>
     </div>
 

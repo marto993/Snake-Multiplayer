@@ -15,11 +15,9 @@
  *   Scenes.isTransitioning()    (extensión)
  *   Scenes.chrome               (extensión) { openDock, closeDock, toggleDock, openProfile, closeProfile, closeAll, alertDock }
  *
- *   Overlays.countdown(n, round)
- *   Overlays.roundStart(round, maxRounds)
- *   Overlays.roundEnd(data, { colorsById })
- *   Overlays.closeRoundEnd()    (extensión) lo usa #restartButton
- *   Overlays.final(data, { colorsByName })
+ *   Overlays.countdown(n)
+ *   Overlays.roundStart()       "¡Ya!" al arrancar la partida
+ *   Overlays.final(data)        data: { ranking: [{ id, name, color, length }], winners: [id], reason? }
  *   Overlays.hideAll()
  *   Overlays.open(el), Overlays.close(el)   (extensión) modales .modal
  *
@@ -595,10 +593,10 @@
     var CIRC = 163.36;     // 2π × 26
     var built = false, shown = false, want = false;
     var root, bar, side, board, caption;
-    var roundText, pipsWrap, pips = [], timerWrap, ringProg, ringCilia, timerVal, statusWrap,
+    var timerWrap, ringProg, ringCilia, timerVal, statusWrap,
         shieldEl, shieldTime, shieldBar, specEl, selfEl, selfDot, selfScore;
     var shieldBeat = null, hideTimer = 0;
-    var L = { round: -1, max: -1, time: -1, rt: -1, phase: '', playing: null, spec: null, metric: '', pip: '', shield: false, self: '', selfC: '', final3: false };
+    var L = { time: -1, rt: -1, phase: '', playing: null, spec: null, shield: false, self: '', selfC: '', final3: false };
     var rows = new Map();
     var order = [];          // ids visibles en orden
     var gapLi = null;
@@ -626,15 +624,9 @@
       caption.textContent = 'Largo actual';
 
       while (bar.firstChild) bar.removeChild(bar.firstChild);
-      // Ronda
-      var rw = mk('div', 'hud-round');
-      var lbl = mk('span', 'hud-round-label');
-      lbl.appendChild(mk('span', 'hud-round-word', 'Ronda '));
-      roundText = doc.createTextNode('1 de 3');
-      lbl.appendChild(roundText);
-      pipsWrap = mk('span', 'hud-pips');
-      pipsWrap.setAttribute('aria-hidden', 'true');
-      rw.appendChild(lbl); rw.appendChild(pipsWrap);
+      // Meta de la partida (una sola, por tiempo)
+      var rw = mk('div', 'hud-goal');
+      rw.appendChild(mk('span', 'hud-goal-label', 'Gana la más larga'));
       // Temporizador
       timerWrap = mk('div', 'hud-timer');
       timerWrap.setAttribute('data-phase', 'calm');
@@ -650,8 +642,8 @@
       ringProg.style.strokeDasharray = String(CIRC);
       ringProg.style.strokeDashoffset = '0';
       ring.appendChild(ringProg);
-      timerVal = mk('span', 'hud-timer-value', '60');
-      timerVal.setAttribute('aria-label', '60 segundos');
+      timerVal = mk('span', 'hud-timer-value', '2:00');
+      timerVal.setAttribute('aria-label', '2 minutos');
       timerWrap.appendChild(ring); timerWrap.appendChild(timerVal);
       // Estado
       statusWrap = mk('div', 'hud-status');
@@ -678,10 +670,17 @@
       return true;
     }
 
-    function setPips(max) {
-      while (pipsWrap.firstChild) pipsWrap.removeChild(pipsWrap.firstChild);
-      pips.length = 0;
-      for (var i = 0; i < max; i++) { var p = mk('i', 'hud-pip'); pipsWrap.appendChild(p); pips.push(p); }
+    // 125 -> "2:05"; menos de un minuto, solo los segundos
+    function clockText(t) {
+      if (t < 60) return String(t);
+      var r = t % 60;
+      return Math.floor(t / 60) + ':' + (r < 10 ? '0' : '') + r;
+    }
+    function clockLabel(t) {
+      var m = Math.floor(t / 60), r = t % 60, parts = [];
+      if (m) parts.push(m + plural(m, ' minuto', ' minutos'));
+      if (r || !m) parts.push(r + plural(r, ' segundo', ' segundos'));
+      return parts.join(' y ');
     }
 
     function phaseOf(t, playing) {
@@ -695,29 +694,14 @@
       if (!d || !build()) return;
       var playing = !!d.playing;
       var spectating = !!d.spectating;
-      var max = Math.max(1, (d.maxRounds | 0) || 3);
-      var round = clamp((d.round | 0) || 1, 1, max);
-      var rt = Math.max(1, +d.roundTime || 60);
+      var rt = Math.max(1, +d.roundTime || 120);
       var t = Math.max(0, Math.round(+d.timeLeft >= 0 ? +d.timeLeft : rt));
       var players = Array.isArray(d.players) ? d.players : [];
 
-      // Ronda y pips
-      if (max !== L.max) { setPips(max); L.max = max; L.round = -1; L.pip = ''; }
-      if (round !== L.round) {
-        roundText.nodeValue = round + ' de ' + max;
-        for (var i = 0; i < pips.length; i++) pips[i].className = 'hud-pip' + (i < round - 1 ? ' is-done' : (i === round - 1 ? ' is-current' : ''));
-        if (L.round !== -1 && shown && !reduced && pips[round - 1]) {
-          anim(pips[round - 1], [{ transform: 'scale(1)' }, { transform: 'scale(1.45)', offset: 0.4 }, { transform: 'scale(1)' }], { duration: 360, easing: M.jelly });
-        }
-        L.round = round;
-      }
-      var pvs = (Math.round(clamp(1 - t / rt, 0, 1) * 100) / 100).toString();
-      if (pvs !== L.pip && pips[round - 1]) { pips[round - 1].style.setProperty('--p', pvs); L.pip = pvs; }
-
       // Temporizador
       if (t !== L.time || rt !== L.rt) {
-        timerVal.textContent = String(t);
-        timerVal.setAttribute('aria-label', t + plural(t, ' segundo', ' segundos'));
+        timerVal.textContent = clockText(t);
+        timerVal.setAttribute('aria-label', clockLabel(t));
         ringProg.style.strokeDashoffset = (CIRC * (1 - clamp(t / rt, 0, 1))).toFixed(2);
         L.time = t; L.rt = rt;
       }
@@ -737,27 +721,21 @@
 
       // Estado propio
       var me = null;
-      for (i = 0; i < players.length; i++) if (players[i] && players[i].isMe) { me = players[i]; break; }
+      for (var i = 0; i < players.length; i++) if (players[i] && players[i].isMe) { me = players[i]; break; }
       var shieldOn = !!(me && me.immune && !spectating && playing);
       if (shieldOn !== L.shield) { setShield(shieldOn, me); L.shield = shieldOn; }
       else if (shieldOn && me.immuneUntil && Math.abs(me.immuneUntil - shieldUntil) > 250 && Math.abs(me.immuneUntil - Date.now()) <= 30000) {
         shieldUntil = +me.immuneUntil; shieldTotal = Math.max(shieldTotal, shieldUntil - Date.now()); shieldTxt = '';
       }
       if (spectating !== L.spec) { specEl.classList.toggle('hidden', !spectating); L.spec = spectating; }
-      var selfTxt = (me && !spectating) ? String(playing ? (me.score | 0) : (me.totalScore | 0)) : '';
+      var selfTxt = (me && !spectating) ? String(me.score | 0) : '';
       if (selfTxt !== L.self) { selfScore.textContent = selfTxt; L.self = selfTxt; }
       selfEl.classList.toggle('hidden', !selfTxt);
       if (me) { var sc = bio(me.color).body; if (sc !== L.selfC) { selfEl.style.setProperty('--c', sc); L.selfC = sc; } }
 
-      // Marcador
-      var metric = playing ? 'live' : 'total';
-      if (metric !== L.metric) {
-        board.setAttribute('data-metric', metric);
-        caption.textContent = playing ? 'Largo actual' : 'Puntos totales';
-        L.metric = metric;
-      }
+      // Marcador: siempre el largo
       L.playing = playing;
-      updateBoard(players, playing, max);
+      updateBoard(players, playing);
     }
 
     // ---------- escudo
@@ -804,17 +782,16 @@
       var r = {
         id: id, li: li, rank: mk('span', 'hud-rank'), dot: mk('i', 'hud-dot'), name: mk('span', 'hud-name'),
         me: mk('span', 'hud-me-tag hidden', 'Tú'), imm: icon('jelly', 'hud-immune-icon hidden', 14),
-        score: mk('span', 'hud-score'), wins: mk('span', 'hud-wins'), len: mk('i', 'hud-len'),
-        winsMax: -1, idx: 9999, v: { name: null, color: null, rank: null, isMe: null, immune: null, out: null, score: null, wins: -1, w: null }
+        score: mk('span', 'hud-score'), len: mk('i', 'hud-len'),
+        idx: 9999, v: { name: null, color: null, rank: null, isMe: null, immune: null, out: null, score: null, w: null }
       };
       r.dot.setAttribute('aria-hidden', 'true');
       r.len.setAttribute('aria-hidden', 'true');
-      r.wins.setAttribute('aria-hidden', 'true');
       li.appendChild(r.rank); li.appendChild(r.dot); li.appendChild(r.name); li.appendChild(r.me);
-      li.appendChild(r.imm); li.appendChild(r.score); li.appendChild(r.wins); li.appendChild(r.len);
+      li.appendChild(r.imm); li.appendChild(r.score); li.appendChild(r.len);
       return r;
     }
-    function metricOf(p) { return sortTotal ? (+p.totalScore || 0) : (+p.score || 0); }
+    function metricOf(p) { return +p.score || 0; }
     function cmp(a, b) {
       var d = metricOf(b) - metricOf(a);
       if (d) return d;
@@ -825,7 +802,7 @@
     }
 
     var seen = new Set();
-    function updateBoard(players, playing, maxRounds) {
+    function updateBoard(players, playing) {
       sortTotal = !playing;
       ents.length = 0;
       for (var i = 0; i < players.length; i++) if (players[i] && players[i].id != null) ents.push(players[i]);
@@ -850,7 +827,7 @@
         var visible = i < limit || (showGap && i === meIdx);
         r.newIdx = i;
         if (visible) visIds.push(id);
-        fillRow(r, p, i + 1, lead, maxRounds);
+        fillRow(r, p, i + 1, lead);
       }
       // filas de jugadores que se fueron
       rows.forEach(function (r, id) {
@@ -865,7 +842,7 @@
       ents.length = 0;
     }
 
-    function fillRow(r, p, rank, lead, maxRounds) {
+    function fillRow(r, p, rank, lead) {
       var v = r.v;
       var name = String(p.name == null ? '' : p.name);
       if (name !== v.name) { r.name.textContent = truncate(name, 12); r.li.title = name; v.name = name; }
@@ -886,18 +863,6 @@
       if (out !== v.out) { r.li.classList.toggle('is-out', out); v.out = out; }
       var sc = String(metricOf(p) | 0);
       if (sc !== v.score) { r.score.textContent = sc; v.score = sc; }
-      if (maxRounds !== r.winsMax) {
-        while (r.wins.firstChild) r.wins.removeChild(r.wins.firstChild);
-        for (var k = 0; k < maxRounds; k++) r.wins.appendChild(mk('i'));
-        r.winsMax = maxRounds; v.wins = -1;
-      }
-      var w = (p.roundWins | 0);
-      if (w !== v.wins) {
-        var kids = r.wins.children;
-        for (k = 0; k < kids.length; k++) kids[k].className = k < w ? 'is-won' : '';
-        r.wins.setAttribute('aria-label', w + plural(w, ' ronda ganada', ' rondas ganadas'));
-        v.wins = w;
-      }
       var ws = (Math.round(clamp(metricOf(p) / lead, 0, 1) * 100) / 100).toString();
       if (ws !== v.w) { r.li.style.setProperty('--w', ws); v.w = ws; }
     }
@@ -1013,7 +978,7 @@
       rows.forEach(function (r) { if (r.li.parentNode) r.li.parentNode.removeChild(r.li); });
       rows.clear(); order = [];
       if (gapLi && gapLi.parentNode) gapLi.parentNode.removeChild(gapLi);
-      L.round = -1; L.time = -1; L.phase = ''; L.metric = ''; L.pip = ''; L.playing = null;
+      L.time = -1; L.phase = ''; L.playing = null;
       if (L.shield) { setShield(false); L.shield = false; }
     }
 
@@ -1029,7 +994,7 @@
   var Overlays = (function () {
     var COLORS_BY_N = { 3: '#1FF2D2', 2: '#4FD8FF', 1: '#C8FF3C' };
     var st = {
-      cdToken: 0, goToken: 0, reTimer: 0, rePending: false, reVisible: false, reShownAt: 0,
+      cdToken: 0, goToken: 0,
       finalTimer: 0, finalData: null, finalGlow: null, finalAnims: [], modal: null, modalOpener: null,
       modalObs: null, modalKey: null, modalClick: null
     };
@@ -1056,12 +1021,14 @@
     }
 
     // ---------- 3, 2, 1
-    function countdown(n, round) {
+    // La meta de la partida, en la cuenta regresiva y en el "¡Ya!"
+    var GOAL_TEXT = 'Gana la serpiente más larga';
+
+    function countdown(n) {
       n = parseInt(n, 10);
       if (!(n > 0)) return;
       var o = $('overlay-countdown');
       if (!o) return;
-      closeRoundEnd();
       hideRoundGo(true);
       var parts = ensureCountdownParts(o);
       var token = ++st.cdToken;
@@ -1071,7 +1038,7 @@
         o.classList.remove('hidden');
         anim(o, [{ opacity: 0 }, { opacity: 1 }], { duration: 300, easing: M.out });
       }
-      parts.k.textContent = 'Ronda ' + ((round | 0) || 1) + ' de 3';
+      parts.k.textContent = GOAL_TEXT;
       var color = COLORS_BY_N[n] || '#1FF2D2';
       var num = parts.num;
       var prevCd = '';
@@ -1153,8 +1120,7 @@
     }
 
     // ---------- ¡Ya!
-    function roundStart(round, maxRounds) {
-      closeRoundEnd();
+    function roundStart() {
       hideCountdown(false);
       var o = $('overlay-round');
       bdPulse('#C8FF3C', 0.35);
@@ -1162,7 +1128,7 @@
       var parts = ensureRoundParts(o);
       var token = ++st.goToken;
       cancelMine(o, true);
-      parts.k.textContent = 'Ronda ' + ((round | 0) || 1) + ' de ' + ((maxRounds | 0) || 3);
+      parts.k.textContent = GOAL_TEXT;
       parts.g.textContent = '¡Ya!';
       o.classList.remove('hidden');
       var a;
@@ -1197,159 +1163,27 @@
       o.classList.add('hidden');
     }
 
-    // ---------- Fin de ronda
-    function roundEnd(data, opts) {
-      data = data || {}; opts = opts || {};
-      var scr = $('gameOverScreen');
-      if (!scr) return;
-      clearTimeout(st.reTimer);
-      fillRoundEnd(scr, data, opts);
-      var delay = reduced ? 300 : 700;
-      st.rePending = true;
-      st.reShownAt = now() + delay;
-      st.reTimer = setTimeout(showRoundEndCard, delay);
-    }
-
-    function colorFor(map, key) { return map && key != null && Object.prototype.hasOwnProperty.call(map, key) ? map[key] : null; }
-
-    function fillRoundEnd(scr, data, opts) {
-      var round = (data.round | 0) || 1;
-      var title = $('roundEndTitle');
-      if (title) title.textContent = 'Fin de la ronda ' + round;
-      var sd = $('scoreDisplay');
-      if (sd) {
-        while (sd.firstChild) sd.removeChild(sd.firstChild);
-        var w = data.winner;
-        var pw = mk('p', 'round-winner');
-        if (w && w.name != null) {
-          var wc = colorFor(opts.colorsById, w.id) || w.color;
-          var wb = bio(wc);
-          pw.style.setProperty('--c', wb.body);
-          var card = qs(scr, '.round-end-card');
-          if (card) card.style.setProperty('--c', wb.body);
-          var dot = mk('i', 'round-winner-dot'); dot.setAttribute('aria-hidden', 'true');
-          var k = (w.score != null ? +w.score : (w.segments && w.segments.length) || 0) | 0;
-          pw.appendChild(dot);
-          pw.appendChild(mk('span', null, String(w.name) + ' gana la ronda con ' + k + plural(k, ' segmento', ' segmentos')));
-        } else {
-          pw.appendChild(mk('span', null, 'Nadie gana esta ronda'));
-          var card0 = qs(scr, '.round-end-card');
-          if (card0) card0.style.removeProperty('--c');
-        }
-        sd.appendChild(pw);
-
-        var scores = data.scores || {};
-        var list = [];
-        Object.keys(scores).forEach(function (id) {
-          var s = scores[id] || {};
-          list.push({ id: id, name: s.name == null ? '' : String(s.name), total: +s.totalScore || 0, wins: +s.roundWins || 0 });
-        });
-        list.sort(function (a, b) { return (b.total - a.total) || (b.wins - a.wins); });
-        if (list.length) {
-          var ol = mk('ol', 'round-standings');
-          for (var i = 0; i < list.length && i < 5; i++) {
-            var it = list[i];
-            var li = mk('li', 'round-standing');
-            var c = colorFor(opts.colorsById, it.id);
-            if (c) { var cb2 = bio(c); li.style.setProperty('--c', cb2.body); li.style.setProperty('--t', cb2.text); }
-            var d2 = mk('i', 'rs-dot'); d2.setAttribute('aria-hidden', 'true');
-            var wins = mk('span', 'rs-wins');
-            wins.setAttribute('aria-label', it.wins + plural(it.wins, ' ronda ganada', ' rondas ganadas'));
-            for (var j = 0; j < 3; j++) wins.appendChild(mk('i', j < it.wins ? 'is-won' : null));
-            li.appendChild(mk('span', 'rs-rank', String(i + 1)));
-            li.appendChild(d2);
-            var nm = mk('span', 'rs-name', truncate(it.name, 16)); nm.title = it.name;
-            li.appendChild(nm);
-            li.appendChild(mk('span', 'rs-total', String(it.total)));
-            li.appendChild(wins);
-            ol.appendChild(li);
-          }
-          sd.appendChild(ol);
-        }
-        sd.appendChild(mk('p', 'round-next', data.nextRound ? ('La ronda ' + (round + 1) + ' empieza en unos segundos') : 'Calculando el resultado final…'));
-      }
-      var btn = $('restartButton');
-      if (btn && !btn.textContent.trim()) btn.textContent = 'Ocultar';
-    }
-
-    function showRoundEndCard() {
-      st.reTimer = 0;
-      st.rePending = false;
-      var scr = $('gameOverScreen');
-      if (!scr) return;
-      st.reVisible = true;
-      st.reShownAt = now();
-      cancelMine(scr, true);
-      scr.classList.remove('hidden');
-      var card = qs(scr, '.round-end-card') || scr;
-      if (reduced) { anim(scr, [{ opacity: 0 }, { opacity: 1 }], { duration: 300 }); return; }
-      if (card !== scr) anim(scr, [{ opacity: 0 }, { opacity: 1 }], { duration: 320, easing: M.out });
-      var cb = baseTf(card);
-      anim(card, [
-        { opacity: 0, transform: tf(cb, 'translateY(40px) scale(0.96)'), filter: 'blur(8px)' },
-        { opacity: 1, transform: tf(cb, 'none'), filter: 'blur(0px)' }
-      ], { duration: 620, easing: M.out });
-      var rowsEls = qsa(card, '#roundEndTitle, .round-winner, .round-standing, .round-next, #restartButton');
-      for (var i = 0; i < rowsEls.length; i++) {
-        anim(rowsEls[i], [{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'none' }],
-          { duration: 460, delay: 140 + Math.min(i, 8) * 70, easing: M.out, fill: 'backwards' });
-      }
-    }
-
-    function closeRoundEnd() {
-      if (st.reTimer) { clearTimeout(st.reTimer); st.reTimer = 0; }
-      st.rePending = false;
-      var scr = $('gameOverScreen');
-      if (!scr || scr.classList.contains('hidden')) { st.reVisible = false; return Promise.resolve(); }
-      if (!st.reVisible) { scr.classList.add('hidden'); return Promise.resolve(); }
-      st.reVisible = false;
-      var card = qs(scr, '.round-end-card') || scr;
-      cancelMine(scr, true);
-      if (reduced) { scr.classList.add('hidden'); return Promise.resolve(); }
-      var cb = baseTf(card);
-      var a = anim(card, [{ opacity: 1, transform: tf(cb, 'none') }, { opacity: 0, transform: tf(cb, 'translateY(-20px)') }], { duration: 320, easing: M.in, fill: 'forwards' });
-      if (card !== scr) anim(scr, [{ opacity: 1 }, { opacity: 0 }], { duration: 320, easing: M.in, fill: 'forwards' });
-      return done(a).then(function () {
-        if (st.reVisible || st.rePending) return;
-        scr.classList.add('hidden');
-        cancelMine(scr, true);
-      });
-    }
-
     // ---------- Final
-    function final(data, opts) {
-      data = data || {}; opts = opts || {};
-      clearTimeout(st.finalTimer);
-      var waitMs = 0;
-      if (!data.reason && (st.rePending || st.reVisible)) waitMs = st.reShownAt + 1800 - now();
-      st.finalTimer = setTimeout(function () { st.finalTimer = 0; prepareFinal(data, opts); }, Math.max(0, waitMs));
-    }
-
-    function prepareFinal(data, opts) {
+    // Gana la serpiente más larga; si empatan, ganan todas las empatadas (título "Empate").
+    function final(data) {
+      data = data || {};
+      clearTimeout(st.finalTimer); st.finalTimer = 0;
       var reason = data.reason ? String(data.reason) : '';
-      var scoresMap = data.finalScores || {};
-      var list = [];
-      Object.keys(scoresMap).forEach(function (id) {
-        var s = scoresMap[id] || {};
-        list.push({ id: id, name: s.name == null ? '' : String(s.name), total: +s.totalScore || 0, wins: +s.roundWins || 0 });
+      var winIds = {};
+      (Array.isArray(data.winners) ? data.winners : []).forEach(function (id) { winIds[String(id)] = true; });
+      var list = (Array.isArray(data.ranking) ? data.ranking : []).map(function (e) {
+        e = e || {};
+        return { id: String(e.id), name: e.name == null ? '' : String(e.name), color: e.color || '', length: +e.length || 0, winner: !!winIds[String(e.id)] };
       });
-      list.sort(function (a, b) { return (b.total - a.total) || (b.wins - a.wins); });
-      var winner = data.winner && data.winner.name != null
-        ? { name: String(data.winner.name), total: +data.winner.totalScore || 0, wins: +data.winner.roundWins || 0 }
-        : (list[0] || null);
-      if (winner && list.length) {
-        // el campeón va primero aunque haya empate
-        for (var i = 0; i < list.length; i++) if (list[i].name === winner.name) { var w0 = list.splice(i, 1)[0]; list.unshift(w0); break; }
-      }
-      var cmap = opts.colorsByName || {};
-      var champ = winner ? bio(colorFor(cmap, winner.name)) : BIO_DEFAULT;
-      st.finalData = { reason: reason, list: list, winner: winner, champ: champ, cmap: cmap };
+      var winners = list.filter(function (e) { return e.winner; });
+      var winner = winners.length === 1 ? winners[0] : null;
+      var champ = winner ? bio(winner.color) : BIO_DEFAULT;
+      st.finalData = { reason: reason, list: list, winner: winner, winners: winners, champ: champ };
       fillFinal(st.finalData);
-      closeRoundEnd();
       hideCountdown(true);
       hideRoundGo(true);
       if (current === 'final') { playFinal(); return; }
-      go('final', { color: reason ? null : champ.body, reason: reason || null });
+      go('final', { color: winner ? champ.body : null, reason: reason || null });
     }
 
     function fillFinal(fd) {
@@ -1360,11 +1194,12 @@
         if (fd.reason || !fd.winner) fs.style.removeProperty('--champion');
         else fs.style.setProperty('--champion', fd.champ.body);
       }
+      var best = fd.winners.length ? fd.winners[0].length : 0;
       if (title) {
         while (title.firstChild) title.removeChild(title.firstChild);
         title.removeAttribute('aria-label');
         if (fd.reason || !fd.winner) {
-          title.textContent = fd.reason ? 'Sala cerrada' : 'Partida terminada';
+          title.textContent = fd.reason ? 'Sala cerrada' : (fd.winners.length > 1 ? 'Empate' : 'Partida terminada');
           title.classList.toggle('is-closed', !!fd.reason);
           title.removeAttribute('data-champion');
         } else {
@@ -1379,27 +1214,25 @@
       }
       if (msg) {
         if (fd.reason) msg.textContent = fd.reason;
-        else if (fd.winner) {
-          var t = fd.winner.total, k = fd.winner.wins;
-          msg.textContent = 'Gana la partida con ' + t + plural(t, ' punto', ' puntos') +
-            (k > 0 ? ' y ' + k + plural(k, ' ronda ganada', ' rondas ganadas') : ' y ninguna ronda ganada') + '.';
+        else if (fd.winner) msg.textContent = 'Gana con la serpiente más larga: ' + best + plural(best, ' segmento', ' segmentos') + '.';
+        else if (fd.winners.length > 1) {
+          var names = fd.winners.map(function (w) { return w.name; });
+          msg.textContent = names.slice(0, -1).join(', ') + ' y ' + names[names.length - 1] + ' terminan con ' + best + plural(best, ' segmento', ' segmentos') + '.';
         } else msg.textContent = '';
       }
       if (ol) {
         while (ol.firstChild) ol.removeChild(ol.firstChild);
         for (var i = 0; i < fd.list.length; i++) {
           var it = fd.list[i];
-          var li = mk('li', 'final-score-item' + (i === 0 && !fd.reason ? ' is-champion' : ''));
-          var c = colorFor(fd.cmap, it.name);
-          if (c) { var cb3 = bio(c); li.style.setProperty('--c', cb3.body); li.style.setProperty('--t', cb3.text); }
+          var li = mk('li', 'final-score-item' + (it.winner && !fd.reason ? ' is-champion' : ''));
+          if (it.color) { var cb3 = bio(it.color); li.style.setProperty('--c', cb3.body); li.style.setProperty('--t', cb3.text); }
           else li.style.setProperty('--c', '#7397A5');
           var dot = mk('i', 'final-dot'); dot.setAttribute('aria-hidden', 'true');
           li.appendChild(mk('span', 'final-rank', String(i + 1)));
           li.appendChild(dot);
           var nm = mk('span', 'final-name', it.name); nm.title = it.name;
           li.appendChild(nm);
-          li.appendChild(mk('span', 'final-total', it.total + plural(it.total, ' punto', ' puntos')));
-          li.appendChild(mk('span', 'final-wins', it.wins === 0 ? 'Sin rondas ganadas' : it.wins + plural(it.wins, ' ronda ganada', ' rondas ganadas')));
+          li.appendChild(mk('span', 'final-total', it.length + plural(it.length, ' segmento', ' segmentos')));
           ol.appendChild(li);
         }
       }
@@ -1427,13 +1260,14 @@
     function playFinal() {
       var fs = $('finalScreen');
       if (!fs) return;
-      var fd = st.finalData || { reason: '', list: [], winner: null, champ: BIO_DEFAULT };
-      var title = $('finalTitle'), msg = $('finalMessage'), ol = $('finalScoresList'), back = $('backToMenuButton');
+      var fd = st.finalData || { reason: '', list: [], winner: null, winners: [], champ: BIO_DEFAULT };
+      var title = $('finalTitle'), msg = $('finalMessage'), ol = $('finalScoresList'), back = qs(fs, '.final-actions');
+      var hint = $('finalHint');
       var head = qs(fs, '.final-scores');
       var A = st.finalAnims;
       var push = function (a) { if (a) A.push(a); return a; };
       if (reduced) {
-        [title, msg, head, ol, back].forEach(function (n, i) { if (n) push(anim(n, [{ opacity: 0 }, { opacity: 1 }], { duration: 300, delay: i * 80, fill: 'backwards' })); });
+        [title, msg, head, ol, hint, back].forEach(function (n, i) { if (n) push(anim(n, [{ opacity: 0 }, { opacity: 1 }], { duration: 300, delay: i * 80, fill: 'backwards' })); });
         focusLater(title || back, 600);
         return;
       }
@@ -1461,8 +1295,9 @@
             { duration: 560, delay: 1250 + Math.min(k, 8) * 90, easing: M.out, fill: 'backwards' }));
         }
       }
+      if (hint) push(anim(hint, [{ opacity: 0 }, { opacity: 1 }], { duration: 520, delay: 1700, easing: M.out, fill: 'backwards' }));
       if (back) push(anim(back, [{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'none' }], { duration: 520, delay: 1800, easing: M.out, fill: 'backwards' }));
-      // El foco va al título (tabindex=-1), no a "Volver a las salas".
+      // El foco va al título (tabindex=-1), no a los botones.
       // Espacio es la tecla de disparo: con el botón enfocado, quien seguía disparando al terminar
       // la partida salía del final sin querer (y en el lobby creaba una sala). Tab llega al botón.
       focusLater(title || back, 1900);
@@ -1496,19 +1331,9 @@
       return done(a).then(function () { stopFinal(); fs.classList.add('hidden'); cancelAnim(a); });
     }
 
-    function hideArenaOverlays(fast) {
-      clearTimeout(st.reTimer); st.reTimer = 0; st.rePending = false;
+    function hideArenaOverlays() {
       hideCountdown(true);
       hideRoundGo(true);
-      var scr = $('gameOverScreen');
-      if (scr && !scr.classList.contains('hidden')) {
-        st.reVisible = false;
-        if (fast || reduced) { scr.classList.add('hidden'); cancelMine(scr, true); }
-        else {
-          var a = anim(scr, [{ opacity: 1 }, { opacity: 0 }], { duration: 200, easing: M.in, fill: 'forwards' });
-          done(a).then(function () { if (!st.reVisible) { scr.classList.add('hidden'); cancelMine(scr, true); } });
-        }
-      }
     }
 
     function hideAll() {
@@ -1616,18 +1441,13 @@
     }
 
     function init() {
-      var btn = $('restartButton');
-      if (btn && !btn.__bioWired) {
-        btn.__bioWired = true;
-        btn.addEventListener('click', function () { closeRoundEnd(); });
-      }
-      ['overlay-countdown', 'overlay-round', 'gameOverScreen', 'finalScreen'].forEach(function (id) {
+      ['overlay-countdown', 'overlay-round', 'finalScreen'].forEach(function (id) {
         var n = $(id); if (n) n.classList.add('hidden');
       });
     }
 
     return {
-      countdown: countdown, roundStart: roundStart, roundEnd: roundEnd, closeRoundEnd: closeRoundEnd,
+      countdown: countdown, roundStart: roundStart,
       final: final, hideAll: hideAll, open: open, close: close,
       _init: init, _playFinal: playFinal, _stopFinal: stopFinal, _hideFinalScreen: hideFinalScreen,
       _hideArenaOverlays: hideArenaOverlays, _isModalOpen: function () { return !!st.modal; },
