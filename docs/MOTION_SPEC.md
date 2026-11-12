@@ -51,10 +51,14 @@ Los valores por nivel son un punto de partida para ajustar jugando. La velocidad
 |---|---|---|---|
 | Cruza la arena en | 3,5 s | 2,7 s | 2,1 s |
 | Disparo, respecto de la serpiente | 2 × | 2 × | 3 × |
-| Comida en la arena | jugadores + 8 | jugadores + 5 | jugadores + 3 |
+| Comida en la arena | jugadores + 14 | jugadores + 10 | jugadores + 7 |
 | Escudo: aparece cada / dura | 6 s / 7 s | 10 s / 5 s | 15 s / 3 s |
 
-Como referencia, hoy la velocidad "Normal" cruza la arena en 2,5 s, el disparo viaja a la misma velocidad que la serpiente y la comida es jugadores + 5, salvo con 2 jugadores, que son 7 (`index.js:487`).
+La primera versión tenía jugadores + 8, + 5 y + 3. Jugando, las serpientes crecían despacio, y la comida se subió a los valores de la tabla. Más comida acorta poco la búsqueda: la distancia a la más cercana baja con la raíz cuadrada de la cantidad (con dos jugadores, de 11 celdas con 7 comidas a 9 con 12). Por eso la palanca principal para crecer rápido son los restos.
+
+**Restos**: lo que pierde una serpiente por un impacto (3 segmentos de la cola si le pegan en la cabeza, o desde el segmento tocado hasta la cola si le pegan en el cuerpo) queda en el mapa como comida de valor 1, una por celda, durante 10 s. Un corte de más de 30 segmentos suelta 30 comidas repartidas a lo largo del cuerpo, con el valor total repartido entre ellas (hasta 5 cada una). A diferencia de la comida base, los restos no reaparecen al comerlos. Un buen disparo se vuelve la forma más rápida de crecer, para quien disparó o para el que llegue antes (`game/remains.js`).
+
+Como referencia, antes de esta etapa la velocidad "Normal" cruzaba la arena en 2,5 s, el disparo viajaba a la misma velocidad que la serpiente y la comida era jugadores + 5, salvo con 2 jugadores, que eran 7 (`index.js:487`).
 
 En la grilla de 50 × 50, los tiempos de cruce dan pasos de 70, 54 y 42 ms. El servidor ya acepta pasos desde 40 ms (`index.js:249`). El disparo avanza 2 o 3 celdas por paso y se compara contra cada celda intermedia, no solo contra la de llegada.
 

@@ -37,7 +37,7 @@ Principios que ordenan todas las decisiones:
 - **Nada aparece en seco.** Toda entrada y salida de escena, overlay y toast se anima. Los elementos chicos que el código alterna con `.hidden` tienen animación de entrada (sección 4.20).
 - **El movimiento responde.** La animación que no fue disparada por el usuario o por el juego se limita a la lista de la sección 3.5.
 
-El momento firma es uno solo: **el agua reacciona**. En intro, login, lobby y sala, el puntero (o el dedo) enciende el plancton a su paso y deja una estela que se apaga en un segundo. En la arena, cada serpiente enciende la nieve marina cerca de su cabeza. Es la única "magia" ambiental; lo demás se mantiene sobrio para que esto se note.
+El momento firma es uno solo: **el agua reacciona**. En intro, login, lobby y sala, el puntero (o el dedo) enciende el plancton a su paso y deja una estela que se apaga en un segundo. En la arena de espera, cada criatura enciende la nieve marina cerca de su cabeza. Durante la ronda no: esos destellos del color de cada serpiente se confundían con la comida. Es la única "magia" ambiental; lo demás se mantiene sobrio para que esto se note.
 
 ## 2. Tokens de diseño
 
@@ -904,7 +904,7 @@ Cada frame de `Arena.render` dibuja, en este orden:
 - **Fondo abisal** (caché a resolución del backing store, se regenera solo al cambiar el tamaño): relleno `#020A12`; degradado radial centrado en (300, 120) con radio 520, de `rgba(7,37,54,0.55)` a transparente (luz difusa desde arriba); degradado lineal en el 35 % inferior hacia `rgba(1,5,9,0.6)`.
 - **Cáusticas**: al iniciar se genera una textura de 256 × 256 una sola vez. Es un diagrama de Voronoi de 12 puntos al azar con distancia envolvente (para que la textura sea repetible sin costura); el valor de cada píxel es `1 - smoothstep(0, 0.06, F2 - F1)` (dibuja las venas entre celdas), elevado a 1,5 y usado como alpha (máximo 0,9). Se guardan dos copias teñidas: cian `#4FD8FF` y coral `#FF4D6D`. Cada frame se dibujan dos capas como `createPattern` en modo `'lighter'`: capa A con escala 2,4, deriva de (6, 3) px/s y alpha 0,055; capa B con escala 3,4, deriva de (-4, 5) px/s y alpha 0,035. En tensión, la copia coral se mezcla con alpha `0,6 × nivel de tensión` y la deriva se multiplica por 1,6. En renderIdle el alpha baja al 70 %.
 - **Grilla**: un punto de 0,6 px de radio en cada esquina de celda, color `#4FD8FF` con alpha 0,07. Con `s` igual a 8, un punto cada dos celdas. Se prerenderiza en un canvas fuera de pantalla al llamar a `setConfig` o al cambiar el tamaño; cada frame es un solo `drawImage`.
-- **Nieve marina**: 70 partículas (45 en calidad Q1, 25 en Q0; ×0,6 con `pointer: coarse`). Cada una tiene profundidad `z` entre 0,3 y 1 que define tamaño (0,6 a 1,8 px) y alpha (0,08 a 0,35); deriva horizontal de ±3 px/s, sube a 2 a 6 px/s, vaivén de ±4 px con período de 6 a 11 segundos, y reaparece por el borde opuesto. **Estela de dinoflagelados**: si una partícula está a menos de `3·s` de la cabeza de cualquier serpiente, su encendido sube a 1 y toma el color `body` de esa serpiente; el encendido decae en 900 ms. Con encendido, el alpha llega a 0,8 y se dibuja con sprite de glow. El costo es de 70 × 8 comparaciones de distancia por frame.
+- **Nieve marina**: 70 partículas (45 en calidad Q1, 25 en Q0; ×0,6 con `pointer: coarse`). Cada una tiene profundidad `z` entre 0,3 y 1 que define tamaño (0,6 a 1,8 px) y alpha (0,08 a 0,35); deriva horizontal de ±3 px/s, sube a 2 a 6 px/s, vaivén de ±4 px con período de 6 a 11 segundos, y reaparece por el borde opuesto. **Durante la ronda** (`Arena.render`), la nieve se dibuja al 70 % de tamaño y al 55 % de alpha y no se enciende: es fondo, y no tiene que competir con la comida ni con el escudo. **Estela de dinoflagelados**, solo en la arena de espera (`renderIdle`): si una partícula está a menos de `3·s` de la cabeza de una criatura (o del puntero), su encendido sube a 1 y toma el color `body` de esa criatura; el encendido decae en 900 ms. Con encendido, el alpha llega a 0,8 y se dibuja con sprite de glow. El costo es de 70 × 8 comparaciones de distancia por frame.
 - **Viñeta**: degradado radial cacheado, transparente hasta el 55 % de la diagonal y `rgba(1,5,9,0.75)` en las esquinas. **Viñeta de tensión**: segunda caché igual con `rgba(255,77,109,0.18)`, dibujada con alpha igual al nivel de tensión (`(10 - roundTimeLeft) / 10` cuando quedan 10 segundos o menos), más un golpe de +0,25 en cada cambio de segundo que decae en 400 ms.
 - **Membrana de bordes**: los bordes de la arena son portales. Cuatro franjas cacheadas de 14 px con degradado de `#1FF2D2` hacia adentro, alpha entre 0,08 y 0,12 en `--bio-dur-breath-slow`. Cuando una serpiente cruza, la franja se enciende en su color en un tramo de `6·s` centrado en el cruce durante 600 ms.
 
@@ -973,24 +973,28 @@ La inmunidad se ve como una medusa que envuelve la cabeza. Está activa si `snak
 
 ### 5.8 Comida
 
-La comida es plancton: un orbe que late, de tamaño y brillo según su valor (1 a 5). El valor siempre se puede leer por la cantidad de satélites que orbitan; el dígito se agrega cuando hay espacio.
+La comida es plancton: un orbe que late, de tamaño y brillo según su valor (1 a 5). El valor siempre se puede leer por la cantidad de satélites que orbitan; el dígito se agrega cuando hay espacio. Los tamaños están en px de la arena (600) y no dependen de la celda: con celdas de 12 px, un orbe proporcional quedaba del tamaño de un copo de nieve marina. Los colores van de verde menta a ámbar y evitan el celeste, que es de la nieve y del escudo.
 
 | Valor | Radio del orbe | Color | Satélites |
 |---|---|---|---|
-| 1 | 0,20·s | `#4FD8FF` | 1 |
-| 2 | 0,24·s | `#1FF2D2` | 2 |
-| 3 | 0,28·s | `#7CFFB2` | 3 |
-| 4 | 0,32·s | `#C8FF3C` | 4 |
-| 5 | 0,36·s | `#FFF27A` | 5, más un anillo exterior |
+| 1 | 4,0 px | `#7CFFB2` | 1 |
+| 2 | 4,4 px | `#B8FF5A` | 2 |
+| 3 | 4,8 px | `#E8F24A` | 3 |
+| 4 | 5,2 px | `#FFD447` | 4 |
+| 5 | 5,6 px | `#FFA347` | 5, más un anillo exterior |
 
-- Orbe: sprite de glow del color con radio `2,2 × r × (1 + 0,1 × valor)` en `'lighter'`, y encima un disco sólido de radio `r` con degradado radial de `#E8FBFF` en el centro al color en el borde.
+- Orbe: sprite de glow del color con radio `1,9 × r × (1 + 0,1 × valor)` en `'lighter'`, y encima un disco de radio `r` con degradado radial de `#E8FBFF` en el centro al color en el borde, rodeado por un contorno oscuro (`rgba(2, 19, 28, 0.85)`, 1,3 px). El contorno es lo que lo separa del glow y lo hace leer como objeto: la nieve marina nunca lo tiene.
 - Respiración: escala `1 ± 0,06` a 0,8 Hz y vaivén vertical de `±0,06·s`, con fase propia derivada de la posición: `((x × 73856093) ^ (y × 19349663)) & 1023`, normalizado a 0 a 2π. Sin números al azar por frame.
-- Satélites: puntos de radio `0,06·s` (mínimo 1 px) que orbitan a `1,6r` a 1,6 rad/s, espaciados de forma pareja.
-- Dígito: si `0,5·s × escala ≥ 7` px CSS, el valor en Recursive MONO 700 de tamaño `0,5·s`, color `#02131C` sobre el centro del orbe.
+- Satélites: puntos de radio `0,06·s` (mínimo 1 px) que orbitan a `1,6r + 1,5` a 1,6 rad/s, espaciados de forma pareja.
+- Dígito: si `1,15·r × escala ≥ 7` px CSS, el valor en Recursive MONO 700 de tamaño `1,15·r`, color `#02131C` sobre el centro del orbe.
+- **Restos** (comida con `remains`, ver `docs/MOTION_SPEC.md`): se dibujan igual que la comida de su valor y aparecen con el mismo crecimiento de 450 ms. En sus últimos 2 s se desvanecen: `fade = (expiresAt - rt) / 2000`, con `rt` la hora del servidor del instante dibujado, que `SnakeGame.js` calcula al aplicar cada muestra de la línea de tiempo.
 
 ### 5.9 Consumible de inmunidad
 
-Una medusa pequeña que flota en su celda: campana de `0,8·s` de ancho y `0,55·s` de alto con degradado de `#C9F8FF` a `#7FE7FF` (alpha 0,55), borde de 1 px `#E8FBFF` al 80 %; tres tentáculos como curvas cuadráticas de `0,6·s` que se mecen con `sin(now × 0,004 + k)`; sprite de glow `#9FF4FF` de radio `1,4·s` con alpha 0,5, y un segundo glow `#B9A6FF` de radio `1,8·s` con alpha 0,2 que late a 0,7 Hz. La campana late a 1,4 Hz y la medusa sube y baja `±0,08·s`.
+Una medusa que flota en su celda, de tamaño fijo en px de la arena y violeta, para que no se confunda con la comida ni con la nieve. Campana de 15 px de ancho y 9 px de alto con degradado de `#D9CCFF` a `#9C82FF` (alpha 0,75) y borde `#F3EEFF` al 90 %; tres tentáculos `#D6CCFF` de 1,2 px como curvas cuadráticas de 8 px que se mecen con `sin(now × 0,004 + k)`; núcleo perla de radio 4 px. Glow `#B9A6FF` de radio 20 px con alpha 0,5 que late a 0,7 Hz, y un glow `#9FF4FF` de radio 12 px con alpha 0,35. La campana late a 1,4 Hz y la medusa sube y baja ±1,2 px.
+
+- **Sonar**: cada 2000 ms (con fase propia), un anillo `#B9A6FF` de 1,5 px se abre de radio 9 a 26 px con `easeOutCubic` mientras su alpha baja de 0,6 a 0 (al cuadrado). Es lo que la hace visible de lejos. Se distingue del sonar de la cabeza propia por el color violeta y porque la medusa no se mueve.
+- Puesta, la inmunidad sigue siendo la campana celeste de 5.7 sobre la cabeza.
 
 ### 5.10 Proyectiles
 
