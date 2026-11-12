@@ -4,6 +4,7 @@ const socketIO = require('socket.io');
 const Snake = require('./public/snakeClass.js');
 const { buildRoomConfig } = require('./game/difficulty');
 const { traceProjectile } = require('./game/projectiles');
+const { cutSnake, dropRemains } = require('./game/remains');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 
@@ -727,19 +728,13 @@ function moveProjectiles(room, frameEvents = { hitEvents: [], blockEvents: [], e
       return false;
     }
 
-    // Impacto: en la cabeza quita hasta 3 segmentos; en el cuerpo, corta desde ahí
+    // Impacto: en la cabeza quita hasta 3 segmentos; en el cuerpo, corta desde ahí.
+    // Lo que pierde queda en el mapa como restos (comida que vence a los 10 s).
     const lengthBefore = player.segments.length;
-    if (result.segmentIndex === 0) {
-      const segmentsToRemove = Math.min(3, player.segments.length - 1);
-      for (let j = 0; j < segmentsToRemove; j++) {
-        if (player.segments.length > 1) {
-          player.segments.pop();
-        }
-      }
-    } else {
-      player.segments = player.segments.slice(0, result.segmentIndex);
-    }
+    const { kept, lost } = cutSnake(player.segments, result.segmentIndex);
+    player.segments = kept;
     player.updateTargets();
+    room.foods.push(...dropRemains(lost, Date.now(), (x, y) => room.foods.some(f => f.x === x && f.y === y)));
     frameEvents.hitEvents.push({
       targetId: player.id,
       attackerId: projectile.playerId,
@@ -974,6 +969,27 @@ function startGame(room) {
 }
 
 // MODIFICADO: gameLogicLoop
+// Una comida base nueva en una celda libre (o en el centro si no encuentra lugar)
+function respawnFood(room) {
+  const { canvasWidth, canvasHeight, segmentSize } = room.config;
+  let foodX, foodY;
+  let attempts = 0;
+  const maxAttempts = 100;
+
+  do {
+    foodX = getRandomCoordinate(canvasWidth, segmentSize);
+    foodY = getRandomCoordinate(canvasHeight, segmentSize);
+    attempts++;
+  } while (!verifyCoordinate(room, foodX, foodY) && attempts < maxAttempts);
+
+  if (attempts >= maxAttempts) {
+    foodX = Math.floor(canvasWidth / 2 / segmentSize) * segmentSize;
+    foodY = Math.floor(canvasHeight / 2 / segmentSize) * segmentSize;
+  }
+
+  room.foods.push({ x: foodX, y: foodY, score: Math.floor(Math.random() * 5) + 1 });
+}
+
 function gameLogicLoop(room) {
   if (!isRoomAlive(room)) {
     if (room.gameState.intervalId) clearInterval(room.gameState.intervalId);
@@ -994,6 +1010,10 @@ function gameLogicLoop(room) {
   if (!room.gameboard || room.gameboard.length === 0) {
     resetGameBoard(room);
   }
+
+  // Los restos de los cortes vencen; la comida base no tiene expiresAt
+  const tickNow = Date.now();
+  room.foods = room.foods.filter(food => !food.expiresAt || food.expiresAt > tickNow);
   
   if (room.config.attacksEnabled) {
     moveProjectiles(room, frameEvents);
@@ -1088,23 +1108,8 @@ function gameLogicLoop(room) {
             color: player.color
           });
           
-          let foodX, foodY;
-          let attempts = 0;
-          const maxAttempts = 100;
-          
-          do {
-            foodX = getRandomCoordinate(room.config.canvasWidth, segmentSize);
-            foodY = getRandomCoordinate(room.config.canvasHeight, segmentSize);
-            attempts++;
-          } while (!verifyCoordinate(room, foodX, foodY) && attempts < maxAttempts);
-          
-          if (attempts >= maxAttempts) {
-            foodX = Math.floor(room.config.canvasWidth / 2 / segmentSize) * segmentSize;
-            foodY = Math.floor(room.config.canvasHeight / 2 / segmentSize) * segmentSize;
-          }
-          
-          const newFoodScore = Math.floor(Math.random() * 5) + 1;
-          room.foods.push({ x: foodX, y: foodY, score: newFoodScore });
+          // Los restos no reaparecen: solo la comida base mantiene su cantidad
+          if (!eatenFood.remains) respawnFood(room);
         }
       }
       
@@ -1457,7 +1462,9 @@ io.on('connection', (socket) => {
             x: Number(f.x),
             y: Number(f.y),
             score: Number(f.score) || 1,
-            type: f.type ? String(f.type) : undefined
+            type: f.type ? String(f.type) : undefined,
+            remains: f.remains ? true : undefined,
+            expiresAt: f.expiresAt ? Number(f.expiresAt) : undefined
           })) : [],
           consumables: room.consumables ? room.consumables.map(c => ({
             id: String(c.id),
