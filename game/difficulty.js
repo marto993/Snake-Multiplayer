@@ -1,6 +1,6 @@
 /*
  * Niveles de dificultad: la sala solo elige el nivel y todo lo demás sale de esta tabla.
- * Valores de docs/MOTION_SPEC.md, sección "Dificultad fija".
+ * Valores de docs/MOTION_SPEC.md, sección "Dificultad fija". La partida es una sola, de roundTime segundos.
  */
 'use strict';
 
@@ -29,7 +29,6 @@ function buildRoomConfig(difficulty, opts) {
     difficulty: key,
     maxPlayers: 8,
     minPlayers: 2,
-    maxRounds: 3,
     gameSpeed: Math.round(level.crossSeconds * 1000 / CELLS),
     canvasWidth: ARENA,
     canvasHeight: ARENA,

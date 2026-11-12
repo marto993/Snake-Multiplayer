@@ -5,6 +5,7 @@ const Snake = require('./public/snakeClass.js');
 const { buildRoomConfig } = require('./game/difficulty');
 const { traceProjectile } = require('./game/projectiles');
 const { cutSnake, dropRemains } = require('./game/remains');
+const { matchResult } = require('./game/match');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 
@@ -236,11 +237,11 @@ function generateRoomId() {
   return roomId;
 }
 
-// Override de desarrollo: ROUND_TIME=10 npm run dev permite rondas cortas para QA.
-// Sin la variable (o con un valor inválido) la ronda sigue durando 60 s.
+// Override de desarrollo: ROUND_TIME=10 npm run dev permite partidas cortas para QA.
+// Sin la variable (o con un valor inválido) la partida dura 2 minutos.
 const ROUND_TIME = (() => {
   const value = Math.floor(Number(process.env.ROUND_TIME));
-  return value > 0 ? value : 60;
+  return value > 0 ? value : 120;
 })();
 
 // La sala solo elige el nivel; el resto de la configuración sale de game/difficulty.js.
@@ -263,7 +264,6 @@ function createRoom(hostId, hostName) {
       playing: false,
       round: 1,
       timeoutIdStartGame: null,
-      nextRoundTimeoutId: null, // pausa de 3 s entre rondas (endRound → startNewRound)
       downCounter: 3, // FIJO: siempre 3 segundos
       intervalId: null,
       roundTimeLeft: defaultConfig.roundTime,
@@ -275,7 +275,6 @@ function createRoom(hostId, hostName) {
     consumables: [], // Array de consumibles
     projectiles: [],
     pendingProjectileEvents: [], // Disparos ocurridos entre ticks; se envían en el próximo gameLogicFrame
-    roundScores: {},
     consumableTimers: {}, // NUEVO: Timers para generación de consumibles
     spectators: new Map() // NUEVO: Espectadores activos (socketId -> { name, joinedAt })
   });
@@ -314,12 +313,9 @@ function deleteRoom(roomId) {
     if (room.gameState.intervalId) clearInterval(room.gameState.intervalId);
     if (room.gameState.timeoutIdStartGame) clearTimeout(room.gameState.timeoutIdStartGame);
     if (room.gameState.roundTimerId) clearInterval(room.gameState.roundTimerId);
-    // Pausa de 3 s entre rondas: si queda viva, revive la sala borrada (ticks fantasma y crash en endGame)
-    if (room.gameState.nextRoundTimeoutId) clearTimeout(room.gameState.nextRoundTimeoutId);
     room.gameState.intervalId = null;
     room.gameState.timeoutIdStartGame = null;
     room.gameState.roundTimerId = null;
-    room.gameState.nextRoundTimeoutId = null;
     room.gameState.playing = false;
 
     // NUEVO: Limpiar timers de consumibles
@@ -343,7 +339,6 @@ function clearRoomGameTimers(room) {
   const gs = room.gameState;
   if (gs.intervalId) { clearInterval(gs.intervalId); gs.intervalId = null; }
   if (gs.roundTimerId) { clearInterval(gs.roundTimerId); gs.roundTimerId = null; }
-  if (gs.nextRoundTimeoutId) { clearTimeout(gs.nextRoundTimeoutId); gs.nextRoundTimeoutId = null; }
   if (gs.timeoutIdStartGame) { clearTimeout(gs.timeoutIdStartGame); gs.timeoutIdStartGame = null; }
   Object.values(room.consumableTimers).forEach(timerId => {
     if (timerId) clearInterval(timerId);
@@ -351,8 +346,8 @@ function clearRoomGameTimers(room) {
   room.consumableTimers = {};
 }
 
-// La partida se corta (no alcanza minPlayers): la sala vuelve a espera como recién creada.
-// La próxima partida arranca en la ronda 1, con cuenta regresiva y puntajes en cero.
+// La sala vuelve a espera, con los mismos jugadores y el mismo nivel: al terminar la partida
+// (lista para "Jugar de nuevo") o cuando se corta por falta de jugadores.
 function resetRoomToWaiting(room) {
   clearRoomGameTimers(room);
   room.gameState.playing = false;
@@ -362,7 +357,6 @@ function resetRoomToWaiting(room) {
   room.projectiles = [];
   room.pendingProjectileEvents = [];
   room.consumables = [];
-  room.roundScores = {};
 
   room.players.forEach((player, index) => resetPlayerForRound(room, player, index));
 
@@ -371,14 +365,13 @@ function resetRoomToWaiting(room) {
   updateGameBoard(room);
 }
 
-// Corte por falta de jugadores (en plena ronda, en la pausa entre rondas o en su cuenta regresiva):
-// la sala vuelve a espera y todos reciben el estado nuevo antes del aviso.
+// Corte por falta de jugadores (en plena partida o en su cuenta regresiva): la sala vuelve a
+// espera y todos reciben el estado nuevo antes del aviso.
 function abortMatch(room) {
   resetRoomToWaiting(room);
   io.to(room.id).emit('updatePlayers', serializePlayers(room.players), 
     { playing: false, round: room.gameState.round }, 
     room.config, { host: room.host, roomId: room.id });
-  io.to(room.id).emit('updateScores', room.roundScores);
   io.to(room.id).emit('gameError', 'Not enough players to continue');
   broadcastOnlinePlayersList();
 }
@@ -750,18 +743,6 @@ function moveProjectiles(room, frameEvents = { hitEvents: [], blockEvents: [], e
   });
 }
 
-function initializeRoundScores(room) {
-  room.players.forEach(player => {
-    if (!room.roundScores[player.id]) {
-      room.roundScores[player.id] = {
-        name: player.name,
-        totalScore: 0,
-        roundWins: 0
-      };
-    }
-  });
-}
-
 function startRoundTimer(room) {
   room.gameState.roundTimeLeft = room.config.roundTime;
   
@@ -778,150 +759,40 @@ function startRoundTimer(room) {
     if (room.gameState.roundTimeLeft <= 0) {
       clearInterval(room.gameState.roundTimerId);
       room.gameState.roundTimerId = null;
-      endRound(room);
+      endMatch(room).catch(error => console.error('Error ending match:', error));
     }
   }, 1000);
 }
 
-function endRound(room) {
-  if (!isRoomAlive(room)) return;
-  if (room.gameState.intervalId) {
-    clearInterval(room.gameState.intervalId);
-    room.gameState.intervalId = null;
-  }
-  if (room.gameState.roundTimerId) {
-    clearInterval(room.gameState.roundTimerId);
-    room.gameState.roundTimerId = null;
-  }
-  
-  // Pausar generación de consumibles
-  Object.values(room.consumableTimers).forEach(timerId => {
-    if (timerId) clearInterval(timerId);
-  });
-  
-  // Ganador de la ronda: la serpiente más larga. En empate gana la primera de la lista
-  // (el mismo jugador que se emite como `winner`). La ronda ganada se suma una sola vez,
-  // después de recorrer a todos: antes se sumaba dentro del recorrido y el primer jugador,
-  // máximo provisional, ganaba todas las rondas.
-  let roundWinner = null;
-  let maxSize = 0;
-
-  room.players.forEach(player => {
-    const snakeSize = player.segments.length;
-    player.score = snakeSize;
-
-    if (snakeSize > maxSize) {
-      maxSize = snakeSize;
-      roundWinner = player;
-    }
-
-    if (room.roundScores[player.id]) {
-      room.roundScores[player.id].totalScore += snakeSize;
-    }
-  });
-
-  if (roundWinner && room.roundScores[roundWinner.id]) {
-    room.roundScores[roundWinner.id].roundWins++;
-  }
-
-  room.gameState.round++;
-
-  if (room.gameState.round > room.config.maxRounds) {
-    endGame(room).catch(error => console.error('Error ending game:', error));
-  } else {
-    if (room.gameState.nextRoundTimeoutId) clearTimeout(room.gameState.nextRoundTimeoutId);
-    room.gameState.nextRoundTimeoutId = setTimeout(() => {
-      room.gameState.nextRoundTimeoutId = null;
-      startNewRound(room);
-    }, 3000);
-  }
-  
-  io.to(room.id).emit('roundEnd', {
-    round: room.gameState.round - 1,
-    winner: roundWinner,
-    scores: room.roundScores,
-    nextRound: room.gameState.round <= room.config.maxRounds
-  });
-}
-
-async function endGame(room) {
-  if (!isRoomAlive(room)) return;
+// Fin de la partida: gana la serpiente más larga. Se guardan las estadísticas, todos reciben la
+// clasificación y la sala vuelve a espera con los mismos jugadores, lista para "Jugar de nuevo".
+async function endMatch(room) {
+  if (!isRoomAlive(room) || !room.gameState.playing) return;
+  clearRoomGameTimers(room);
   room.gameState.playing = false;
-  if (room.gameState.nextRoundTimeoutId) {
-    clearTimeout(room.gameState.nextRoundTimeoutId);
-    room.gameState.nextRoundTimeoutId = null;
-  }
-  
-  if (room.gameState.intervalId) {
-    clearInterval(room.gameState.intervalId);
-    room.gameState.intervalId = null;
-  }
-  
-  if (room.gameState.roundTimerId) {
-    clearInterval(room.gameState.roundTimerId);
-    room.gameState.roundTimerId = null;
-  }
-  
-  // Parar generación de consumibles
-  Object.values(room.consumableTimers).forEach(timerId => {
-    if (timerId) clearInterval(timerId);
-  });
-    
-  // Sin valor inicial, reduce sobre una sala sin puntajes lanza TypeError y tira el proceso
-  const finalWinner = Object.values(room.roundScores).reduce((prev, current) =>
-    (prev && prev.totalScore > current.totalScore) ? prev : current
-  , null);
 
-  // Update player stats
-  const updatePromises = room.players.map(player => {
-    if (player.playerId) {
-      const gameData = {
-        finalScore: room.roundScores[player.id]?.totalScore || 0,
-        roundsWon: room.roundScores[player.id]?.roundWins || 0,
-        won: !!finalWinner && room.roundScores[player.id]?.totalScore === finalWinner.totalScore
-      };
-      return updatePlayerStats(player.playerId, gameData);
-    }
-  }).filter(Boolean);
-  
+  const { ranking, winners } = matchResult(room.players);
+  const lengthById = new Map(ranking.map(entry => [entry.id, entry.length]));
+  const updates = room.players.filter(player => player.playerId).map(player =>
+    updatePlayerStats(player.playerId, {
+      finalScore: lengthById.get(player.id) || 0,
+      won: winners.includes(player.id)
+    })
+  );
   try {
-    await Promise.all(updatePromises);
+    await Promise.all(updates);
   } catch (error) {
     console.error('Error updating player stats:', error);
   }
-  
-  io.to(room.id).emit('gameEnd', {
-    winner: finalWinner,
-    finalScores: room.roundScores,
-    roomFinished: true
-  });
-  
-  room.finished = true;
-  setTimeout(() => {
-    if (isRoomAlive(room)) deleteRoom(room.id);
-  }, 30000);
-}
+  if (!isRoomAlive(room)) return;
 
-// MODIFICADO: startNewRound
-function startNewRound(room) {
-  // La pausa entre rondas puede vencer con la sala borrada o la partida cortada por falta de jugadores
-  if (!isRoomAlive(room) || room.finished || !room.gameState.playing) return;
-  if (room.players.length < room.config.minPlayers) {
-    abortMatch(room);
-    return;
-  }
-  room.gameState.downCounter = 3; // FIJO: siempre 3 segundos
-  room.gameState.roundTimeLeft = room.config.roundTime;
-  room.projectiles = [];
-  room.pendingProjectileEvents = []; // No filtrar disparos de la ronda anterior
-  room.consumables = []; // Limpiar consumibles
-  
-  room.players.forEach((player, index) => resetPlayerForRound(room, player, index));
-  
-  generateFoods(room);
-  initializeConsumableSystem(room); // Reiniciar sistema de consumibles
-  updateGameBoard(room);
-  startGame(room);
+  io.to(room.id).emit('gameEnd', { ranking, winners });
+
+  resetRoomToWaiting(room);
+  io.to(room.id).emit('updatePlayers', serializePlayers(room.players),
+    { playing: false, round: room.gameState.round },
+    room.config, { host: room.host, roomId: room.id });
+  broadcastOnlinePlayersList();
 }
 
 function startGame(room) {
@@ -937,7 +808,7 @@ function startGame(room) {
     room.gameState.playing = true;
     room.pendingProjectileEvents = []; // Arranca la ronda sin eventos de disparo viejos
     
-    console.log(`Starting round ${room.gameState.round} in room ${room.id}`);
+    console.log(`Starting match in room ${room.id}`);
     io.to(room.id).emit('gameStart', {
       players: serializePlayers(room.players),
       foods: [...room.foods],
@@ -1253,7 +1124,6 @@ io.on('connection', (socket) => {
       room.players.push(player);
       resetPlayerForRound(room, player, room.players.length - 1);
       
-      initializeRoundScores(room);
       socket.emit('roomJoined', { 
         roomId: data.roomId, 
         isHost: false,
@@ -1330,9 +1200,7 @@ io.on('connection', (socket) => {
     room.players.forEach((player, index) => resetPlayerForRound(room, player, index));
     resetGameBoard(room);
     generateFoods(room);
-    initializeRoundScores(room);
     updateGameBoard(room);
-    io.to(currentRoom).emit('updateScores', room.roundScores);
     room.gameState.timeoutIdStartGame = setTimeout(() => startGame(room), 1000);
   });
 
@@ -1392,21 +1260,6 @@ io.on('connection', (socket) => {
         const userData = connectedUsers.get(socket.id);
         if (userData) {
           userData.roomId = roomId;
-        }
-        
-        // Serializar roundScores para evitar referencias circulares
-        const serializedRoundScores = {};
-        if (room.roundScores) {
-          Object.keys(room.roundScores).forEach(playerId => {
-            const scoreData = room.roundScores[playerId];
-            if (scoreData && typeof scoreData === 'object') {
-              serializedRoundScores[playerId] = {
-                name: scoreData.name || '',
-                totalScore: scoreData.totalScore || 0,
-                roundWins: scoreData.roundWins || 0
-              };
-            }
-          });
         }
         
         // Serializar consumibles del config
@@ -1487,7 +1340,6 @@ io.on('connection', (socket) => {
           config: {
             maxPlayers: Number(room.config.maxPlayers) || 8,
             minPlayers: Number(room.config.minPlayers) || 2,
-            maxRounds: Number(room.config.maxRounds) || 3,
             gameSpeed: Number(room.config.gameSpeed) || 83,
             canvasWidth: Number(room.config.canvasWidth) || 600,
             canvasHeight: Number(room.config.canvasHeight) || 600,
@@ -1503,7 +1355,6 @@ io.on('connection', (socket) => {
             round: Number(room.gameState.round) || 1,
             roundTimeLeft: Number(room.gameState.roundTimeLeft) || 60
           },
-          roundScores: serializedRoundScores,
           roundTimeLeft: Number(room.gameState.roundTimeLeft) || 60
         });
         
@@ -1537,7 +1388,6 @@ io.on('connection', (socket) => {
         playing: room.gameState.playing,
         config: {
           difficulty: room.config.difficulty,
-          maxRounds: room.config.maxRounds,
           gameSpeed: room.config.gameSpeed,
           canvasWidth: room.config.canvasWidth,
           canvasHeight: room.config.canvasHeight,
@@ -1744,7 +1594,6 @@ io.on('connection', (socket) => {
       if (room.pendingProjectileEvents) {
         room.pendingProjectileEvents = room.pendingProjectileEvents.filter(e => e.playerId !== socket.id);
       }
-      delete room.roundScores[socket.id];
       
       // NUEVO: Actualizar datos del usuario (ya no está en sala)
       const userData = connectedUsers.get(socket.id);
@@ -1800,9 +1649,8 @@ io.on('connection', (socket) => {
 
   socket.on('backToMenu', () => {
     if (currentRoom) {
-      // Si la sala sigue activa, salir de verdad: un espectador deja room.spectators (si no, al volver
-      // a mirar la misma sala recibía "Ya estás espectando") y un jugador deja room.players.
-      // En una sala terminada (finished) no hace nada: los puntajes quedan hasta que se borre.
+      // Salir de verdad: un espectador deja room.spectators (si no, al volver a mirar la misma sala
+      // recibía "Ya estás espectando") y un jugador deja room.players (en espera o en partida).
       handlePlayerLeaveRoom(socket, currentRoom);
       
       // NUEVO: Actualizar datos del usuario (ya no está en sala)
