@@ -51,7 +51,7 @@ Script load order matters (index.html): socket.io → snakeClass → motion → 
 ## Non-obvious gotchas
 
 - **Timer cleanup is mandatory.** `deleteRoom()` must `clearInterval` the game loop, round timer, **and** every entry in `consumableTimers`. Missed timers = memory leak + ghost game ticks.
-- **DB path differs by env.** Dev: `./game_stats.db`. Prod (Fly): `/app/data/game_stats.db` (persistent volume `game_stats_volume`). Logic at `index.js:14`.
+- **DB path differs by env.** Dev: `./game_stats.db`. Prod (Fly): `/app/data/game_stats.db` (persistent volume `data_volume`). Logic at `index.js:14`.
 - **Player IDs are compound:** `${username}_${Date.now()}`. Don't query players by `name`.
 - **Room config comes from the difficulty table.** The host only picks `difficulty` (`easy` / `medium` / `hard`); `validateRoomConfig` passes it to `game/difficulty.js`, which builds the whole `room.config` and falls back to `medium` for anything unknown. Speed, shot cells per tick, extra food and shield timing vary by level; arena 600, 12 px cells, 2 to 8 players, start length 3 are fixed. `roundTime` (the match length) is 120 unless `ROUND_TIME` is set. Every round reset goes through `resetPlayerForRound()`.
 - **Portal wraparound breaks interpolation.** When a snake teleports edge-to-edge, naive lerp animates across the whole canvas. `motion.js` interpolates the short way around (`wrapDelta`) and moves a segment to the opposite edge once its center crosses; `arena.js` cuts the continuous body path wherever consecutive segments are > canvas/2 apart. Preserve both when touching rendering.
@@ -67,13 +67,15 @@ Script load order matters (index.html): socket.io → snakeClass → motion → 
 
 ## Testing
 
-`npm test` runs the unit tests in `test/` (Node's built-in runner). They cover the pieces that load in Node without a browser or a running server: `motion.js`, `Snake.reset`, `game/difficulty.js`, `game/projectiles.js` and `game/remains.js`. Gameplay still needs a manual check: validate changes by running `npm run dev` and opening multiple browser windows (use incognito for distinct sessions). Inspect DB with `sqlite3 game_stats.db`.
+`npm test` runs the unit tests in `test/` (Node's built-in runner). They cover the pieces that load in Node without a browser or a running server: `motion.js`, `Snake.reset`, `game/difficulty.js`, `game/projectiles.js`, `game/remains.js` and `game/match.js`. Gameplay still needs a manual check: validate changes by running `npm run dev` and opening multiple browser windows (use incognito for distinct sessions). Inspect DB with `sqlite3 game_stats.db`.
 
 `ROUND_TIME=10 npm run dev` shortens the match for testing (positive integers only; default 120). Headless browser checks work with `puppeteer-core` + `/snap/bin/chromium` (the snap can't write to host `/tmp`, so use a dir under `~`).
 
 ## Deployment
 
-Fly.io, region `gru` (São Paulo), auto-stop when idle, persistent volume for SQLite. Config in `fly.toml` and `Dockerfile`. App URL: `snake-multiplayer-2024.fly.dev`.
+Fly.io app `snake-multiplayer`, region `gru` (São Paulo), auto-stop when idle, volume `data_volume` for SQLite. Config in `fly.toml` and `Dockerfile`. App URL: `snake-multiplayer.fly.dev`.
+
+**Every push to `main` deploys.** `.github/workflows/deploy.yml` runs `npm test` and, if it passes, `flyctl deploy --remote-only` with the `FLY_API_TOKEN` repo secret (an app-scoped deploy token). It can also be run by hand from the Actions tab. To deploy by hand from this machine, run `fly deploy` from a clean checkout of `main`: it uploads the local folder, ignored files included.
 
 ```bash
 fly logs                                          # tail prod logs

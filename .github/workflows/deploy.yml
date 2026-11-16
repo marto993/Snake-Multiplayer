@@ -1,0 +1,39 @@
+# Deploy a Fly.io en cada push a main, o a mano desde la pestaña Actions.
+# Primero corren los tests; si fallan, no se despliega.
+# Necesita el secreto FLY_API_TOKEN (un token de deploy de la app snake-multiplayer).
+name: Deploy a Fly.io
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Un deploy a la vez: si llega otro push mientras despliega, espera su turno.
+concurrency:
+  group: deploy-produccion
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20 # la misma versión mayor que el Dockerfile
+      - run: npm test
+
+  deploy:
+    name: Deploy
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: superfly/flyctl-actions/setup-flyctl@1.6
+      - run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
