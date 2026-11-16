@@ -2,1292 +2,305 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Snake Multiplayer</title>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono:wght@400@700&display=swap');
-        
-        * { 
-            font-family: 'Share Tech Mono', monospace; 
-            box-sizing: border-box;
-        }
-        
-        body {
-            display: flex;
-            justify-content: center;
-            align-items: flex-start;
-            min-height: 100vh;
-            margin: 0;
-            background: #0d1117;
-            color: #58a6ff;
-            padding: 10px;
-            overflow-x: auto;
-            padding-bottom: 32px;
-        }
-        
-        .container {
-            display: flex;
-            gap: 15px;
-            max-width: 100%;
-            width: auto;
-        }
-        
-        .game-panel {
-            background: #161b22;
-            border: 1px solid #30363d;
-            padding: 15px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-        }
-        
-        .left-panel {
-            flex: 0 0 280px;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-        
-        .main-panel {
-            flex: 1;
-            text-align: center;
-            min-width: 0;
-        }
-
-        .right-panel {
-            flex: 0 0 300px;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-
-        .info-canvas-container {
-            margin-bottom: 0;
-            background: #010409;
-            position: relative;
-        }
-
-        #infoCanvas {
-            display: block;
-            background: #010409;
-            border: none;
-            width: 600px;
-            height: 90px;
-        }
-
-        .canvas-separator {
-            height: 1px;
-            background: #30363d;
-            width: 600px;
-            margin: 0;
-        }
-
-        .game-canvas-container {
-            background: #010409;
-            border: 1px solid #30363d;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-            padding: 0;
-            width: 600px;
-            height: 600px;
-            overflow: hidden;
-        }
-
-        .profile-panel {
-            background: #161b22;
-            border: 1px solid #30363d;
-            padding: 15px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-        }
-
-        .profile-stats {
-            background: #0d1117;
-            border: 1px solid #30363d;
-            padding: 15px;
-            margin-bottom: 15px;
-            font-size: 0.9em;
-            line-height: 1.4;
-        }
-
-        .profile-stats strong {
-            color: #58a6ff;
-            display: block;
-            margin-bottom: 8px;
-            font-size: 1.1em;
-        }
-
-        .profile-stats span {
-            display: block;
-            color: #8b949e;
-            margin-bottom: 4px;
-        }
-
-        .profile-actions {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .profile-actions button {
-            margin-bottom: 0;
-            padding: 8px 12px;
-            font-size: 0.9em;
-        }
-
-        /* NUEVO: Estilos para lista de jugadores en línea */
-        .online-players-panel {
-            background: #161b22;
-            border: 1px solid #30363d;
-            padding: 15px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-        }
-
-        .online-players-list {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-
-        .online-player-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 8px;
-            margin-bottom: 6px;
-            background: #0d1117;
-            border: 1px solid #30363d;
-            font-size: 0.85em;
-            transition: all 0.2s ease;
-        }
-
-        .online-player-item:hover {
-            background: #161b22;
-            border-color: #58a6ff;
-        }
-
-        .online-player-info {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-			padding-right: 4px;
-        }
-
-        .online-player-name {
-            color: #fff;
-            font-weight: 600;
-			min-width: 8.75rem;
-        }
-
-        .online-player-status {
-            color: #888;
-            font-size: 0.8em;
-        }
-
-        .online-player-status.in-game {
-            color: #f85149;
-        }
-
-        .online-player-status.available {
-            color: #3fb950;
-        }
-
-        .invite-button {
-            background: #0d1117;
-            color: #58a6ff;
-            border: 1px solid #30363d;
-            padding: 4px 8px;
-            font-size: 0.8em;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            font-family: 'Share Tech Mono', monospace;
-            text-transform: uppercase;
-            margin: 0;
-        }
-
-        .invite-button:hover {
-            background: #1f6feb;
-            color: #fff;
-            border-color: #1f6feb;
-        }
-
-        .invite-button:disabled {
-            background: #161b22;
-            color: #6e7681;
-            border-color: #30363d;
-            cursor: not-allowed;
-        }
-
-        .invite-button:disabled:hover {
-            background: #161b22;
-            color: #6e7681;
-        }
-
-        .online-players-empty {
-            text-align: center;
-            padding: 20px;
-            color: #6e7681;
-            font-style: italic;
-            font-size: 0.9em;
-        }
-        
-        h1 {
-            margin: 0 0 20px 0;
-            color: #58a6ff;
-            font-size: 2.5em;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            font-weight: 400;
-        }
-        
-        h2 {
-            margin: 0 0 15px 0;
-            color: #58a6ff;
-            font-size: 1.4em;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            font-weight: 400;
-        }
-        
-        h3 {
-            margin: 15px 0 10px 0;
-            color: #c9d1d9;
-            font-size: 1.2em;
-            text-transform: uppercase;
-            font-weight: 400;
-            letter-spacing: 0.5px;
-        }
-        
-        .game-info {
-            background: #161b22;
-            color: #c9d1d9;
-            border: 1px solid #30363d;
-            padding: 15px;
-        }
-        
-        .config-panel {
-            background: #0d1117;
-            border: 1px solid #30363d;
-            padding: 15px;
-            margin-bottom: 15px;
-        }
-        
-        .config-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
-        }
-        
-        .config-row:last-child {
-            margin-bottom: 0;
-        }
-        
-        .config-label {
-            font-size: 0.9em;
-            font-weight: 400;
-            flex: 1;
-            color: #c9d1d9;
-        }
-        
-        .config-input {
-            width: 70px;
-            padding: 4px 6px;
-            border: 1px solid #30363d;
-            background: #0d1117;
-            color: #c9d1d9;
-            font-size: 0.9em;
-            text-align: center;
-            font-family: 'Share Tech Mono', monospace;
-        }
-        
-        .config-input:focus {
-            outline: none;
-            border-color: #58a6ff;
-            box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
-        }
-        
-        .config-input:disabled {
-            background: #161b22;
-            color: #6e7681;
-            cursor: not-allowed;
-        }
-        
-        .config-select {
-            width: 70px;
-            padding: 4px;
-            border: 1px solid #30363d;
-            background: #0d1117;
-            color: #c9d1d9;
-            font-size: 0.9em;
-            font-family: 'Share Tech Mono', monospace;
-        }
-        
-        .config-select:disabled {
-            background: #161b22;
-            color: #6e7681;
-            cursor: not-allowed;
-        }
-        
-        .config-checkbox {
-            width: 18px;
-            height: 18px;
-            cursor: pointer;
-            accent-color: #58a6ff;
-        }
-        
-        .config-checkbox:disabled {
-            cursor: not-allowed;
-        }
-        
-        .config-button {
-            background: #0d1117;
-            color: #58a6ff;
-            border: 1px solid #30363d;
-            padding: 8px 12px;
-            font-size: 0.9em;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            margin-bottom: 10px;
-            font-family: 'Share Tech Mono', monospace;
-            text-transform: uppercase;
-        }
-        
-        .config-button:hover {
-            background: #1f6feb;
-            color: #fff;
-            border-color: #1f6feb;
-        }
-
-        .config-divider {
-            margin: 15px 0;
-            border-top: 1px solid #30363d;
-            padding-top: 15px;
-        }
-
-        .config-divider h4 {
-            margin: 0 0 10px 0;
-            color: #c9d1d9;
-            font-size: 0.9em;
-            text-transform: uppercase;
-            font-family: 'Share Tech Mono', monospace;
-            letter-spacing: 0.5px;
-            font-weight: 400;
-        }
-
-        .config-info {
-            font-size: 0.8em;
-            color: #8b949e;
-            margin: 10px 0;
-            padding: 8px;
-            background: #0d1117;
-            border-left: 2px solid #30363d;
-            border-radius: 2px;
-            line-height: 1.3;
-        }
-
-        .config-info strong {
-            color: #58a6ff;
-        }
-        
-        #playerList {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
-        
-        .player-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 6px;
-            margin-bottom: 4px;
-            background: #0d1117;
-            border: 1px solid #30363d;
-            transition: all 0.2s ease;
-            font-size: 0.9em;
-        }
-        
-        .player-item.current-player {
-            background: #1c2128;
-            border: 1px solid #58a6ff;
-            box-shadow: 0 0 0 1px rgba(88, 166, 255, 0.2);
-        }
-        
-        .player-item.eliminated {
-            opacity: 0.5;
-            background: #161b22;
-            border-color: #f85149;
-        }
-        
-        .player-rank {
-            font-weight: 500;
-            min-width: 20px;
-            text-align: center;
-            background: #161b22;
-            color: #c9d1d9;
-            padding: 2px;
-            font-size: 0.8em;
-        }
-        
-        .player-name {
-            flex: 1;
-            text-align: left;
-            font-weight: 400;
-            color: #c9d1d9;
-            font-size: 0.85em;
-        }
-        
-        .player-score {
-            font-weight: 500;
-            min-width: 40px;
-            text-align: right;
-            line-height: 1.1;
-            font-size: 0.8em;
-            color: #58a6ff;
-        }
-        
-        .player-score small {
-            display: block;
-            font-size: 0.8em;
-            color: #8b949e;
-            font-weight: normal;
-        }
-        
-        .player-status {
-            font-size: 1em;
-        }
-        
-        .form-panel {
-            background: #161b22;
-            border: 1px solid #30363d;
-            padding: 15px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-        }
-        
-        .form-panel label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 400;
-            color: #c9d1d9;
-            text-transform: uppercase;
-            font-size: 0.9em;
-        }
-        
-        .form-panel input {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid #30363d;
-            background: #0d1117;
-            color: #c9d1d9;
-            font-size: 16px;
-            margin-bottom: 15px;
-            transition: all 0.2s ease;
-            font-family: 'Share Tech Mono', monospace;
-        }
-        
-        .form-panel input:focus {
-            outline: none;
-            border-color: #58a6ff;
-            box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
-        }
-        
-        button {
-            background: #0d1117;
-            color: #58a6ff;
-            border: 1px solid #30363d;
-            padding: 12px 24px;
-            font-size: 16px;
-            font-weight: 400;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            width: 100%;
-            margin-bottom: 10px;
-            font-family: 'Share Tech Mono', monospace;
-            text-transform: uppercase;
-        }
-        
-        button:hover {
-            background: #1f6feb;
-            color: #fff;
-            border-color: #1f6feb;
-        }
-        
-        button:active {
-            transform: scale(0.98);
-        }
-        
-        button.secondary {
-            background: #0d1117;
-            color: #c9d1d9;
-            border-color: #30363d;
-        }
-        
-        button.secondary:hover {
-            background: #21262d;
-            color: #fff;
-            border-color: #30363d;
-        }
-        
-        #startGameButton {
-            background: #238636;
-            color: #fff;
-            border-color: #238636;
-            font-size: 18px;
-            padding: 15px 30px;
-        }
-        
-        #startGameButton:hover {
-            background: #2ea043;
-            border-color: #2ea043;
-        }
-        
-        #game {
-            border: 0px solid #00ff41;
-            background: #000;
-            display: block;
-        }
-        
-        .game-over-screen {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(13, 17, 23, 0.98);
-            color: #c9d1d9;
-            padding: 40px;
-            border: 1px solid #30363d;
-            text-align: center;
-            font-size: 24px;
-            font-weight: 400;
-            z-index: 1000;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
-        }
-        
-        .game-over-screen h1 {
-            color: #f85149;
-            margin-bottom: 20px;
-            font-size: 3em;
-            font-weight: 400;
-        }
-        
-        .hidden {
-            display: none !important;
-        }
-        
-        .waiting-message {
-            background: #161b22;
-            border: 1px solid #30363d;
-            padding: 20px;
-            margin: 20px 0;
-            text-align: center;
-            color: #8b949e;
-        }
-        
-        .controls-hint {
-            background: #0d1117;
-            border: 1px solid #30363d;
-            padding: 10px;
-            margin-top: 15px;
-            font-size: 0.9em;
-            color: #8b949e;
-        }
-
-        .spectator-banner {
-            background: rgba(88, 166, 255, 0.1);
-            border: 1px solid #30363d;
-            padding: 10px;
-            margin-bottom: 15px;
-            text-align: center;
-            font-weight: 400;
-            color: #58a6ff;
-            font-size: 1.1em;
-        }
-        
-        #roomsList {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-        
-        .room-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px;
-            margin-bottom: 8px;
-            background: #0d1117;
-            border: 1px solid #30363d;
-        }
-        
-        .room-info {
-            flex: 1;
-            font-size: 0.9em;
-            color: #c9d1d9;
-        }
-        
-        .room-config {
-            font-size: 0.8em;
-            color: #8b949e;
-            margin-top: 5px;
-        }
-        
-        .join-room-btn {
-            margin: 0;
-            padding: 6px 12px;
-            font-size: 14px;
-            width: auto;
-        }
-        
-        .empty-room {
-            text-align: center;
-            padding: 20px;
-            color: #6e7681;
-            font-style: italic;
-        }
-        
-        .button-group {
-            display: flex;
-            gap: 10px;
-        }
-        
-        .button-group button {
-            margin-bottom: 0;
-        }
-        
-        #roomInfo {
-            background: #0d1117;
-            border: 1px solid #30363d;
-            padding: 10px;
-            margin-bottom: 15px;
-            font-size: 0.9em;
-            color: #8b949e;
-        }
-        
-        .final-screen {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.98);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1001;
-        }
-        
-        .final-content {
-            background: #161b22;
-            border: 1px solid #30363d;
-            padding: 40px;
-            text-align: center;
-            max-width: 500px;
-            width: 90%;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
-        }
-        
-        .final-content h1 {
-            color: #58a6ff;
-            margin-bottom: 20px;
-            font-size: 2.5em;
-            font-weight: 400;
-        }
-        
-        .final-scores {
-            margin: 30px 0;
-            text-align: left;
-        }
-        
-        .final-scores h3 {
-            text-align: center;
-            color: #c9d1d9;
-            margin-bottom: 20px;
-            font-weight: 400;
-        }
-        
-        #finalScoresList {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
-        
-        .final-score-item {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            padding: 12px;
-            margin-bottom: 8px;
-            background: #0d1117;
-            border-left: 2px solid #30363d;
-        }
-        
-        .final-rank {
-            font-weight: 500;
-            font-size: 1.2em;
-            color: #58a6ff;
-            min-width: 30px;
-        }
-        
-        .final-name {
-            flex: 1;
-            font-weight: 400;
-            color: #c9d1d9;
-        }
-        
-        .final-total {
-            font-weight: 500;
-            color: #3fb950;
-        }
-        
-        .final-wins {
-            font-size: 0.9em;
-            color: #8b949e;
-        }
-
-        .modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.95);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1001;
-        }
-
-        .modal-content {
-            background: #161b22;
-            border: 1px solid #30363d;
-            max-width: 500px;
-            width: 90%;
-            max-height: 80vh;
-            overflow-y: auto;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
-        }
-
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 20px;
-            border-bottom: 1px solid #30363d;
-        }
-
-        .modal-header h2 {
-            margin: 0;
-            color: #58a6ff;
-            font-weight: 400;
-        }
-
-        .modal-close {
-            background: none;
-            border: none;
-            color: #f85149;
-            font-size: 24px;
-            font-weight: 400;
-            cursor: pointer;
-            padding: 0;
-            margin: 0;
-            width: auto;
-            transition: color 0.2s ease;
-        }
-
-        .modal-close:hover {
-            color: #ff6b6b;
-            background: none;
-        }
-
-        .modal-body {
-            padding: 20px;
-        }
-
-        .leaderboard-list {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
-
-        .leaderboard-item {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            padding: 12px;
-            margin-bottom: 8px;
-            background: #0d1117;
-            border-left: 2px solid #30363d;
-            transition: background 0.2s ease;
-        }
-
-        .leaderboard-item:hover {
-            background: #161b22;
-        }
-
-        .leaderboard-item.loading {
-            justify-content: center;
-            color: #6e7681;
-            font-style: italic;
-        }
-
-        .leaderboard-item .rank {
-            font-weight: 500;
-            font-size: 1.1em;
-            color: #58a6ff;
-            min-width: 30px;
-        }
-        
-        .leaderboard-item .name {
-            flex: 1;
-            font-weight: 400;
-            color: #c9d1d9;
-        }
-        
-        .leaderboard-item .wins {
-            font-weight: 500;
-            color: #3fb950;
-            min-width: 35px;
-            text-align: center;
-        }
-        
-        .leaderboard-item .games {
-            color: #8b949e;
-            min-width: 35px;
-            text-align: center;
-            font-size: 0.9em;
-        }
-        
-        .leaderboard-item .winrate {
-            color: #58a6ff;
-            min-width: 45px;
-            text-align: center;
-            font-weight: 500;
-        }
-
-        .leaderboard-item:nth-child(1) .rank {
-            color: #fbbf24;
-        }
-
-        .leaderboard-item:nth-child(2) .rank {
-            color: #94a3b8;
-        }
-
-        .leaderboard-item:nth-child(3) .rank {
-            color: #d97706;
-        }
-
-        .leaderboard-item:nth-child(1) {
-            border-left-color: #fbbf24;
-            background: #1c2128;
-        }
-
-        .leaderboard-item:nth-child(2) {
-            border-left-color: #94a3b8;
-            background: #1c2128;
-        }
-
-        .leaderboard-item:nth-child(3) {
-            border-left-color: #d97706;
-            background: #1c2128;
-        }
-
-        #gameFooter {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 32px;
-            background: rgba(13, 17, 23, 0.95);
-            backdrop-filter: blur(4px);
-            border-top: 1px solid rgba(48, 54, 61, 0.3);
-            z-index: 999;
-            font-family: 'Share Tech Mono', monospace;
-        }
-
-        .footer-content {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            height: 100%;
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 0 20px;
-        }
-
-        .footer-text {
-            font-size: 11px;
-            color: #6e7681;
-            font-weight: 400;
-            letter-spacing: 0.5px;
-        }
-
-        .footer-text .heart {
-            color: #f85149;
-            animation: heartbeat 2s ease-in-out infinite;
-        }
-
-        .footer-links {
-            display: flex;
-            gap: 12px;
-        }
-
-        .footer-links a {
-            font-size: 12px;
-            color: #6e7681;
-            text-decoration: none;
-            transition: all 0.2s ease;
-            padding: 4px;
-            border-radius: 3px;
-        }
-
-        .footer-links a:hover {
-            color: #58a6ff;
-            transform: translateY(-1px);
-            background: rgba(88, 166, 255, 0.1);
-        }
-
-        @keyframes heartbeat {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.1); }
-        }
-
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-        
-        ::-webkit-scrollbar-track {
-            background: #0d1117;
-        }
-        
-        ::-webkit-scrollbar-thumb {
-            background: #30363d;
-        }
-        
-        ::-webkit-scrollbar-thumb:hover {
-            background: #484f58;
-        }
-
-        @media (max-width: 768px) {
-            body {
-                padding-bottom: 28px;
-                padding: 8px;
-            }
-
-            .container {
-                flex-direction: column;
-                gap: 10px;
-            }
-            
-            .left-panel {
-                flex: none;
-                order: 1;
-            }
-
-            .main-panel {
-                order: 2;
-            }
-
-            .right-panel {
-                order: 3;
-                flex: none;
-            }
-            
-            #game, #infoCanvas {
-                max-width: 100%;
-                height: auto;
-            }
-            
-            h1 {
-                font-size: 2em;
-            }
-            
-            .button-group {
-                flex-direction: column;
-            }
-
-            #gameFooter {
-                height: 28px;
-            }
-            
-            .footer-content {
-                padding: 0 10px;
-            }
-            
-            .footer-text {
-                font-size: 10px;
-            }
-            
-            .footer-links {
-                gap: 8px;
-            }
-            
-            .footer-links a {
-                font-size: 11px;
-                padding: 2px;
-            }
-
-            .modal-content {
-                margin: 20px;
-            }
-            
-            .leaderboard-item {
-                gap: 10px;
-                padding: 10px;
-            }
-            
-            .leaderboard-item .rank {
-                min-width: 25px;
-            }
-            
-            .leaderboard-item .wins,
-            .leaderboard-item .games {
-                min-width: 30px;
-            }
-            
-            .leaderboard-item .winrate {
-                min-width: 40px;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .footer-text {
-                font-size: 9px;
-            }
-            
-            .footer-links a {
-                font-size: 10px;
-            }
-        }
-    </style>
-    
-    <script src="/socket.io/socket.io.min.js"></script>
-    <script src="./snakeClass.js"></script>
+    <meta name="description" content="Snake multijugador en tiempo real: criaturas de luz en el abismo.">
+    <meta name="theme-color" content="#020A12">
+    <meta name="color-scheme" content="dark">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23020A12'/%3E%3Cpath d='M7 17a9 9 0 0 1 18 0z' fill='%231FF2D2'/%3E%3Cpath d='M11 19.5c-1 2.5 1 4 0 6.5M16 19.5v7M21 19.5c1 2.5-1 4 0 6.5' fill='none' stroke='%23C8FF3C' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT,WONK@1,144,200..600,100,1&family=Recursive:wght,MONO@300..800,0..1&display=swap">
+    <link rel="stylesheet" href="./css/theme.css">
 </head>
-<body>
-    <div class="container">
-        <div class="left-panel">
-            <div class="profile-panel" id="userPanel">
-                <div id="profileView" class="hidden">
-                    <h3>👤 Mi Perfil</h3>
-                    <div id="profileInfo">
-                        <div class="profile-stats">
-                            <span>Cargando perfil...</span>
-                        </div>
-                    </div>
-                    
-                    <div class="profile-actions">
-                        <button id="leaderboardButton" class="secondary">🏆 Rankings</button>
-                        <button id="resetProfileButton" class="secondary" onclick="resetPlayerProfile()">🔓 Cerrar Sesión</button>
+<body data-scene="intro">
+    <!-- Iconos: trazo 1,75 px, extremos redondeados, currentColor, retícula de 20 px.
+         Uso desde JS: <svg class="icon"><use href="#i-medusa"/></svg> -->
+    <svg class="icon-sprite" width="0" height="0" aria-hidden="true" focusable="false">
+        <symbol id="i-medusa" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3.5 10.2a6.5 6.5 0 0 1 13 0"/>
+            <path d="M3.5 10.2c1.1.9 2.1.9 3.25 0s2.15-.9 3.25 0 2.15.9 3.25 0 2.15-.9 3.25 0"/>
+            <path d="M7 12.4c-.7 1.7.7 2.7 0 4.9M10 12.7v5M13 12.4c.7 1.7-.7 2.7 0 4.9"/>
+        </symbol>
+        <symbol id="i-eye" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1.8 10S5 4.5 10 4.5 18.2 10 18.2 10 15 15.5 10 15.5 1.8 10 1.8 10z"/>
+            <circle cx="10" cy="10" r="2.6"/>
+        </symbol>
+        <symbol id="i-refresh" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16.3 8.2A6.5 6.5 0 1 0 16 13"/>
+            <path d="M16.6 3.6v4.8h-4.8"/>
+        </symbol>
+        <symbol id="i-close" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5.5 5.5l9 9M14.5 5.5l-9 9"/>
+        </symbol>
+        <symbol id="i-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5.5 7.75L10 12.25l4.5-4.5"/>
+        </symbol>
+        <symbol id="i-heart" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10 16.6s-6.2-3.7-6.2-8.2A3.5 3.5 0 0 1 10 6.3a3.5 3.5 0 0 1 6.2 2.1c0 4.5-6.2 8.2-6.2 8.2z"/>
+        </symbol>
+        <symbol id="i-plankton" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="7" cy="8" r="2.4"/>
+            <circle cx="13.6" cy="12.6" r="1.8"/>
+            <path d="M3 16.4c1.6-1.3 3.4-1.3 5 0M12 4.4c1.2.8 2.8.8 4 0"/>
+        </symbol>
+    </svg>
+
+    <canvas id="backdrop" aria-hidden="true"></canvas>
+
+    <!-- Chrome persistente: wordmark y chip de perfil (visible en lobby y sala) -->
+    <header id="topbar">
+        <span class="wordmark" data-wordmark-target>snake</span>
+        <div id="profileView" class="profile-view">
+            <button type="button" class="profile-chip" popovertarget="profilePopover" aria-controls="profilePopover" aria-expanded="false" aria-haspopup="true">
+                <i class="profile-orb" aria-hidden="true"></i>
+                <span class="profile-chip-text">
+                    <span class="profile-chip-name">Tu perfil</span>
+                    <span class="profile-chip-meta"></span>
+                </span>
+                <svg class="icon profile-chip-chevron" aria-hidden="true"><use href="#i-chevron"/></svg>
+            </button>
+            <div id="profilePopover" class="profile-popover" popover role="dialog" aria-label="Perfil">
+                <div id="profileInfo">
+                    <div class="profile-stats">
+                        <span>Cargando perfil…</span>
                     </div>
                 </div>
-
-                <div id="loginView">
-                    <h2>Entrar al Juego</h2>
-                    <label for="username">Tu Nombre:</label>
-                    <input type="text" id="username" style="margin-bottom: 24px; padding: 4px 10px" placeholder="Ingresa tu nombre" maxlength="20" required>
-                    <button id="joinButton">🎮 Continuar</button>
-                    
-                    <div class="profile-actions" style="margin-top: 15px;">
-                        <button id="loginLeaderboardButton" class="secondary">🏆 Ver Rankings</button>
-                    </div>
+                <div class="profile-actions">
+                    <button type="button" id="leaderboardButton" class="btn btn-secondary">Ranking global</button>
+                    <button type="button" id="resetProfileButton" class="btn btn-quiet btn-danger-hover" onclick="resetPlayerProfile()" data-reveal>Cerrar sesión</button>
                 </div>
-            </div>
-
-            <!-- NUEVO: Panel de jugadores en línea -->
-            <div class="online-players-panel hidden" id="onlinePlayersPanel">
-                <h3>🌐 Jugadores Activos</h3>
-                <ul id="onlinePlayersList" class="online-players-list">
-                    <li class="online-players-empty">Cargando jugadores...</li>
-                </ul>
             </div>
         </div>
-        
-        <div class="main-panel game-panel">
-            <h1>🐍 Snake Multiplayer</h1>
-            <div class="info-canvas-container" id="infoCanvasContainer">
-                <canvas id="infoCanvas" width="600" height="90"></canvas>
-            </div>
-            <div class="canvas-separator"></div>
-            <div class="game-canvas-container">
-                <canvas id="game" width="600" height="600"></canvas>
-            </div>
-        </div>
+    </header>
 
-        <div class="right-panel">
-            <div id="gameInterface" class="game-panel game-info hidden">
-                <div id="spectatorBanner" class="spectator-banner hidden">
-                    👁️ MODO ESPECTADOR - Solo visualización
+    <main id="scenes">
+        <!-- Intro: visible desde el primer frame, hasta que scenes.js tome control -->
+        <section id="scene-intro" class="scene" data-state="active" aria-label="Inicio">
+            <h1 class="intro-title" tabindex="-1">snake</h1>
+            <p class="intro-tagline">Multijugador en tiempo real</p>
+            <p class="intro-prompt">
+                <span class="prompt-fine">Pulsa cualquier tecla para sumergirte</span>
+                <span class="prompt-coarse">Toca la pantalla para sumergirte</span>
+            </p>
+        </section>
+
+        <!-- Login -->
+        <section id="scene-login" class="scene" data-state="hidden" inert aria-hidden="true" aria-label="Entrar">
+            <div class="login-wrap">
+                <header class="login-head" data-stagger>
+                    <span class="login-wordmark" data-wordmark-target>snake</span>
+                    <p class="login-tagline">Multijugador en tiempo real</p>
+                </header>
+                <div id="loginView" class="login-view">
+                    <div class="login-card membrane" data-stagger>
+                        <label for="username" class="field-label">Tu nombre</label>
+                        <input type="text" id="username" class="field-input field-input-lg" placeholder="Cómo te verán los demás" maxlength="20" required autocomplete="nickname" autocapitalize="off" spellcheck="false" aria-describedby="usernameHelp" data-autofocus>
+                        <p id="usernameHelp" class="field-help">Entre 2 y 20 caracteres. Con el mismo nombre recuperas tu perfil.</p>
+                        <button type="button" id="joinButton" class="btn btn-primary btn-block btn-lg" data-breathe>Entrar</button>
+                    </div>
+                    <button type="button" id="loginLeaderboardButton" class="btn btn-quiet login-ranking" data-stagger>Ver ranking global</button>
                 </div>
-                <div id="roomInfo"></div>
+            </div>
+        </section>
 
-                <div id="configPanel" class="config-panel hidden">
-                    <button id="toggleConfigButton" class="config-button">⚙️ Configuración</button>
-                    <div id="configSettings" class="hidden">
-                        <div class="config-row">
-                            <span class="config-label">Máx. Jugadores:</span>
-                            <input type="number" id="maxPlayersInput" class="config-input" min="2" max="16" value="8">
-                        </div>
-                        <div class="config-row">
-                            <span class="config-label">Mín. Jugadores:</span>
-                            <input type="number" id="minPlayersInput" class="config-input" min="2" max="16" value="2">
-                        </div>
-                        <div class="config-row">
-                            <span class="config-label">Velocidad:</span>
-                            <select id="gameSpeedInput" class="config-select">
-                                <option value="200">Lento</option>
-                                <option value="83" selected>Normal</option>
-                                <option value="50">Rápido</option>
-                                <option value="40">Muy Rápido</option>
-                            </select>
-                        </div>
-                        <div class="config-row">
-                            <span class="config-label">Tamaño Snake:</span>
-                            <select id="segmentSizeInput" class="config-select">
-                                <option value="8">Pequeño</option>
-                                <option value="10">Normal</option>
-                                <option value="15">Grande</option>
-                                <option value="20" selected>XL</option>
-                                <option value="25">XXL</option>
-                            </select>
-                        </div>
+        <!-- Lobby -->
+        <section id="scene-lobby" class="scene" data-state="hidden" inert aria-hidden="true" aria-label="Salas">
+            <div class="lobby-wrap">
+                <div id="roomSelection" class="lobby-card membrane">
+                    <h2 class="scene-title" tabindex="-1" data-stagger>Salas</h2>
+                    <button type="button" id="createRoomButton" class="btn btn-primary btn-block btn-xl" data-breathe data-autofocus data-stagger>Crear sala</button>
 
-                        <div class="config-divider">
-                            <h4>🎁 Consumibles</h4>
+                    <div class="join-by-code" data-stagger>
+                        <label for="roomId" class="field-label">Código de sala</label>
+                        <div class="join-row">
+                            <input type="text" id="roomId" class="field-input field-code" placeholder="ABC123" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false">
+                            <button type="button" id="joinRoomButton" class="btn btn-secondary">Unirse</button>
                         </div>
+                    </div>
 
-                        <div class="config-row">
-                            <span class="config-label">🛡️ Inmunidad:</span>
-                            <input type="checkbox" id="immunityEnabledInput" class="config-checkbox" checked>
+                    <div class="rooms" data-stagger>
+                        <div class="rooms-head">
+                            <h3 class="panel-title">Salas abiertas</h3>
+                            <button type="button" id="refreshRoomsButton" class="btn btn-quiet btn-with-icon">
+                                <svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>
+                                <span>Actualizar</span>
+                            </button>
                         </div>
-
-                        <div class="config-row">
-                            <span class="config-label">⏱️ Intervalo:</span>
-                            <select id="immunityIntervalInput" class="config-select">
-                                <option value="3" selected>3s</option>
-								<option value="5">5s</option>
-                                <option value="8">8s</option>
-                                <option value="13">13s</option>
-                                <option value="17">17s</option>
-                            </select>
-                        </div>
-
-                        <div class="config-row">
-                            <span class="config-label">⏳ Duración:</span>
-                            <select id="immunityDurationInput" class="config-select">
-                                <option value="3">3s</option>
-                                <option value="5" selected>5s</option>
-                                <option value="7">7s</option>
-                                <option value="9">9s</option>
-                            </select>
-                        </div>
-
-                        <div class="config-info">
-                            <strong>ℹ️ Info:</strong> Inmunidad bloquea 1 proyectil.
-                        </div>
-
-                        <button id="saveConfigButton" class="config-button">💾 Guardar</button>
+                        <ul id="roomsList" class="rooms-list" aria-live="polite">
+                            <li class="empty-room">Buscando salas…</li>
+                        </ul>
                     </div>
                 </div>
-                
-				<h2>🐍 Jugadores</h2>
-                <ol id="playerList"></ol>
-                <button id="startGameButton" class="hidden">🚀 Iniciar Juego</button>
-                <div class="controls-hint">
-				  <strong>Controles:</strong><br>
-				  ⬆️⬇️⬅️➡️ Flechas o WASD<br>
-				  🎯 Espacio - Atacar
-				</div>
             </div>
-            
-            <div id="roomSelection" class="form-panel hidden">
-                <h2>Unirse o Crear Sala</h2>
-                
-                <button id="createRoomButton">🏠 Crear Nueva Sala</button>
-                
-                <div style="margin: 20px 0; text-align: center; font-weight: bold; color: #666;">O</div>
-                
-                <label for="roomId">Unirse por ID de Sala:</label>
-                <input type="text" id="roomId" placeholder="Ingresa ID de sala" maxlength="6" style="text-transform: uppercase;">
-                <button id="joinRoomButton">🚪 Unirse a Sala</button>
-                
-                <div style="margin: 20px 0; text-align: center; font-weight: bold; color: #666;">O</div>
-                
-                <div>
-                    <div class="button-group">
-                        <button id="refreshRoomsButton" class="secondary">🔄 Actualizar</button>
+        </section>
+
+        <!-- Sala y partida: mismo contenedor, data-mode="room" | "game" -->
+        <section id="scene-arena" class="scene" data-state="hidden" data-mode="room" inert aria-hidden="true" aria-label="Arena">
+            <div class="arena-layout">
+                <aside class="arena-side" aria-label="Sala">
+                    <div id="gameInterface" class="room-panel membrane">
+                        <div class="room-panel-main">
+                            <div id="spectatorBanner" class="spectator-banner hidden" data-reveal>
+                                <svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>
+                                <span>Modo espectador</span>
+                            </div>
+                            <div id="roomInfo" class="room-meta"></div>
+                            <div class="players-block">
+                                <h2 class="players-heading" tabindex="-1">Jugadores <span id="playersCount" class="players-count"></span></h2>
+                                <ol id="playerList" class="player-list"></ol>
+                            </div>
+                            <div id="waitingSpan" class="waiting-message hidden" data-reveal role="status">Faltan jugadores para empezar</div>
+                            <button type="button" id="startGameButton" class="btn btn-primary btn-block btn-lg hidden" data-reveal data-breathe>Iniciar partida</button>
+                            <button type="button" id="leaveRoomButton" class="btn btn-quiet btn-block hidden" data-reveal>Salir de la sala</button>
+                        </div>
+                        <div class="room-panel-aside">
+                            <div id="configPanel" class="config-panel hidden" data-reveal>
+                                <button type="button" id="toggleConfigButton" class="config-toggle" aria-expanded="false" aria-controls="configSettings">Configuración</button>
+                                <div id="configSettings" class="config-settings hidden" data-reveal>
+                                    <fieldset id="difficultyPicker" class="difficulty-picker">
+                                        <legend class="config-label">Nivel</legend>
+                                        <label class="difficulty-option"><input type="radio" name="difficulty" value="easy"><span class="difficulty-name">Fácil</span><span class="difficulty-hint">Más lenta y con más comida</span></label>
+                                        <label class="difficulty-option"><input type="radio" name="difficulty" value="medium" checked><span class="difficulty-name">Medio</span><span class="difficulty-hint">Equilibrado</span></label>
+                                        <label class="difficulty-option"><input type="radio" name="difficulty" value="hard"><span class="difficulty-name">Difícil</span><span class="difficulty-hint">Más rápida, con disparos veloces</span></label>
+                                    </fieldset>
+
+                                    <p class="config-info">El escudo de inmunidad bloquea un disparo y se gasta.</p>
+                                </div>
+                            </div>
+
+                            <div class="controls-hint" data-variant="player">
+                                <p data-hint="player"><kbd>Flechas</kbd> o <kbd>WASD</kbd> para moverte. <kbd>Espacio</kbd> para disparar: cada disparo cuesta un segmento.</p>
+                                <p data-hint="spectator">Estás viendo la partida en vivo.</p>
+                                <p data-hint="touch">Para jugar necesitas un teclado. Desde el móvil puedes mirar partidas en curso.</p>
+                            </div>
+                        </div>
                     </div>
-                    <h3>Salas Disponibles:</h3>
-                    <ul id="roomsList">
-                        <li class="empty-room">Cargando salas...</li>
-                    </ul>
+                </aside>
+
+                <!-- HUD: display: contents; sus hijos son ítems de la grilla -->
+                <div id="hud" class="hud">
+                    <div class="hud-bar"></div>
+                    <div class="hud-side">
+                        <ol class="hud-board" data-metric="live" aria-label="Marcador"></ol>
+                        <p class="hud-board-caption">Largo actual</p>
+                    </div>
+                </div>
+
+                <div class="arena-stage">
+                    <div class="arena-frame">
+                        <canvas id="game" width="600" height="600" aria-label="Arena de juego"></canvas>
+                    </div>
+                    <div id="overlay-countdown" class="overlay overlay-countdown hidden" aria-hidden="true">
+                        <p class="overlay-kicker"></p>
+                        <span class="countdown-ring"></span>
+                        <span class="countdown-number"></span>
+                    </div>
+                    <div id="overlay-round" class="overlay overlay-round hidden" aria-live="polite">
+                        <p class="overlay-kicker"></p>
+                        <p class="round-go"></p>
+                    </div>
                 </div>
             </div>
-            
-            <div class="waiting-message hidden" id="waitingSpan">
-                ⏳ Esperando más jugadores para iniciar...
+        </section>
+    </main>
+
+    <!-- Dock persistente: jugadores en línea (lobby y sala) -->
+    <aside id="dock" class="dock" popover aria-label="Jugadores en línea">
+        <div id="onlinePlayersPanel" class="online-players-panel membrane">
+            <span class="dock-grip" aria-hidden="true"></span>
+            <div class="dock-head">
+                <h3 class="panel-title dock-title">En línea</h3>
+                <button type="button" class="btn-icon dock-close" popovertarget="dock" popovertargetaction="hide" aria-label="Cerrar">
+                    <svg class="icon" aria-hidden="true"><use href="#i-close"/></svg>
+                </button>
             </div>
+            <ul id="onlinePlayersList" class="online-players-list">
+                <li class="online-players-empty">Buscando jugadores…</li>
+            </ul>
         </div>
-    </div>
+    </aside>
+    <button type="button" id="dockToggle" class="dock-toggle" popovertarget="dock" aria-controls="dock" aria-expanded="false">
+        <i class="dock-toggle-dot" aria-hidden="true"></i>
+        <span class="dock-toggle-label">En línea</span>
+        <span id="dockCount" class="dock-count"></span>
+    </button>
 
-    <div id="gameOverScreen" class="game-over-screen hidden">
-        <h1>🏆 RONDA TERMINADA</h1>
-        <p id="scoreDisplay"></p>
-        <button id="restartButton">Continuar</button>
-    </div>
-
-    <div id="finalScreen" class="final-screen hidden">
+    <!-- Final de partida -->
+    <div id="finalScreen" class="final-screen hidden" role="dialog" aria-modal="true" aria-labelledby="finalTitle">
         <div class="final-content">
-            <h1 id="finalTitle">🏆 Juego Completo!</h1>
-            <p id="finalMessage">Campeón: Nombre Jugador</p>
-            
-            <div class="final-scores">
-                <h3>Clasificación Final</h3>
-                <ul id="finalScoresList"></ul>
+            <h1 id="finalTitle" class="final-title" tabindex="-1">Partida terminada</h1>
+            <p id="finalMessage" class="final-message"></p>
+            <section class="final-scores" aria-labelledby="finalScoresTitle">
+                <h2 id="finalScoresTitle" class="panel-title">Clasificación final</h2>
+                <ol id="finalScoresList" class="final-scores-list"></ol>
+            </section>
+            <p id="finalHint" class="final-hint hidden" role="status"></p>
+            <div class="final-actions">
+                <button type="button" id="playAgainButton" class="btn btn-primary btn-lg hidden" data-breathe>Jugar de nuevo</button>
+                <button type="button" id="backToRoomButton" class="btn btn-secondary btn-lg">Volver a la sala</button>
+                <button type="button" id="backToMenuButton" class="btn btn-quiet">Salir a las salas</button>
             </div>
-            
-            <button id="backToMenuButton">🏠 Volver al Menú</button>
         </div>
     </div>
 
-    <div id="leaderboardModal" class="modal hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>🏆 Rankings Globales</h2>
-                <button class="modal-close" id="closeLeaderboardModal">&times;</button>
+    <!-- Ranking global -->
+    <div id="leaderboardModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="leaderboardTitle">
+        <div class="modal-content membrane">
+            <header class="modal-header">
+                <h2 id="leaderboardTitle" class="modal-title">Ranking global</h2>
+                <button type="button" class="btn-icon modal-close" id="closeLeaderboardModal" aria-label="Cerrar">
+                    <svg class="icon" aria-hidden="true"><use href="#i-close"/></svg>
+                </button>
+            </header>
+            <div class="leaderboard-head" aria-hidden="true">
+                <span class="rank"></span>
+                <span class="name">Jugador</span>
+                <span class="wins">Victorias</span>
+                <span class="games">Partidas</span>
+                <span class="winrate">Efectividad</span>
             </div>
             <div class="modal-body">
                 <ul id="leaderboardList" class="leaderboard-list">
-                    <li class="leaderboard-item loading">Cargando rankings...</li>
+                    <li class="leaderboard-item loading">Cargando ranking…</li>
                 </ul>
             </div>
+            <p class="leaderboard-note">Primero quienes jugaron 3 partidas o más, ordenados por porcentaje de victorias.</p>
         </div>
     </div>
-    
+
+    <div id="toasts" role="region" aria-label="Notificaciones"></div>
+
     <footer id="gameFooter">
         <div class="footer-content">
-            <span class="footer-text">Hecho con <span class="heart">❤️</span> por El Marto</span>
+            <span class="footer-text">Hecho con <span class="heart" role="img" aria-label="amor"><svg class="icon" aria-hidden="true"><use href="#i-heart"/></svg></span> por El Marto</span>
             <div class="footer-links">
-                <a href="https://github.com/marto993" target="_blank" title="GitHub">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <a href="https://github.com/marto993" target="_blank" rel="noopener noreferrer" title="GitHub" aria-label="GitHub">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                         <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
                     </svg>
                 </a>
-                <a href="https://www.linkedin.com/in/martin-di-geronimo-29a06b17b" target="_blank" title="LinkedIn">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <a href="https://www.linkedin.com/in/martin-di-geronimo-29a06b17b" target="_blank" rel="noopener noreferrer" title="LinkedIn" aria-label="LinkedIn">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                         <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
                     </svg>
                 </a>
-                <a href="https://elprode.up.railway.app/" target="_blank" title="El Prode">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <a href="https://elprode.up.railway.app/" target="_blank" rel="noopener noreferrer" title="El Prode" aria-label="El Prode">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
                     </svg>
                 </a>
             </div>
         </div>
     </footer>
-    
+
+    <script src="/socket.io/socket.io.min.js"></script>
+    <script src="./snakeClass.js"></script>
+    <script src="./js/net/motion.js"></script>
+    <script src="./js/fx/particles.js"></script>
+    <script src="./js/render/arena.js"></script>
+    <script src="./js/ui/backdrop.js"></script>
+    <script src="./js/ui/scenes.js"></script>
     <script src="./SnakeGame.js"></script>
 </body>
 </html>

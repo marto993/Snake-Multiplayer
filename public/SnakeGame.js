@@ -1,218 +1,118 @@
-document.addEventListener("DOMContentLoaded", function() {
-  let renderLoop = null;
-  let isGameRunning = false;
+/*
+ * SnakeGame.js: cliente de Snake Multiplayer.
+ *
+ * Mantiene la lógica de red y de estado (socket.io, perfil, salas) y conecta:
+ *   - window.Motion    (js/net/motion.js)    línea de tiempo de los frames del servidor
+ *   - window.Arena     (js/render/arena.js)  dibuja canvas#game
+ *   - window.Backdrop  (js/ui/backdrop.js)   fondo vivo
+ *   - window.Scenes / Overlays / Toasts / HUD (js/ui/scenes.js)
+ *
+ * Reglas de esta capa (docs/VISUAL_SPEC.md, sección 10):
+ *   - Un único requestAnimationFrame siempre vivo. Con partida en curso: Arena.render;
+ *     al terminar la partida, 2400 ms de estado congelado; el resto del tiempo, Arena.renderIdle.
+ *   - Los eventos de gameLogicFrame se despachan a la arena cuando el render alcanza su frame,
+ *     ANTES de dibujar las posiciones de ese frame.
+ *   - Nada que venga del servidor se inserta con innerHTML: todo va con textContent.
+ */
+document.addEventListener('DOMContentLoaded', function () {
+  'use strict';
 
-  const canvas = document.getElementById("game");
-  const ctx = canvas.getContext("2d");
-  
-  // Canvas de información
-  const infoCanvas = document.getElementById("infoCanvas");
-  const infoCtx = infoCanvas.getContext("2d");
-  const infoCanvasContainer = document.getElementById("infoCanvasContainer");
-  
-  const gameOverScreen = document.getElementById('gameOverScreen');
-  const scoreDisplay = document.getElementById('scoreDisplay');
-  const restartButton = document.getElementById('restartButton');
-  const joinButton = document.getElementById('joinButton');
-  const createRoomButton = document.getElementById('createRoomButton');
-  const joinRoomButton = document.getElementById('joinRoomButton');
-  const startGameButton = document.getElementById('startGameButton');
-  const refreshRoomsButton = document.getElementById('refreshRoomsButton');
-  const joinForm = document.getElementById('joinForm');
-  const roomSelection = document.getElementById('roomSelection');
-  const gameInterface = document.getElementById('gameInterface');
-  const usernameInput = document.getElementById('username');
-  const roomIdInput = document.getElementById('roomId');
-  const roomsList = document.getElementById('roomsList');
-  const waitingSpan = document.getElementById('waitingSpan');
-  const playerList = document.getElementById('playerList');
-  const roomInfo = document.getElementById('roomInfo');
+  // ===========================================================================
+  // Módulos visuales (con respaldos inertes para que la red nunca dependa de ellos)
+  // ===========================================================================
+  const noop = function () {};
+  const Scenes = window.Scenes || { go: noop, current: function () { return null; }, onEnter: function () { return noop; }, playIntro: function () { return Promise.resolve({}); } };
+  const Overlays = window.Overlays || { countdown: noop, roundStart: noop, roundEnd: noop, closeRoundEnd: noop, final: noop, hideAll: noop, open: noop, close: noop };
+  const Toasts = window.Toasts || { show: noop };
+  const HUD = window.HUD || { update: noop, show: noop, hide: noop, reset: noop };
+  const Backdrop = window.Backdrop || { setMood: noop, pulse: noop };
+  const Arena = window.Arena || null;
+  const Motion = window.Motion || null; // sin Motion, las posiciones se aplican al llegar (sin interpolar)
 
-  const configPanel = document.getElementById('configPanel');
-  const toggleConfigButton = document.getElementById('toggleConfigButton');
-  const configSettings = document.getElementById('configSettings');
-  const saveConfigButton = document.getElementById('saveConfigButton');
-  
-  const maxPlayersInput = document.getElementById('maxPlayersInput');
-  const minPlayersInput = document.getElementById('minPlayersInput');
-  const gameSpeedInput = document.getElementById('gameSpeedInput');
-  const segmentSizeInput = document.getElementById('segmentSizeInput');
-  
-  const immunityEnabledInput = document.getElementById('immunityEnabledInput');
-  const immunityIntervalInput = document.getElementById('immunityIntervalInput');
-  const immunityDurationInput = document.getElementById('immunityDurationInput');
-
-  // NUEVO: Elementos para sistema de invitaciones
-  const onlinePlayersPanel = document.getElementById('onlinePlayersPanel');
-  const onlinePlayersList = document.getElementById('onlinePlayersList');
-
-  // Sistema de notificaciones en canvas
-  let canvasNotifications = [];
-  
-  function CanvasNotification(message, type = 'info', duration = 3000) {
-    this.message = message;
-    this.type = type;
-    this.duration = duration;
-    this.createdAt = Date.now();
-    this.alpha = 0;
-    this.y = -50; // Empieza arriba, fuera del canvas
-    this.targetY = 0;
-    this.animationPhase = 'entering'; // 'entering', 'showing', 'exiting'
-    this.id = Math.random().toString(36).substring(2, 9);
-    
-    // Calcular posición Y basada en notificaciones existentes
-    const existingNotifications = canvasNotifications.filter(n => n.animationPhase !== 'exiting');
-    this.targetY = existingNotifications.length * 45 + 20;
-    
-    // Configurar colores según tipo
-    switch(type) {
-      case 'success':
-        this.backgroundColor = 'rgba(63, 185, 80, 0.9)';
-        this.textColor = '#ffffff';
-        this.borderColor = '#3fb950';
-        break;
-      case 'error':
-        this.backgroundColor = 'rgba(248, 81, 73, 0.9)';
-        this.textColor = '#ffffff';
-        this.borderColor = '#f85149';
-        break;
-      case 'invitation':
-        this.backgroundColor = 'rgba(88, 166, 255, 0.9)';
-        this.textColor = '#ffffff';
-        this.borderColor = '#58a6ff';
-        break;
-      case 'info':
-      default:
-        this.backgroundColor = 'rgba(88, 166, 255, 0.9)';
-        this.textColor = '#ffffff';
-        this.borderColor = '#58a6ff';
-        break;
-    }
+  const reportedErrors = new Set();
+  function reportOnce(err) {
+    const key = String((err && err.message) || err);
+    if (reportedErrors.has(key)) return;
+    reportedErrors.add(key);
+    console.error(err);
   }
-  
-  CanvasNotification.prototype.update = function() {
-    const now = Date.now();
-    const elapsed = now - this.createdAt;
-    
-    if (this.animationPhase === 'entering') {
-      // Animación de entrada (primeros 300ms)
-      const progress = Math.min(elapsed / 300, 1);
-      this.alpha = progress;
-      this.y = this.lerp(-50, this.targetY, this.easeOut(progress));
-      
-      if (progress >= 1) {
-        this.animationPhase = 'showing';
-      }
-    } else if (this.animationPhase === 'showing') {
-      // Mostrando (duración - 600ms para entrada y salida)
-      this.alpha = 1;
-      this.y = this.targetY;
-      
-      if (elapsed >= this.duration - 300) {
-        this.animationPhase = 'exiting';
-      }
-    } else if (this.animationPhase === 'exiting') {
-      // Animación de salida (últimos 300ms)
-      const exitProgress = (elapsed - (this.duration - 300)) / 300;
-      this.alpha = 1 - exitProgress;
-      this.y = this.lerp(this.targetY, -50, this.easeIn(exitProgress));
-      
-      if (exitProgress >= 1) {
-        return false; // Marcar para eliminación
-      }
-    }
-    
-    return true; // Continuar mostrando
-  };
-  
-  CanvasNotification.prototype.lerp = function(start, end, factor) {
-    return start + (end - start) * factor;
-  };
-  
-  CanvasNotification.prototype.easeOut = function(t) {
-    return 1 - Math.pow(1 - t, 3);
-  };
-  
-  CanvasNotification.prototype.easeIn = function(t) {
-    return t * t * t;
-  };
-  
-  CanvasNotification.prototype.draw = function(context) {
-    if (this.alpha <= 0) return;
-    
-    context.save();
-    context.globalAlpha = this.alpha;
-    
-    // Configurar fuente
-    context.font = '400 16px Share Tech Mono, monospace';
-    context.textAlign = 'center';
-    context.textBaseline = 'middle';
-    
-    // Medir texto para dimensiones del toast
-    const textWidth = context.measureText(this.message).width;
-    const padding = 20;
-    const toastWidth = textWidth + (padding * 2);
-    const toastHeight = 35;
-    const x = (context.canvas.width - toastWidth) / 2;
-    
-    // Dibujar fondo del toast
-    context.fillStyle = this.backgroundColor;
-    this.roundRect(context, x, this.y, toastWidth, toastHeight, 8);
-    context.fill();
-    
-    // Dibujar borde
-    context.strokeStyle = this.borderColor;
-    context.lineWidth = 2;
-    context.stroke();
-    
-    // Dibujar texto
-    context.fillStyle = this.textColor;
-    context.fillText(this.message, context.canvas.width / 2, this.y + toastHeight / 2);
-    
-    context.restore();
-  };
-  
-  CanvasNotification.prototype.roundRect = function(ctx, x, y, width, height, radius) {
-    ctx.beginPath();
-    ctx.moveTo(x + radius, y);
-    ctx.lineTo(x + width - radius, y);
-    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-    ctx.lineTo(x + width, y + height - radius);
-    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-    ctx.lineTo(x + radius, y + height);
-    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-    ctx.lineTo(x, y + radius);
-    ctx.quadraticCurveTo(x, y, x + radius, y);
-    ctx.closePath();
-  };
-  
-  function addCanvasNotification(message, type = 'info', duration = 3000) {
-    if (!message || message.trim() === '') return;
-    
-    // Marcar todas las notificaciones existentes para salida inmediata
-    canvasNotifications.forEach(notif => {
-      if (notif.animationPhase !== 'exiting') {
-        notif.animationPhase = 'exiting';
-        notif.createdAt = Date.now() - (notif.duration - 300); // Forzar inicio de salida
-      }
-    });
-    
-    const notification = new CanvasNotification(message.trim(), type, duration);
-    notification.targetY = 20; // Siempre en la primera posición
-    canvasNotifications.push(notification);
-  }
-  
-  function updateCanvasNotifications() {
-    canvasNotifications = canvasNotifications.filter(notification => notification.update());
-  }
-  
-  function drawCanvasNotifications(context) {
-    canvasNotifications.forEach(notification => {
-      notification.draw(context);
-    });
+  // Las llamadas a la capa visual nunca deben cortar un handler de red a la mitad.
+  function ui(fn) {
+    try { fn(); } catch (err) { reportOnce(err); }
   }
 
-  // Persistence variables
+  // ===========================================================================
+  // Constantes
+  // ===========================================================================
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  const ARENA_SIZE = 600;               // coordenadas lógicas fijas del servidor
+  const FREEZE_MS = 2400;               // congelamiento de la arena al terminar la partida (arena.js, 5.14)
+  const FINAL_DELAY_MS = 2000;          // la pantalla final entra cuando la arena ya enfocó al ganador
+  const INVITE_COOLDOWN_MS = 8000;      // "Enviada" en el botón de invitar
+  const PROFILE_RETRY_MAX = 6;          // reintentos del re-registro automático ("ya está conectado")
+  const KEY_TO_ARROW = { 37: 37, 38: 38, 39: 39, 40: 40, 87: 38, 65: 37, 83: 40, 68: 39 }; // flechas y WASD
+  const DIFFICULTY_NAMES = { easy: 'fácil', medium: 'medio', hard: 'difícil' };
+  const REMAINS_FADE_MS = 2000;         // los restos de un corte se apagan en sus últimos 2 s
+
+  // Mensajes del servidor que llegan en inglés (spec 8.6). Los que ya llegan en español pasan igual.
+  const SERVER_ERRORS_ES = {
+    'Username must be 2-20 characters': 'El nombre debe tener entre 2 y 20 caracteres',
+    'Failed to create room': 'No se pudo crear la sala. Intenta de nuevo.',
+    'Error creating room': 'No se pudo crear la sala. Intenta de nuevo.',
+    'Invalid room ID': 'El código de sala no es válido',
+    'Room not found or has ended': 'No hay una sala abierta con ese código',
+    'Room is full': 'La sala está llena',
+    'Game already in progress': 'La partida ya empezó. Puedes mirarla desde la lista de salas.',
+    'Username already taken in this room': 'Ya hay alguien con ese nombre en la sala',
+    'Error joining room': 'No se pudo entrar a la sala. Intenta de nuevo.',
+    'Only the host can modify room settings': 'Solo el anfitrión puede cambiar la configuración',
+    'Cannot modify settings during game': 'No se puede cambiar la configuración durante la partida',
+    'Only the host can start the game': 'Solo el anfitrión puede iniciar la partida',
+    'Not enough players to continue': 'No quedan jugadores suficientes para seguir',
+    'Error loading profile': 'No se pudo cargar el perfil'
+  };
+  const NOT_ENOUGH_PLAYERS = 'Not enough players to continue';
+
+  // ===========================================================================
+  // DOM (contrato de IDs de index.html)
+  // ===========================================================================
+  const $ = function (id) { return document.getElementById(id); };
+  const canvas = $('game');
+
+  const joinButton = $('joinButton');
+  const createRoomButton = $('createRoomButton');
+  const joinRoomButton = $('joinRoomButton');
+  const startGameButton = $('startGameButton');
+  const refreshRoomsButton = $('refreshRoomsButton');
+  const usernameInput = $('username');
+  const roomIdInput = $('roomId');
+  const roomsList = $('roomsList');
+  const waitingSpan = $('waitingSpan');
+  const playerList = $('playerList');
+  const playersCount = $('playersCount');
+  const roomInfo = $('roomInfo');
+
+  const configPanel = $('configPanel');
+  const toggleConfigButton = $('toggleConfigButton');
+  const configSettings = $('configSettings');
+  const difficultyInputs = Array.prototype.slice.call(document.querySelectorAll('#difficultyPicker input[name="difficulty"]'));
+
+  const onlinePlayersList = $('onlinePlayersList');
+  const dockCount = $('dockCount');
+  const profileInfo = $('profileInfo');
+  const spectatorBanner = $('spectatorBanner');
+  const controlsHint = document.querySelector('.controls-hint');
+  const leaderboardModal = $('leaderboardModal');
+  const leaderboardList = $('leaderboardList');
+  const backToMenuButton = $('backToMenuButton');
+  const backToRoomButton = $('backToRoomButton');
+  const playAgainButton = $('playAgainButton');
+  const finalHint = $('finalHint');
+  const leaveRoomButton = $('leaveRoomButton');
+
+  // ===========================================================================
+  // Estado de red y de juego
+  // ===========================================================================
   let playerProfile = null;
   let currentPlayerId = null;
 
@@ -222,58 +122,212 @@ document.addEventListener("DOMContentLoaded", function() {
   let snakes = [];
   let foods = [];
   let consumables = [];
-  let projectiles = [];
-  let clientProjectiles = [];
+  let clientProjectiles = [];   // lo que dibuja la arena (applyTimelineSample)
   let isConnected = false;
+  let hasConnectedOnce = false;
   let isHost = false;
   let isSpectating = false;
   let currentRoomId = null;
+  let roomHostId = null;
+  let roomHostName = '';
   let roomConfig = {};
-  let roomScores = {};
   let roundTimeLeft = 0;
 
-  // NUEVO: Variables para sistema de invitaciones
   let onlinePlayers = [];
-  let pendingInvitations = [];
+  const pendingInvitations = [];
 
-  const consumableStyles = {
-    immunity: {
-      color: '#0101FF',
-      glowColor: '#1F1FEF',
-      name: 'Inmunidad'
+  // Estado propio de la presentación
+  let roundLive = false;        // partida en curso: entre gameStart (o spectatingStarted) y gameEnd
+  let freezeUntil = 0;          // performance.now() hasta el que la arena muestra el último estado congelado
+  let countdownActive = false;  // cuenta regresiva 3, 2, 1 en pantalla
+  let startRequested = false;   // el anfitrión pidió iniciar y el servidor todavía no arrancó
+  let matchFinished = false;    // llegó gameEnd: la escena final está por entrar o a la vista
+  let finalTimer = 0;           // espera entre gameEnd y la pantalla final
+  let tensionOn = false;        // últimos 10 segundos
+  let lastPulseSecond = -1;
+  let keyboardSeen = false;
+  let previewList = [];         // criaturas de la sala para Arena.renderIdle
+  let idleCaption = '';
+  let knownRoomCodes = new Set();
+  let knownOnlineIds = new Set();
+  let knownPlayerIds = new Set();
+  const invitedAt = new Map();  // socketId -> momento de la invitación
+  let roomsRefreshTimer = 0;
+  let autoProfilePending = false; // el último getOrCreateProfile lo mandó el cliente solo (sesión guardada o reconexión)
+  let profileRetryTimer = 0;
+  let profileRetryCount = 0;
+  let sessionReplaced = false;  // el servidor pasó esta sesión a otra pestaña o dispositivo
+  const roomNodes = new Map();  // código de sala -> { li, sig } (la lista se reconcilia en el lugar)
+  let joinBusyTimer = 0;
+  let pendingButton = null;
+  let pendingButtonTimer = 0;
+
+  const coarseQuery = window.matchMedia ? window.matchMedia('(pointer: coarse)') : null;
+
+  // ===========================================================================
+  // Utilidades
+  // ===========================================================================
+  function el(tag, cls, text) {
+    const node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text !== undefined && text !== null) node.textContent = String(text);
+    return node;
+  }
+  function iconEl(symbolId, cls) {
+    const svg = document.createElementNS(SVGNS, 'svg');
+    svg.setAttribute('class', 'icon' + (cls ? ' ' + cls : ''));
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    const use = document.createElementNS(SVGNS, 'use');
+    use.setAttribute('href', '#' + symbolId);
+    svg.appendChild(use);
+    return svg;
+  }
+  function clearNode(node) {
+    if (!node) return;
+    while (node.firstChild) node.removeChild(node.firstChild);
+  }
+  function showElement(element) { if (element) element.classList.remove('hidden'); }
+  function hideElement(element) { if (element) element.classList.add('hidden'); }
+  function toggleElement(element, visible) { if (visible) showElement(element); else hideElement(element); }
+  function plural(n, one, many) { return n === 1 ? one : many; }
+  function perfNow() { return (window.performance && performance.now) ? performance.now() : Date.now(); }
+
+  function bio(hex) {
+    try {
+      if (Arena && typeof Arena.bioColor === 'function') return Arena.bioColor(hex);
+      if (typeof Scenes.bioColor === 'function') return Scenes.bioColor(hex);
+    } catch (err) { reportOnce(err); }
+    return { body: hex || '#1FF2D2', text: '#E8FBFF' };
+  }
+
+  function roundTime() { return (roomConfig && +roomConfig.roundTime) || 120; }
+
+  function translateServerMessage(message) {
+    const text = String(message === undefined || message === null ? '' : message).trim();
+    if (Object.prototype.hasOwnProperty.call(SERVER_ERRORS_ES, text)) return SERVER_ERRORS_ES[text];
+    const need = /^Need at least (\d+) players$/.exec(text);
+    if (need) return 'Se necesitan al menos ' + need[1] + ' jugadores';
+    return text;
+  }
+
+  // Toasts DOM (reemplazan a las notificaciones dibujadas en el canvas).
+  // duration undefined = duración por tipo (3000 ms, error 4500 ms, invitación 9000 ms).
+  function toast(message, type, duration, opts) {
+    if (message === undefined || message === null || String(message).trim() === '') return;
+    ui(function () { Toasts.show(String(message).trim(), type || 'info', duration, opts); });
+  }
+  const addCanvasNotification = toast; // alias de compatibilidad con el nombre anterior
+
+  function markInvalid(input) {
+    if (!input) return;
+    input.classList.remove('is-invalid');
+    void input.offsetWidth; // reinicia la ondulación de LAYOUT
+    input.classList.add('is-invalid');
+    input.setAttribute('aria-invalid', 'true');
+  }
+  function clearInvalid(input) {
+    if (!input) return;
+    input.classList.remove('is-invalid');
+    input.removeAttribute('aria-invalid');
+  }
+
+  // Botones que esperan respuesta del servidor (evita salas duplicadas por doble clic)
+  function setPendingButton(btn) {
+    clearPendingButton();
+    if (!btn) return;
+    pendingButton = btn;
+    btn.disabled = true;
+    btn.setAttribute('aria-busy', 'true');
+    pendingButtonTimer = setTimeout(clearPendingButton, 6000);
+  }
+  function clearPendingButton() {
+    clearTimeout(pendingButtonTimer);
+    pendingButtonTimer = 0;
+    if (pendingButton) {
+      pendingButton.disabled = false;
+      pendingButton.removeAttribute('aria-busy');
+      pendingButton = null;
     }
-  };
+  }
 
-  // localStorage functions
+  function setJoinBusy(busy) {
+    if (!joinButton) return;
+    clearTimeout(joinBusyTimer);
+    joinButton.disabled = !!busy;
+    joinButton.textContent = busy ? 'Entrando…' : 'Entrar';
+    if (busy) {
+      joinButton.setAttribute('aria-busy', 'true');
+      joinBusyTimer = setTimeout(function () { setJoinBusy(false); }, 8000);
+    } else {
+      joinButton.removeAttribute('aria-busy');
+    }
+  }
+
+  // ===========================================================================
+  // Perfil en localStorage
+  // ===========================================================================
   function savePlayerProfile(profile) {
     try {
       localStorage.setItem('snakePlayerProfile', JSON.stringify(profile));
       localStorage.setItem('snakePlayerId', profile.playerId);
-    } catch (error) {
-      console.log('Error saving profile:', error);
-    }
+    } catch (error) { /* almacenamiento no disponible: el perfil vive solo en memoria */ }
   }
 
   function loadPlayerProfile() {
     try {
       const savedProfile = localStorage.getItem('snakePlayerProfile');
       const savedPlayerId = localStorage.getItem('snakePlayerId');
-      
       if (savedProfile && savedPlayerId) {
         const profile = JSON.parse(savedProfile);
-        return { ...profile, playerId: savedPlayerId };
+        return Object.assign({}, profile, { playerId: savedPlayerId });
       }
-    } catch (error) {
-      console.log('Error loading profile:', error);
-    }
+    } catch (error) { /* perfil corrupto o almacenamiento bloqueado */ }
     return null;
   }
 
   function clearPlayerProfile() {
-    localStorage.removeItem('snakePlayerProfile');
-    localStorage.removeItem('snakePlayerId');
+    try {
+      localStorage.removeItem('snakePlayerProfile');
+      localStorage.removeItem('snakePlayerId');
+    } catch (error) { /* nada que limpiar */ }
     playerProfile = null;
     currentPlayerId = null;
+  }
+
+  function currentUsername() {
+    if (playerProfile && playerProfile.stats && playerProfile.stats.name) return String(playerProfile.stats.name);
+    return usernameInput ? usernameInput.value.trim() : '';
+  }
+  function isValidUsername(name) { return !!name && name.length >= 2 && name.length <= 20; }
+
+  // Igual que antes: se reutiliza el playerId solo si el nombre coincide con el perfil cargado.
+  function buildIdentity(username, extra) {
+    const data = Object.assign({ username: username }, extra || {});
+    if (currentPlayerId && playerProfile && playerProfile.stats && playerProfile.stats.name.toLowerCase() === username.toLowerCase()) {
+      data.playerId = currentPlayerId;
+    } else {
+      currentPlayerId = null;
+      // Sin perfil en memoria (falló el re-registro automático o la sesión pasó a otra pestaña),
+      // la sesión guardada sigue valiendo para el mismo nombre: con su playerId el servidor
+      // reemplaza un socket viejo en vez de responder "ya está conectado".
+      const saved = loadPlayerProfile();
+      if (saved && saved.stats && saved.playerId && String(saved.stats.name).toLowerCase() === username.toLowerCase()) {
+        data.playerId = saved.playerId;
+      }
+    }
+    return data;
+  }
+
+  // Re-registro automático del perfil guardado (al cargar y al reconectar)
+  function requestSavedProfile(profile) {
+    if (!profile || !profile.stats || !profile.playerId) return;
+    autoProfilePending = true;
+    socket.emit('getOrCreateProfile', { username: profile.stats.name, playerId: profile.playerId });
+  }
+  function cancelProfileRetry() {
+    if (profileRetryTimer) { clearTimeout(profileRetryTimer); profileRetryTimer = 0; }
+    profileRetryCount = 0;
   }
 
   function initializeUserInterface() {
@@ -282,499 +336,351 @@ document.addEventListener("DOMContentLoaded", function() {
       usernameInput.value = savedProfile.stats.name;
       playerProfile = savedProfile;
       currentPlayerId = savedProfile.playerId;
-      
-      //addCanvasNotification('Verificando sesión...', 'info');
-      socket.emit('getOrCreateProfile', { 
-        username: savedProfile.stats.name, 
-        playerId: savedProfile.playerId 
-      });
+      updateProfileDisplay(savedProfile.stats);
+      // La intro muestra "Conectando…" hasta que llegue profileLoaded (o profileError → login)
+      requestSavedProfile(savedProfile);
     } else {
-      showElement(document.getElementById('loginView'));
-      hideElement(document.getElementById('profileView'));
-      hideElement(document.getElementById('roomSelection'));
-      hideElement(onlinePlayersPanel);
-      updateLogoutButtonVisibility();
-      addCanvasNotification('¡Conectado! Ingresa tu nombre para comenzar.', 'info');
+      updateProfileDisplay(null);
+      ui(function () { Scenes.go('login'); }); // queda en cola hasta que termine la intro
     }
+    updateLogoutButtonVisibility();
   }
 
   function updateLogoutButtonVisibility() {
-    const logoutButton = document.getElementById('resetProfileButton');
-    if (logoutButton) {
-      if (playerProfile && currentPlayerId) {
-        showElement(logoutButton);
-      } else {
-        hideElement(logoutButton);
-      }
-    }
+    const logoutButton = $('resetProfileButton');
+    toggleElement(logoutButton, !!(playerProfile && currentPlayerId));
   }
 
+  // Chip del topbar y estadísticas del popover (spec 4.21, Perfil)
   function updateProfileDisplay(stats) {
-    const profileInfo = document.getElementById('profileInfo');
-    if (profileInfo && stats) {
-      profileInfo.innerHTML = `
-        <div class="profile-stats">
-          <strong>📊 ${stats.name}</strong><br>
-          <span>🎮 ${stats.games_played} partidas</span><br>
-          <span>🏆 ${stats.wins} victorias</span><br>
-          <span>🔥 Racha: ${stats.current_streak}</span><br>
-          <span>⭐ Mejor: ${stats.best_score}</span>
-        </div>
-      `;
-    }
-  }
-
-  // NUEVO: Funciones para sistema de invitaciones
-  function updateOnlinePlayersList(players) {
-    console.log('Actualizando lista de jugadores online:', players); // DEBUG
-    onlinePlayers = players || [];
-    
-    if (!onlinePlayers || onlinePlayers.length === 0) {
-      onlinePlayersList.innerHTML = '<li class="online-players-empty">No hay otros jugadores en línea</li>';
+    const chipName = document.querySelector('#profileView .profile-chip-name');
+    const chipMeta = document.querySelector('#profileView .profile-chip-meta');
+    const orb = document.querySelector('#profileView .profile-orb');
+    if (!stats) {
+      if (chipName) chipName.textContent = 'Tu perfil';
+      if (chipMeta) chipMeta.textContent = '';
+      if (orb) orb.textContent = '';
+      if (profileInfo) {
+        clearNode(profileInfo);
+        const box = el('div', 'profile-stats');
+        box.appendChild(el('span', null, 'Ingresa tu nombre para ver tus estadísticas'));
+        profileInfo.appendChild(box);
+      }
       return;
     }
-    
-    onlinePlayersList.innerHTML = '';
-    
-    onlinePlayers.forEach(player => {
-      const listItem = document.createElement('li');
-      listItem.className = 'online-player-item';
-      
-      const playerInfo = document.createElement('div');
-      playerInfo.className = 'online-player-info';
-      
-      const playerName = document.createElement('div');
-      playerName.className = 'online-player-name';
-      playerName.textContent = player.name;
-      
-      const playerStatus = document.createElement('div');
-      playerStatus.className = `online-player-status ${player.isInGame ? 'in-game' : 'available'}`;
-      playerStatus.textContent = player.isInGame ? 'En partida' : 'Disponible';
-      
-      playerInfo.appendChild(playerName);
-      playerInfo.appendChild(playerStatus);
+    const name = String(stats.name || '');
+    const wins = stats.wins | 0;
+    if (chipName) chipName.textContent = name;
+    if (chipMeta) chipMeta.textContent = wins + plural(wins, ' victoria', ' victorias');
+    if (orb) orb.textContent = name ? Array.from(name)[0].toUpperCase() : '';
+    if (!profileInfo) return;
+    clearNode(profileInfo);
+    const box = el('div', 'profile-stats');
+    box.appendChild(el('strong', 'profile-name', name));
+    const grid = el('dl', 'profile-grid');
+    [
+      ['Partidas', stats.games_played | 0],
+      ['Victorias', wins],
+      ['Racha actual', stats.current_streak | 0],
+      ['Mejor puntaje', stats.best_score | 0]
+    ].forEach(function (pair) {
+      const cell = el('div');
+      cell.appendChild(el('dt', null, pair[0]));
+      cell.appendChild(el('dd', null, pair[1]));
+      grid.appendChild(cell);
+    });
+    box.appendChild(grid);
+    profileInfo.appendChild(box);
+  }
+
+  // ===========================================================================
+  // Jugadores en línea e invitaciones (dock)
+  // ===========================================================================
+  function updateOnlinePlayersList(players) {
+    onlinePlayers = Array.isArray(players) ? players : [];
+    if (!onlinePlayersList) return;
+    const nextIds = new Set();
+    const frag = document.createDocumentFragment();
+
+    if (onlinePlayers.length === 0) {
+      frag.appendChild(el('li', 'online-players-empty', 'No hay nadie más en línea'));
+    }
+
+    const now = Date.now();
+    onlinePlayers.forEach(function (player) {
+      const id = String(player.socketId);
+      nextIds.add(id);
+      const listItem = el('li', 'online-player-item');
+      if (!knownOnlineIds.has(id)) listItem.setAttribute('data-reveal', '');
+
+      const dot = el('i', 'online-dot');
+      dot.setAttribute('aria-hidden', 'true');
+      listItem.appendChild(dot);
+
+      const playerInfo = el('div', 'online-player-info');
+      playerInfo.appendChild(el('div', 'online-player-name', player.name));
+      // Los compañeros de la propia sala figuran aparte: no se los puede invitar (el servidor los lista igual)
+      const inMyRoom = !!currentRoomId && player.roomId === currentRoomId;
+      let statusClass = player.isInGame ? 'in-game' : 'available';
+      let statusText = player.isInGame ? 'En partida' : 'Disponible';
+      if (inMyRoom) { statusClass = 'in-room'; statusText = 'En tu sala'; }
+      playerInfo.appendChild(el('div', 'online-player-status ' + statusClass, statusText));
       listItem.appendChild(playerInfo);
-      
-      // Mostrar botón invitar solo si: estamos en sala + juego no activo + jugador disponible
-      const showInviteButton = currentRoomId && !gameState.playing && player.canInvite;
-      
+
+      // Botón de invitar solo si: estoy en una sala, no hay partida y el jugador está disponible
+      const showInviteButton = currentRoomId && !isSpectating && !gameState.playing && !roundLive && player.canInvite;
       if (showInviteButton) {
-        const inviteButton = document.createElement('button');
-        inviteButton.className = 'invite-button';
-        inviteButton.textContent = '📩 Invitar';
-        inviteButton.disabled = !player.canInvite;
-        
-        inviteButton.addEventListener('click', () => {
-          invitePlayer(player.socketId, player.name);
+        const inviteButton = el('button', 'invite-button');
+        inviteButton.type = 'button';
+        const sentAt = invitedAt.get(id) || 0;
+        const recentlySent = now - sentAt < INVITE_COOLDOWN_MS;
+        inviteButton.textContent = recentlySent ? 'Enviada' : 'Invitar';
+        inviteButton.disabled = recentlySent;
+        inviteButton.setAttribute('aria-label', (recentlySent ? 'Invitación enviada a ' : 'Invitar a ') + player.name);
+        inviteButton.addEventListener('click', function () {
+          invitePlayer(player.socketId, player.name, inviteButton);
         });
-        
         listItem.appendChild(inviteButton);
       }
-      
-      onlinePlayersList.appendChild(listItem);
+      frag.appendChild(listItem);
     });
+
+    clearNode(onlinePlayersList);
+    onlinePlayersList.appendChild(frag);
+    knownOnlineIds = nextIds;
+    if (dockCount) dockCount.textContent = onlinePlayers.length ? String(onlinePlayers.length) : '';
   }
 
-  function invitePlayer(targetSocketId, targetPlayerName) {
-    if (!currentRoomId || gameState.playing) {
-      addCanvasNotification('No puedes invitar en este momento', 'error');
+  function invitePlayer(targetSocketId, targetPlayerName, button) {
+    if (!currentRoomId || gameState.playing || roundLive) {
+      toast('No puedes invitar durante una partida', 'error');
       return;
     }
-    
-    socket.emit('invitePlayer', { targetSocketId });
-    addCanvasNotification(`Invitación enviada a ${targetPlayerName}`, 'info');
+    socket.emit('invitePlayer', { targetSocketId: targetSocketId });
+    const id = String(targetSocketId);
+    invitedAt.set(id, Date.now());
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Enviada';
+      button.setAttribute('aria-label', 'Invitación enviada a ' + targetPlayerName);
+    }
+    setTimeout(function () {
+      invitedAt.delete(id);
+      updateOnlinePlayersList(onlinePlayers);
+    }, INVITE_COOLDOWN_MS);
   }
 
   function handleInvitationReceived(invitationData) {
-    const { fromPlayer, roomId } = invitationData;
-    
-    // Mostrar notificación especial de invitación
-    addCanvasNotification(`${fromPlayer} te ha invitado a la sala ${roomId}`, 'invitation', 5000);
-    
-    // Copiar automáticamente el código de sala al input
-    if (roomIdInput) {
-      roomIdInput.value = roomId;
-      roomIdInput.focus();
-      roomIdInput.select();
+    const fromPlayer = invitationData && invitationData.fromPlayer;
+    const roomId = invitationData && invitationData.roomId;
+    if (!roomId) return;
+
+    pendingInvitations.push({ from: fromPlayer, roomId: roomId, timestamp: Date.now() });
+    const message = (fromPlayer || 'Alguien') + ' te invita a la sala ' + roomId;
+
+    // Desde una sala no se puede saltar a otra (el servidor no la abandona): solo se avisa.
+    if (currentRoomId) {
+      toast(message, 'invitation');
+      return;
     }
-    
-    // Agregar a lista de invitaciones pendientes
-    pendingInvitations.push({
-      from: fromPlayer,
-      roomId: roomId,
-      timestamp: Date.now()
+    if (roomIdInput) roomIdInput.value = String(roomId).toUpperCase();
+    toast(message, 'invitation', undefined, {
+      actionLabel: 'Unirse',
+      onAction: function () {
+        if (currentRoomId) return;
+        if (roomIdInput) roomIdInput.value = String(roomId).toUpperCase();
+        joinRoomFromInput();
+      }
     });
-    
-    console.log(`Invitation received from ${fromPlayer} to room ${roomId}`);
   }
 
-  function lerp(start, end, factor) {
-    return start + (end - start) * factor;
+  // ===========================================================================
+  // Línea de tiempo de los frames del servidor (js/net/motion.js)
+  // ===========================================================================
+  // El render dibuja un instante un paso atrás del último frame e interpola en línea recta
+  // entre los dos frames que lo rodean: la velocidad visible queda constante. Comida,
+  // consumibles, escudos y eventos de la arena se toman del frame que el render ya alcanzó,
+  // así el efecto coincide con la cabeza que llega.
+  const timeline = Motion ? Motion.createTimeline({ tickMs: 83 }) : null;
+  const timeSample = { a: null, b: null, f: 0, e: 0, rt: 0 };
+  const projectileViews = new Map(); // id -> objeto que lee la arena (se reutiliza entre cuadros)
+  const projectileList = [];
+
+  function indexById(list) {
+    const map = new Map();
+    (list || []).forEach(function (item) { map.set(item.id, item); });
+    return map;
   }
 
-  function ClientProjectile(serverProjectile) {
-    this.id = serverProjectile.id;
-    this.playerId = serverProjectile.playerId;
-    this.color = serverProjectile.color;
-    this.direction = { ...serverProjectile.direction };
-    
-    this.targetX = serverProjectile.x;
-    this.targetY = serverProjectile.y;
-    
-    this.renderX = serverProjectile.prevX || serverProjectile.x;
-    this.renderY = serverProjectile.prevY || serverProjectile.y;
-    
-    this.interpolationSpeed = 0.2;
+  function timelineFrame(data, t) {
+    return {
+      t: t,
+      snakes: indexById(data.players),
+      projectiles: indexById(data.projectiles),
+      foods: data.foods || [],
+      consumables: data.consumables || [],
+      payload: data
+    };
   }
 
-  ClientProjectile.prototype.updateRenderPosition = function() {
-    this.renderX = lerp(this.renderX, this.targetX, this.interpolationSpeed);
-    this.renderY = lerp(this.renderY, this.targetY, this.interpolationSpeed);
-  };
-
-  ClientProjectile.prototype.updateTarget = function(serverProjectile) {
-    this.targetX = serverProjectile.x;
-    this.targetY = serverProjectile.y;
-    this.direction = { ...serverProjectile.direction };
-    this.color = serverProjectile.color;
-  };
-
-  const retroColors = {
-    snake: ['#58a6ff', '#a371f7', '#7dd3fc', '#fbbf24', '#f85149', '#c084fc', '#3fb950', '#f97316'],
-    background: '#010409',
-    grid: '#161b22',
-    food: '#a371f7',
-    foodGlow: '#c084fc',
-    projectile: '#fbbf24'
-  };
-
-  function drawRetroRect(ctx, x, y, width, height, color, glowColor = null) {
-    ctx.fillStyle = color;
-    ctx.fillRect(x, y, width, height);
-    
-    if (glowColor) {
-      ctx.shadowColor = glowColor;
-      ctx.shadowBlur = 5;
-      ctx.fillRect(x, y, width, height);
-      ctx.shadowBlur = 0;
-      ctx.shadowColor = 'transparent';
-    }
+  // Partida nueva (gameStart o spectatingStarted): el primer frame interpola desde este estado
+  function restartTimeline(data) {
+    resetTimeline();
+    if (!timeline) return;
+    if (roomConfig && roomConfig.gameSpeed) timeline.setTick(roomConfig.gameSpeed);
+    timeline.seed(timelineFrame(data, null));
   }
 
-  function drawRetroSnakeSegment(ctx, x, y, size, color, isHead = false, direction = null, isCurrentPlayer = false, hasImmunity = false) {
-    const padding = 1;
-    const innerSize = size - (padding * 2);
-    
-    if (hasImmunity) {
-      const pulseIntensity = (Math.sin(Date.now() * 0.008) + 1) * 0.6;
-      const glowSize = 4 + (pulseIntensity * 3);
-      const glowAlpha = 0.6 + (pulseIntensity * 0.4);
-      
-      ctx.shadowColor = `rgba(120, 170, 255, ${glowAlpha})`;
-      ctx.shadowBlur = glowSize;
-      ctx.fillStyle = color;
-      ctx.fillRect(x + padding, y + padding, innerSize, innerSize);
-      
-      ctx.shadowColor = `rgba(170, 220, 255, ${glowAlpha * 0.7})`;
-      ctx.shadowBlur = glowSize * 1.35;
-      ctx.fillRect(x + padding, y + padding, innerSize, innerSize);
-      
-      ctx.shadowBlur = 0;
-      ctx.shadowColor = 'transparent';
-    }
-    
-    drawRetroRect(ctx, x + padding, y + padding, innerSize, innerSize, color);
-    
-    if (isHead) {
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(x + padding, y + padding, innerSize, innerSize);
-      
-      if (direction) {
-        drawRetroEyes(ctx, x, y, size, direction);
+  function resetTimeline() {
+    projectileViews.clear();
+    projectileList.length = 0;
+    clientProjectiles = [];
+    if (timeline) timeline.clear();
+  }
+
+  function dispatchTimelineFrame(frame) {
+    const data = frame.payload;
+    dispatchFrameEvents(data);
+    callEach(data.consumableEvents, function (event) {
+      if (event.consumableType === 'immunity' && event.playerId === socket.id && !isSpectating) {
+        toast('Escudo activo: bloquea un disparo', 'success', 2500);
       }
+    });
+  }
+
+  function projectileView(p) {
+    let view = projectileViews.get(p.id);
+    if (!view) {
+      view = { id: p.id, playerId: p.playerId, color: p.color, direction: p.direction, x: p.x, y: p.y, seen: 0 };
+      projectileViews.set(p.id, view);
     }
-    
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x + padding, y + padding, innerSize, innerSize);
+    view.color = p.color;
+    view.direction = p.direction;
+    return view;
   }
 
-  function drawRetroProjectile(ctx, projectile, segmentSize) {
-    const centerX = projectile.renderX + segmentSize / 2;
-    const centerY = projectile.renderY + segmentSize / 2;
-    const size = segmentSize * 0.6;
-    
-    ctx.save();
-    ctx.translate(centerX, centerY);
-    ctx.rotate(Math.PI / 4);
-    
-    drawRetroRect(ctx, -size/2, -size/2, size, size, projectile.color || retroColors.projectile, '#ffff80');
-    
-    ctx.restore();
-  }
+  function applyTimelineSample(s, now) {
+    // Efectos del frame recién alcanzado, antes de dibujarlo: la arena todavía tiene el cuerpo
+    // del cuadro anterior, así un corte desprende la parte que se veía
+    timeline.drain(dispatchTimelineFrame);
 
-  function drawRetroEyes(ctx, x, y, size, direction) {
-    const eyeSize = Math.max(2, size * 0.2);
-    const eyeOffset = size * 0.3;
-    
-    let leftEyeX, leftEyeY, rightEyeX, rightEyeY;
-    
-    if (direction.x === 1) {
-      leftEyeX = x + size - eyeOffset;
-      leftEyeY = y + eyeOffset;
-      rightEyeX = x + size - eyeOffset;
-      rightEyeY = y + size - eyeOffset;
-    } else if (direction.x === -1) {
-      leftEyeX = x + eyeOffset;
-      leftEyeY = y + eyeOffset;
-      rightEyeX = x + eyeOffset;
-      rightEyeY = y + size - eyeOffset;
-    } else if (direction.y === -1) {
-      leftEyeX = x + eyeOffset;
-      leftEyeY = y + eyeOffset;
-      rightEyeX = x + size - eyeOffset;
-      rightEyeY = y + eyeOffset;
-    } else {
-      leftEyeX = x + eyeOffset;
-      leftEyeY = y + size - eyeOffset;
-      rightEyeX = x + size - eyeOffset;
-      rightEyeY = y + size - eyeOffset;
+    const a = s.a, b = s.b;
+    const cell = segmentSize;
+    const period = Math.floor(ARENA_SIZE / cell) * cell;
+    const shotStep = cell * ((roomConfig && +roomConfig.projectileCells) || 1); // lo que avanza un disparo por paso
+    for (let i = 0; i < snakes.length; i++) {
+      const snake = snakes[i];
+      const pa = a.snakes.get(snake.id);
+      const pb = b ? b.snakes.get(snake.id) : null;
+      if (pa && pb) Motion.snakeAt(pa.segments, pb.segments, s.f, cell, period, snake.renderSegments);
+      else if (pa) Motion.snakeAhead(pa.segments, pa.direction, b ? 0 : s.e, cell, period, snake.renderSegments);
+      else if (pb) Motion.snakeAt(null, pb.segments, 0, cell, period, snake.renderSegments);
+      else continue;
+      snake.direction = (pb || pa).direction;
+      if (pa) snake.activeConsumable = pa.activeConsumable;
     }
-    
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(leftEyeX - eyeSize/2, leftEyeY - eyeSize/2, eyeSize, eyeSize);
-    ctx.fillRect(rightEyeX - eyeSize/2, rightEyeY - eyeSize/2, eyeSize, eyeSize);
-  }
 
-  function drawRetroFood(ctx, food, segmentSize) {
-    const padding = 2;
-    const size = segmentSize - (padding * 2);
-    
-    const pulse = Math.sin(Date.now() * 0.01) * 0.1 + 1;
-    const pulseSize = size * pulse;
-    const offset = (size - pulseSize) / 2;
-    
-    drawRetroRect(
-      ctx, 
-      food.x + padding + offset, 
-      food.y + padding + offset, 
-      pulseSize, 
-      pulseSize, 
-      retroColors.food, 
-      retroColors.foodGlow
-    );
-    
-    ctx.fillStyle = '#ffffff';
-    ctx.font = `bold ${Math.max(8, segmentSize * 0.4)}px monospace`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    
-    const centerX = food.x + segmentSize / 2;
-    const centerY = food.y + segmentSize / 2;
-    
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 2;
-    ctx.strokeText(food.score, centerX, centerY);
-    ctx.fillText(food.score, centerX, centerY);
-  }
-
-  function drawHexagon(ctx, centerX, centerY, radius, color, glowColor) {
-    const sides = 6;
-    const angle = (Math.PI * 2) / sides;
-    
-    ctx.beginPath();
-    
-    for (let i = 0; i <= sides; i++) {
-      const x = centerX + Math.cos(i * angle) * radius;
-      const y = centerY + Math.sin(i * angle) * radius;
-      
-      if (i === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
+    foods = a.foods;
+    consumables = a.consumables;
+    // Restos de un corte: se desvanecen en sus últimos 2 s (hora del servidor del instante dibujado)
+    for (let i = 0; i < foods.length; i++) {
+      const food = foods[i];
+      if (food.expiresAt) food.fade = Math.max(0, Math.min(1, (food.expiresAt - s.rt) / REMAINS_FADE_MS));
     }
-    
-    ctx.closePath();
-    
-    if (glowColor) {
-      ctx.shadowColor = glowColor;
-      ctx.shadowBlur = 8;
-    }
-    
-    ctx.fillStyle = color;
-    ctx.fill();
-    
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    
-    ctx.shadowBlur = 0;
-    ctx.shadowColor = 'transparent';
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 0;
-  }
 
-  function drawLayeredConsumable(ctx, centerX, centerY, size, baseColor, accentColor, glowColor) {
-    const pulse = Math.sin(Date.now() * 0.01) * 0.2 + 1;
-    
-    ctx.globalAlpha = 0.3;
-    drawHexagon(ctx, centerX, centerY, size * pulse * 1.3, accentColor, glowColor);
-    
-    ctx.globalAlpha = 1;
-    drawHexagon(ctx, centerX, centerY, size * pulse, baseColor, glowColor);
-    
-    ctx.globalAlpha = 0.8;
-    drawHexagon(ctx, centerX, centerY, size * 0.4, '#ffffff', '#ffffff');
-    ctx.globalAlpha = 1;
-  }
-
-  function drawRetroConsumable(ctx, consumable, segmentSize) {
-    const style = consumableStyles[consumable.type];
-    if (!style) return;
-    
-    const centerX = consumable.x + segmentSize / 2;
-    const centerY = consumable.y + segmentSize / 2;
-    const pulse = Math.sin(Date.now() * 0.008) * 0.15 + 1;
-    const size = (segmentSize * 0.45) * pulse;
-    
-    switch(consumable.type) {
-      case 'immunity':
-        drawLayeredConsumable(ctx, centerX, centerY, size, style.color, '#c080ff', style.glowColor);
-        break;
-      default:
-        drawHexagon(ctx, centerX, centerY, size, style.color, style.glowColor);
-    }
-  }
-
-  // Canvas de información con layout de 2 columnas
-  function drawInfoCanvas() {
-    if (!infoCanvas) return;
-    
-    // Limpiar canvas
-    infoCtx.fillStyle = '#010409';
-    infoCtx.fillRect(0, 0, infoCanvas.width, infoCanvas.height);
-    
-    // Definir las dos secciones
-    const leftSectionWidth = 150;
-    const rightSectionX = leftSectionWidth + 20;
-    const rightSectionWidth = infoCanvas.width - rightSectionX - 20;
-    
-    // === SECCIÓN IZQUIERDA: RONDA Y TIEMPO ===
-    infoCtx.textAlign = 'left';
-    
-    // Ronda (más pequeña, arriba)
-    infoCtx.font = '400 22px Share Tech Mono, monospace';
-    infoCtx.fillStyle = '#c9d1d9';
-    infoCtx.fillText(`RONDA ${gameState.round}/3`, 20, 32);
-    
-    // Tiempo (más grande, destacado, abajo)
-    infoCtx.font = '400 28px Share Tech Mono, monospace';
-    const timeColor = roundTimeLeft <= 10 ? '#f85149' : roundTimeLeft <= 20 ? '#d29922' : '#58a6ff';
-    infoCtx.fillStyle = timeColor;
-    infoCtx.fillText(`${roundTimeLeft}s`, 20, 75);
-    
-    // === LÍNEA DIVISORIA VERTICAL ===
-    infoCtx.strokeStyle = '#30363d';
-    infoCtx.lineWidth = 1;
-    infoCtx.beginPath();
-    infoCtx.moveTo(leftSectionWidth, 10);
-    infoCtx.lineTo(leftSectionWidth, infoCanvas.height - 10);
-    infoCtx.stroke();
-    
-    // === SECCIÓN DERECHA: PUNTAJES DE JUGADORES ===
-    if (snakes && snakes.length > 0) {
-      const sortedSnakes = [...snakes].sort((a, b) => {
-        if (gameState.playing) {
-          return b.score - a.score;
-        } else {
-          const aTotal = (roomScores && roomScores[a.id]) ? roomScores[a.id].totalScore : 0;
-          const bTotal = (roomScores && roomScores[b.id]) ? roomScores[b.id].totalScore : 0;
-          return bTotal - aTotal;
-        }
-      });
-      
-      // Calcular layout optimizado - más jugadores por fila
-      const maxPlayersPerRow = Math.min(16, sortedSnakes.length);
-      const totalRows = Math.ceil(sortedSnakes.length / maxPlayersPerRow);
-      const playerWidth = rightSectionWidth / maxPlayersPerRow;
-      const playerHeight = Math.max(40, (infoCanvas.height - 20) / totalRows);
-      const startY = 40;
-      
-      sortedSnakes.forEach((snake, index) => {
-        const row = Math.floor(index / maxPlayersPerRow);
-        const col = index % maxPlayersPerRow;
-        const x = rightSectionX + (col * playerWidth) + 10;
-        const y = startY + (row * playerHeight);
-        
-        const isCurrentPlayer = snake.id === socket.id;
-        
-        // Usar el color de la snake del jugador
-        let textColor = snake.color || '#58a6ff';
-        
-        // Nombre del jugador con ranking
-        infoCtx.font = '400 18px Share Tech Mono, monospace';
-        infoCtx.fillStyle = textColor;
-        infoCtx.textAlign = 'left';
-        
-        // Truncar nombre según espacio disponible
-        const maxNameLength = Math.floor(playerWidth / 10);
-        const playerName = snake.name.length > maxNameLength ? snake.name.substring(0, maxNameLength - 1) + '…' : snake.name;
-        infoCtx.fillText(`#${index + 1} ${playerName}`, x, y);
-        
-        // Puntajes en línea separada
-        infoCtx.font = '400 16px Share Tech Mono, monospace';
-        if (gameState.playing) {
-          infoCtx.fillText(`${snake.score} segs`, x, y + 16);
-        } else {
-          const totalScore = (roomScores && roomScores[snake.id]) ? roomScores[snake.id].totalScore : 0;
-          const roundWins = (roomScores && roomScores[snake.id]) ? roomScores[snake.id].roundWins : 0;
-          infoCtx.fillText(`${totalScore} segs (${roundWins}V)`, x, y + 16);
-        }
+    // Proyectiles: los de a avanzan hacia b (o siguen de largo si ya no están); los nuevos de b
+    // arrancan donde se crearon
+    const f = b ? s.f : s.e;
+    projectileList.length = 0;
+    a.projectiles.forEach(function (pa) {
+      const pb = b ? b.projectiles.get(pa.id) : null;
+      const view = projectileView(pb || pa);
+      Motion.projectileAt(pa, pb, f, shotStep, view);
+      view.seen = now;
+      projectileList.push(view);
+    });
+    if (b) {
+      b.projectiles.forEach(function (pb) {
+        if (a.projectiles.has(pb.id)) return;
+        const view = projectileView(pb);
+        Motion.projectileAt(null, pb, s.f, shotStep, view);
+        view.seen = now;
+        projectileList.push(view);
       });
     }
-    
-    // Dibujar notificaciones en el canvas de información
-    updateCanvasNotifications();
-    drawCanvasNotifications(infoCtx);
+    projectileViews.forEach(function (view, id) { if (view.seen !== now) projectileViews.delete(id); });
+    clientProjectiles = projectileList;
   }
 
+  function applyTimeline(now) {
+    if (!timeline) return;
+    const s = timeline.sample(now, timeSample);
+    if (s) applyTimelineSample(s, now);
+  }
+
+  // Fin de la partida: lo congelado es el último frame (coincide con la clasificación final)
+  function settleTimeline() {
+    if (!timeline) return;
+    const s = timeline.sampleLatest(timeSample);
+    if (s) applyTimelineSample(s, perfNow());
+    timeline.clear();
+  }
+
+  // ===========================================================================
+  // Teclado
+  // ===========================================================================
   document.addEventListener('keydown', handleKeyPress);
 
-	function handleKeyPress(event) {
-	  // No permitir controles si se está espectando
-	  if (isSpectating) return;
-	  
-	  const key = event.keyCode;
-	  
-	  // Flechas (37-40) o WASD (87,65,83,68)
-	  if ((key >= 37 && key <= 40) || key === 87 || key === 65 || key === 83 || key === 68) {
-		if (isConnected && gameState.playing) {
-		  event.preventDefault();
-		  
-		  // Convertir WASD a códigos de flechas para el servidor
-		  let keyToSend = key;
-		  if (key === 87) keyToSend = 38; // W -> ↑
-		  else if (key === 65) keyToSend = 37; // A -> ←
-		  else if (key === 83) keyToSend = 40; // S -> ↓
-		  else if (key === 68) keyToSend = 39; // D → →
-		  
-		  socket.emit('newMove', { key: keyToSend });
-		}
-	  } else if (key === 32 && isConnected && gameState.playing) {
-		event.preventDefault();
-		socket.emit('attack');
-	  }
-	}
+  // Espacio y flechas son teclas de juego: mientras hay partida (o su cuenta regresiva) no desplazan
+  // la página ni activan el botón enfocado, aunque la partida todavía no corra (roundLive en false).
+  function swallowsGameKeys(target) {
+    if (!currentRoomId) return false;
+    const scene = Scenes.current();
+    if (scene === 'game') return true;
+    if (scene === 'room') return countdownActive || roundLive || !!gameState.playing;
+    // En el final el foco queda en el título: Espacio no desplaza; un botón al que se llegó con Tab sí responde
+    if (scene === 'final') return !(target && target.tagName === 'BUTTON');
+    return false;
+  }
 
+  function handleKeyPress(event) {
+    if (!keyboardSeen && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      keyboardSeen = true;
+      updateSpectatorIndicator();
+    }
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    const target = event.target;
+    const inField = !!(target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)));
+    const key = event.keyCode;
+    if (!inField && (key === 32 || (key >= 37 && key <= 40)) && swallowsGameKeys(target)) event.preventDefault();
+
+    // No permitir controles si se está mirando
+    if (isSpectating) return;
+    // Solo con una partida en curso (no durante la cuenta regresiva)
+    if (!isConnected || !gameState.playing || !roundLive) return;
+    if (inField) return;
+
+    const arrow = KEY_TO_ARROW[key];
+    if (arrow) {
+      event.preventDefault();
+      // WASD se convierte a códigos de flecha para el servidor
+      socket.emit('newMove', { key: arrow });
+    } else if (key === 32) {
+      event.preventDefault();
+      socket.emit('attack');
+    }
+  }
+
+  // ===========================================================================
+  // Serpientes locales
+  // ===========================================================================
   function createLocalSnake(serverSnake) {
     const snake = new Snake(
       serverSnake.id,
       serverSnake.name,
       segmentSize,
-      600,
-      600,
+      ARENA_SIZE,
+      ARENA_SIZE,
       serverSnake.segments[0].x,
       serverSnake.segments[0].y,
       serverSnake.direction.x,
@@ -782,389 +688,582 @@ document.addEventListener("DOMContentLoaded", function() {
       serverSnake.color,
       roomConfig.gameSpeed || 91
     );
-    
-    snake.segments = serverSnake.segments.map(seg => ({ ...seg }));
-    snake.targetSegments = serverSnake.segments.map(seg => ({ ...seg }));
-    snake.renderSegments = serverSnake.segments.map(seg => ({ ...seg }));
-    snake.direction = { ...serverSnake.direction };
+
+    snake.segments = serverSnake.segments.map(function (seg) { return { x: seg.x, y: seg.y }; });
+    snake.targetSegments = serverSnake.segments.map(function (seg) { return { x: seg.x, y: seg.y }; });
+    snake.renderSegments = serverSnake.segments.map(function (seg) { return { x: seg.x, y: seg.y }; });
+    snake.direction = { x: serverSnake.direction.x, y: serverSnake.direction.y };
     snake.score = serverSnake.score;
     snake.gameover = serverSnake.gameover;
     snake.scoreLeftToGrow = serverSnake.scoreLeftToGrow;
-    
     snake.activeConsumable = serverSnake.activeConsumable;
-    
+
     return snake;
   }
 
-  function startRenderLoop() {
-    if (renderLoop) return;
-    
-    function render() {
-      if (isGameRunning && gameState.playing) {
-        snakes.forEach(snake => {
-          if (snake.updateRenderPosition) {
-            snake.updateRenderPosition();
-          }
-        });
-        
-        clientProjectiles.forEach(projectile => {
-          projectile.updateRenderPosition();
-        });
-        
-        gameLoop();
-      }
-      
-      // Actualizar canvas de info siempre (para notificaciones)
-      drawInfoCanvas();
-      
-      if (isGameRunning) {
-        renderLoop = requestAnimationFrame(render);
-      }
-    }
-    
-    renderLoop = requestAnimationFrame(render);
+  function copySegments(list) {
+    return list.map(function (seg) { return { x: seg.x, y: seg.y }; });
   }
 
-  function stopRenderLoop() {
-    if (renderLoop) {
-      cancelAnimationFrame(renderLoop);
-      renderLoop = null;
-    }
-    isGameRunning = false;
+  function rebuildPreview() {
+    const me = isSpectating ? null : socket.id;
+    previewList = snakes.map(function (s) {
+      return { id: s.id, name: s.name, color: s.color, isMe: me !== null && s.id === me };
+    });
   }
 
-  socket.on('connect', () => {
-    console.log('Conectado al servidor:', socket.id);
+
+  // ===========================================================================
+  // Arena: configuración y bucle de render (un único requestAnimationFrame)
+  // ===========================================================================
+  if (Arena && canvas) {
+    ui(function () {
+      Arena.init(canvas);
+      Arena.setConfig({ segmentSize: segmentSize, width: ARENA_SIZE, height: ARENA_SIZE });
+    });
+  }
+
+  function applyArenaConfig() {
+    if (!Arena) return;
+    ui(function () { Arena.setConfig({ segmentSize: segmentSize, width: ARENA_SIZE, height: ARENA_SIZE }); });
+  }
+
+  // Objetos reutilizados por frame (sin allocations en el bucle)
+  const arenaState = {
+    snakes: snakes, foods: foods, consumables: consumables, projectiles: clientProjectiles,
+    myId: null, roundTimeLeft: 0, playing: false, spectating: false
+  };
+  const idleOptions = { snakesPreview: previewList, caption: '' };
+
+  function fillArenaState() {
+    arenaState.snakes = snakes;
+    arenaState.foods = foods;
+    arenaState.consumables = consumables;
+    arenaState.projectiles = clientProjectiles;
+    arenaState.myId = socket.id;
+    arenaState.roundTimeLeft = roundTimeLeft;
+    arenaState.playing = !!gameState.playing;
+    arenaState.spectating = isSpectating;
+  }
+
+  function renderFrame(now) {
+    requestAnimationFrame(renderFrame);
+    if (!Arena || !canvas) return;
+    // La arena solo se dibuja cuando se ve: sala, partida y debajo del velo del final
+    const scene = Scenes.current();
+    if (scene !== 'room' && scene !== 'game' && scene !== 'final') return;
+    try {
+      if (roundLive) {
+        applyTimeline(now);
+        fillArenaState();
+        Arena.render(arenaState, now);
+      } else if (now < freezeUntil) {
+        // Fin de la partida: el último estado queda congelado (sin interpolar) mientras la arena enfoca
+        // al ganador, antes de la pantalla final.
+        fillArenaState();
+        Arena.render(arenaState, now);
+      } else {
+        idleOptions.snakesPreview = previewList;
+        idleOptions.caption = scene === 'room' && !countdownActive ? idleCaption : '';
+        Arena.renderIdle(now, idleOptions);
+      }
+    } catch (err) {
+      reportOnce(err);
+    }
+  }
+  requestAnimationFrame(renderFrame);
+
+  // Eventos visuales del frame del servidor → ganchos de la arena.
+  // Los disparos van primero: ocurrieron entre ticks, antes de los impactos del mismo frame
+  // (así la arena ya conoce el color de un proyectil que expira en el mismo tick).
+  function callEach(list, fn) {
+    if (!list || !list.length || typeof fn !== 'function') return;
+    for (let i = 0; i < list.length; i++) {
+      try { fn(list[i]); } catch (err) { reportOnce(err); }
+    }
+  }
+  function dispatchFrameEvents(data) {
+    if (!Arena) return;
+    callEach(data.projectileEvents, Arena.onProjectileFired);
+    callEach(data.foodEvents, Arena.onFoodEaten);
+    callEach(data.hitEvents, Arena.onHit);          // la arena ya sacude y hace el pulso de fondo si soy la víctima
+    callEach(data.blockEvents, Arena.onBlock);
+    callEach(data.portals, Arena.onPortal);
+    callEach(data.expiredProjectiles, Arena.onProjectileExpired);
+    callEach(data.consumableEvents, Arena.onConsumablePicked);
+  }
+
+  // ===========================================================================
+  // HUD y tensión
+  // ===========================================================================
+  function hudPlayers() {
+    const now = Date.now();
+    return snakes.map(function (s) {
+      const ac = s.activeConsumable;
+      const immune = !!(ac && ac.type === 'immunity' && (!ac.endTime || now < ac.endTime));
+      return {
+        id: s.id,
+        name: s.name,
+        color: s.color,
+        score: s.score,
+        immune: immune,
+        immuneUntil: immune && ac.endTime ? ac.endTime : 0,
+        isMe: !isSpectating && s.id === socket.id,
+        gameover: !!s.gameover
+      };
+    });
+  }
+
+  function updateHUD() {
+    if (!currentRoomId) return;
+    ui(function () {
+      HUD.update({
+        timeLeft: roundTimeLeft,
+        roundTime: roundTime(),
+        players: hudPlayers(),
+        playing: roundLive,
+        spectating: isSpectating
+      });
+    });
+  }
+
+  // Últimos 10 segundos: ambiente de tensión y un pulso coral por segundo nuevo
+  function checkTension() {
+    if (!roundLive) return;
+    const t = roundTimeLeft;
+    if (t > 10 || t < 0) return;
+    if (!tensionOn) {
+      tensionOn = true;
+      ui(function () { Backdrop.setMood('tension'); });
+    }
+    if (t > 0 && t !== lastPulseSecond) {
+      lastPulseSecond = t;
+      ui(function () { Backdrop.pulse('#FF4D6D', 0.15); });
+    }
+  }
+  function resetTension() {
+    tensionOn = false;
+    lastPulseSecond = -1;
+  }
+
+  // ===========================================================================
+  // Socket: conexión
+  // ===========================================================================
+  socket.on('connect', function () {
+    const reconnect = hasConnectedOnce;
+    const afterReplacement = sessionReplaced;
+    hasConnectedOnce = true;
     isConnected = true;
-    // Mostrar canvas de info siempre
-    showElement(infoCanvasContainer);
-    drawInfoCanvas();
+    sessionReplaced = false;
+    if (reconnect) {
+      // El servidor ya nos sacó de la sala al caer la conexión: volver al lobby y reenganchar el perfil
+      if (currentRoomId) {
+        leaveRoomLocally();
+        ui(function () { Overlays.hideAll(); Scenes.go(playerProfile ? 'lobby' : 'login'); });
+      }
+      // Si el servidor todavía tiene el socket viejo (corte del lado del cliente), el mismo playerId
+      // le indica que es esta sesión que vuelve: reemplaza al viejo (index.js, getOrCreateProfile)
+      if (playerProfile && currentPlayerId && playerProfile.stats) {
+        cancelProfileRetry();
+        requestSavedProfile({ stats: playerProfile.stats, playerId: currentPlayerId });
+      }
+      if (!afterReplacement) toast('Conexión restablecida', 'success');
+    }
     refreshRooms();
   });
 
-  socket.on('disconnect', () => {
+  socket.on('disconnect', function () {
     isConnected = false;
-    stopRenderLoop();
-    addCanvasNotification('Desconectado del servidor', 'error');
+    roundLive = false;
+    if (!sessionReplaced) toast('Se perdió la conexión con el servidor', 'error');
   });
 
-  socket.on('gameError', (message) => {
-    addCanvasNotification(message, 'error');
+  // Otra pestaña o dispositivo abrió esta misma sesión: el servidor la mueve allá y nos desconecta.
+  // La sesión guardada (localStorage) es de las dos pestañas, así que no se borra.
+  socket.on('sessionReplaced', function () {
+    sessionReplaced = true;
+    cancelProfileRetry();
+    autoProfilePending = false;
+    if (currentRoomId) leaveRoomLocally();
+    playerProfile = null;
+    currentPlayerId = null;
+    setJoinBusy(false);
+    updateProfileDisplay(null);
+    updateLogoutButtonVisibility();
+    ui(function () {
+      Overlays.hideAll();
+      Overlays.close(leaderboardModal);
+      Scenes.go('login');
+    });
+    toast('Abriste tu sesión en otra pestaña o dispositivo. Entra de nuevo para seguir aquí.', 'info', 6000);
   });
 
-  socket.on('roomCreated', (data) => {
+  socket.on('gameError', function (message) {
+    clearPendingButton();
+    startRequested = false;
+    if (String(message) === NOT_ENOUGH_PLAYERS) handleRoundAborted();
+    syncRoomControls();
+    toast(translateServerMessage(message), 'error');
+  });
+
+  // La partida se cortó porque se fueron jugadores (index.js, handlePlayerLeaveRoom)
+  function handleRoundAborted() {
+    roundLive = false;
+    freezeUntil = 0;
+    countdownActive = false;
+    gameState = Object.assign({}, gameState, { playing: false });
+    resetTimeline();
+    resetTension();
+    ui(function () { Overlays.hideAll(); });
+    if (isSpectating) {
+      socket.emit('backToMenu');
+      leaveRoomLocally();
+      ui(function () { Scenes.go('lobby'); });
+      return;
+    }
+    ui(function () { Scenes.go('room'); });
+    updatePlayerList();
+    updateConfigPanel();
+    updateOnlinePlayersList(onlinePlayers);
+  }
+
+  // ===========================================================================
+  // Socket: salas
+  // ===========================================================================
+  function enterRoom(data, created) {
+    clearPendingButton();
     isSpectating = false;
     currentRoomId = data.roomId;
-    isHost = data.isHost;
-    roomConfig = data.config;
-    
+    isHost = !!data.isHost;
+    roomConfig = data.config || {};
+    segmentSize = roomConfig.segmentSize || segmentSize;
+    if (isHost) { roomHostId = socket.id; roomHostName = currentUsername(); }
+    roundLive = false;
+    freezeUntil = 0;
+    countdownActive = false;
+    startRequested = false;
+    matchFinished = false;
+    resetTension();
+    knownPlayerIds = new Set();
+    // El código (escrito o cargado por una invitación) ya cumplió: no queda en el campo al volver al lobby
+    if (roomIdInput) { roomIdInput.value = ''; clearInvalid(roomIdInput); }
+
     if (data.playerProfile) {
       playerProfile = data.playerProfile;
       currentPlayerId = data.playerProfile.playerId;
       savePlayerProfile(data.playerProfile);
       updateProfileDisplay(data.playerProfile.stats);
     }
-    
-    showGameInterface();
+
+    ui(function () { HUD.reset(); });
+    applyArenaConfig();
+    updateConfigInputs(roomConfig);
     updateConfigPanel();
     updateSpectatorIndicator();
-    addCanvasNotification(`¡Sala ${data.roomId} creada!`, 'success');
-    
-    // NUEVO: Actualizar lista de jugadores (ahora con botones de invitar)
-    socket.emit('getOnlinePlayers');
-  });
+    updateRoomInfo();
+    syncRoomControls();
+    ui(function () { Overlays.hideAll(); Scenes.go('room'); });
 
-  socket.on('roomJoined', (data) => {
-    isSpectating = false;
-    currentRoomId = data.roomId;
-    isHost = data.isHost;
-    roomConfig = data.config;
-    
-    if (data.playerProfile) {
-      playerProfile = data.playerProfile;
-      currentPlayerId = data.playerProfile.playerId;
-      savePlayerProfile(data.playerProfile);
-      updateProfileDisplay(data.playerProfile.stats);
-    }
-    
-    showGameInterface();
-    updateConfigPanel();
-    updateSpectatorIndicator();
-    addCanvasNotification(`¡Te uniste a la sala ${data.roomId}!`, 'success');
-    
-    // NUEVO: Actualizar lista de jugadores (ahora con botones de invitar)
-    socket.emit('getOnlinePlayers');
-  });
+    if (created) toast('Sala ' + data.roomId + ' creada. Comparte el código para invitar.', 'success');
+    else toast('Entraste a la sala ' + data.roomId, 'success');
 
-  socket.on('roomsList', (rooms) => {
+    // Actualizar lista de jugadores (ahora con botones de invitar)
+    socket.emit('getOnlinePlayers');
+  }
+
+  socket.on('roomCreated', function (data) { enterRoom(data, true); });
+  socket.on('roomJoined', function (data) { enterRoom(data, false); });
+
+  socket.on('roomsList', function (rooms) {
     updateRoomsList(rooms);
   });
 
-  socket.on('newHost', (data) => {
-    if (data.hostId === socket.id) {
+  socket.on('newHost', function (data) {
+    roomHostId = data.hostId;
+    roomHostName = data.hostName || '';
+    if (data.hostId === socket.id && !isSpectating) {
       isHost = true;
-      addCanvasNotification('¡Ahora eres el anfitrión!', 'info');
+      toast('Ahora eres el anfitrión de la sala', 'info');
     }
-    updateHostControls();
+    updateRoomInfo();
+    updatePlayerList();
+    syncRoomControls();
     updateConfigPanel();
   });
 
-  socket.on('updatePlayers', (players, state, config, roomData) => {
-    snakes = players.map(serverPlayer => {
-      const existingSnake = snakes.find(s => s.id === serverPlayer.id);
+  socket.on('updatePlayers', function (players, state, config, roomData) {
+    snakes = players.map(function (serverPlayer) {
+      const existingSnake = snakes.find(function (s) { return s.id === serverPlayer.id; });
       if (existingSnake) {
-        existingSnake.segments = serverPlayer.segments.map(seg => ({ ...seg }));
-        existingSnake.targetSegments = serverPlayer.segments.map(seg => ({ ...seg }));
-        existingSnake.direction = { ...serverPlayer.direction };
+        existingSnake.segments = copySegments(serverPlayer.segments);
+        existingSnake.targetSegments = copySegments(serverPlayer.segments);
+        existingSnake.direction = { x: serverPlayer.direction.x, y: serverPlayer.direction.y };
         existingSnake.score = serverPlayer.score;
         existingSnake.gameover = serverPlayer.gameover;
         existingSnake.scoreLeftToGrow = serverPlayer.scoreLeftToGrow;
         existingSnake.color = serverPlayer.color;
         existingSnake.activeConsumable = serverPlayer.activeConsumable;
         return existingSnake;
-      } else {
-        return createLocalSnake(serverPlayer);
       }
+      return createLocalSnake(serverPlayer);
     });
-    
+
     gameState = state;
     roomConfig = config;
-    updatePlayerList(players);
-    updateRoomInfo(roomData);
-    updateHostControls();
+    if (config && config.segmentSize && config.segmentSize !== segmentSize) {
+      segmentSize = config.segmentSize;
+      applyArenaConfig();
+    }
+    if (roomData) {
+      roomHostId = roomData.host;
+      if (!isSpectating) isHost = roomData.host === socket.id;
+      const hostSnake = snakes.find(function (s) { return s.id === roomData.host; });
+      if (hostSnake) roomHostName = hostSnake.name;
+    }
+
+    // La cuenta regresiva se cancela si alguien se va y no alcanza el mínimo
+    if (countdownActive && !state.playing && players.length < (config.minPlayers || 2)) {
+      countdownActive = false;
+      ui(function () { Overlays.hideAll(); });
+    }
+    // "No quedan jugadores suficientes" estando en partida y sin fin de partida pendiente (spec 4.1)
+    if (!state.playing && Scenes.current() === 'game' && !isSpectating && !matchFinished && freezeUntil <= perfNow() && !countdownActive) {
+      roundLive = false;
+      ui(function () { Scenes.go('room'); });
+    }
+
+    rebuildPreview();
+    updatePlayerList();
+    updateRoomInfo();
+    syncRoomControls();
     updateConfigPanel();
-    
-    // Actualizar canvas de info
-    drawInfoCanvas();
-    
-    if (players.length >= config.minPlayers && !state.playing && isHost) {
-      showElement(startGameButton);
-    } else {
-      hideElement(startGameButton);
-    }
-    
-    if (players.length < config.minPlayers) {
-      showElement(waitingSpan);
-      addCanvasNotification(`Necesitas ${config.minPlayers - players.length} jugadores más`, 'info');
-    } else {
-      hideElement(waitingSpan);
-    }
-    
-    // NUEVO: Actualizar lista de jugadores online cuando cambie el estado
+    // Al terminar la partida el servidor ya reinició la sala (largo 3): el marcador conserva el
+    // resultado mientras la arena congelada y la pantalla final lo muestran
+    if (Scenes.current() === 'game' && !matchFinished) updateHUD();
+
+    // Actualizar lista de jugadores en línea cuando cambie el estado
     socket.emit('getOnlinePlayers');
   });
 
-  socket.on('configUpdated', (newConfig) => {
+  // Firma de lo editable (el nivel): el anfitrión reenvía la misma configuración al iniciar
+  // y eso no debe disparar el aviso "Configuración actualizada" en toda la sala.
+  function configSignature(config) {
+    return config ? String(config.difficulty || '') : '';
+  }
+
+  socket.on('configUpdated', function (newConfig) {
+    const changed = configSignature(newConfig) !== configSignature(roomConfig);
     roomConfig = newConfig;
     updateConfigInputs(newConfig);
-    updateCanvasSize(newConfig);
-    snakes.forEach(snake => {
-      snake.updateInterpolationSpeed(newConfig.gameSpeed);
+    segmentSize = newConfig.segmentSize;
+    applyArenaConfig();
+    if (changed) toast('Configuración actualizada', 'success');
+  });
+
+  // ===========================================================================
+  // Socket: partida
+  // ===========================================================================
+  socket.on('countdown', function (count, state) {
+    if (state) gameState = state;
+    countdownActive = true;
+    startRequested = false;
+    matchFinished = false;
+    roundTimeLeft = roundTime(); // el anillo del HUD arranca lleno para la partida que viene
+    // "Jugar de nuevo": quien sigue en la pantalla final vuelve a la arena para ver la cuenta
+    ui(function () {
+      if (Scenes.current() === 'final') Scenes.go('room');
+      Overlays.countdown(count);
     });
-    addCanvasNotification('¡Configuración actualizada!', 'success');
+    syncRoomControls();
+    updateConfigPanel();
+    if (Scenes.current() === 'game') updateHUD();
   });
 
-  socket.on('updateScores', (scores) => {
-    roomScores = scores;
-    updatePlayerList(snakes);
-    drawInfoCanvas();
-  });
-
-  socket.on('gameStart', (data) => {
-    isSpectating = false;
-    canvas.width = 600;
-    canvas.height = 600;
+  socket.on('gameStart', function (data) {
+    // Un espectador sigue siéndolo en las partidas siguientes: solo es jugador si figura en la lista
+    isSpectating = !!currentRoomId && !data.players.some(function (p) { return p.id === socket.id; });
+    roomConfig = data.config;
     segmentSize = data.config.segmentSize;
-    
-    snakes = data.players.map(serverPlayer => createLocalSnake(serverPlayer));
+
+    snakes = data.players.map(function (serverPlayer) { return createLocalSnake(serverPlayer); });
     foods = data.foods || [];
     consumables = data.consumables || [];
-    projectiles = data.projectiles || [];
+    // Los proyectiles vivos al terminar la partida anterior desaparecen sin evento
+    restartTimeline(data);
     gameState = data.gameState;
-    roomConfig = data.config;
-    roundTimeLeft = data.gameState.roundTimeLeft || 35;
-    
-    isGameRunning = true;
-    startRenderLoop();
-    
-    hideElement(gameOverScreen);
-    hideElement(startGameButton);
-    hideElement(configPanel);
-    
-    addCanvasNotification(`Ronda ${data.gameState.round} - ¡Batalla por tiempo!`, 'success');
-    console.log(`¡Ronda ${data.gameState.round} iniciada!`);
-    
-    // NUEVO: Actualizar lista sin botones de invitar (juego activo)
-    socket.emit('getOnlinePlayers');
-    
+    roundTimeLeft = data.gameState.roundTimeLeft !== undefined ? data.gameState.roundTimeLeft : roundTime();
+
+    roundLive = true;
+    freezeUntil = 0;
+    countdownActive = false;
+    startRequested = false;
+    matchFinished = false;
+    resetTension();
+    rebuildPreview();
+
+    applyArenaConfig();
+    if (Arena) ui(function () { Arena.onRoundStart(); });
+    ui(function () {
+      Scenes.go('game');
+      Overlays.roundStart();
+      HUD.show();
+      Backdrop.setMood('game');
+    });
+    updateHUD();
     updateSpectatorIndicator();
-    gameLoop();
+    updateRoomInfo();
+    syncRoomControls();
+    updateConfigPanel();
+
+    // Actualizar lista sin botones de invitar (juego activo)
+    socket.emit('getOnlinePlayers');
   });
 
-  socket.on('spectatingStarted', (data) => {
+  socket.on('spectatingStarted', function (data) {
+    clearPendingButton();
     isSpectating = true;
     isHost = false;
     currentRoomId = data.roomId;
-    
-    canvas.width = 600;
-    canvas.height = 600;
-    segmentSize = data.config.segmentSize;
-    
-    snakes = data.players.map(serverPlayer => createLocalSnake(serverPlayer));
+
+    roomConfig = data.config || {};
+    segmentSize = roomConfig.segmentSize || segmentSize;
+
+    snakes = data.players.map(function (serverPlayer) { return createLocalSnake(serverPlayer); });
     foods = data.foods || [];
     consumables = data.consumables || [];
-    projectiles = data.projectiles || [];
+    restartTimeline(data);
     gameState = data.gameState;
-    roomConfig = data.config;
-    roundTimeLeft = data.roundTimeLeft || 60;
-    roomScores = data.roundScores || {};
-    
-    isGameRunning = true;
-    startRenderLoop();
-    
-    hideElement(gameOverScreen);
-    hideElement(startGameButton);
-    hideElement(configPanel);
-    showElement(document.getElementById('gameInterface'));
-    hideElement(document.getElementById('roomSelection'));
-    
+    roundTimeLeft = data.roundTimeLeft || roundTime();
+
+    roundLive = !!(data.gameState && data.gameState.playing);
+    freezeUntil = 0;
+    countdownActive = false;
+    matchFinished = false;
+    resetTension();
+    knownPlayerIds = new Set();
+    rebuildPreview();
+
+    ui(function () { HUD.reset(); });
+    applyArenaConfig();
+    updateRoomInfo();
     updateSpectatorIndicator();
-    addCanvasNotification(`Espectando sala ${data.roomId}`, 'info');
-    
-    gameLoop();
+    updatePlayerList();
+    syncRoomControls();
+    updateConfigPanel();
+    ui(function () {
+      Overlays.hideAll();
+      Scenes.go('game');
+      HUD.show();
+    });
+    updateHUD();
+    toast('Mirando la sala ' + data.roomId, 'info');
   });
 
-  socket.on('spectatorJoined', (data) => {
-    if (isSpectating) return; // No mostrar a otros espectadores
-    addCanvasNotification(`${data.spectatorName} se unió como espectador`, 'info');
+  socket.on('spectatorJoined', function (data) {
+    if (isSpectating) return; // no mostrar a otros espectadores
+    toast((data && data.spectatorName ? data.spectatorName : 'Alguien') + ' está mirando la partida', 'info');
   });
 
-  socket.on('spectatorLeft', (data) => {
-    // Actualizar contador si es necesario
+  socket.on('spectatorLeft', function () {
+    // Sin cambios visibles por ahora
   });
 
-  socket.on('countdown', (count, state) => {
-    gameState = state;
-    addCanvasNotification(`Ronda ${state.round} inicia en ${count}...`, 'info');
-    drawInfoCanvas();
-  });
-
-  socket.on('roundTimeUpdate', (timeLeft) => {
+  socket.on('roundTimeUpdate', function (timeLeft) {
     roundTimeLeft = timeLeft;
-    drawInfoCanvas();
+    updateHUD();
+    checkTension();
   });
 
-  socket.on('gameLogicFrame', (data) => {
-    snakes.forEach(localSnake => {
-      const serverSnake = data.players.find(p => p.id === localSnake.id);
-      if (serverSnake) {
-        const portalEvent = data.portals && data.portals.find(p => p.playerId === localSnake.id);
+  socket.on('gameLogicFrame', function (data) {
+    if (!data || !currentRoomId) return;
 
-        if (portalEvent) {
-          localSnake.targetSegments = serverSnake.segments.map(seg => ({ ...seg }));
-          localSnake.segments = serverSnake.segments.map(seg => ({ ...seg }));
-          localSnake.renderSegments = serverSnake.segments.map(seg => ({ ...seg }));
-        } else {
-          localSnake.targetSegments = serverSnake.segments.map(seg => ({ ...seg }));
-          localSnake.segments = serverSnake.segments.map(seg => ({ ...seg }));
+    // 1. Posiciones, comida, proyectiles y eventos de la arena: entran a la línea de tiempo y se
+    //    aplican cuando el render alcanza este frame (applyTimelineSample)
+    if (timeline) {
+      timeline.push(timelineFrame(data, data.timestamp), perfNow());
+    } else {
+      dispatchTimelineFrame({ payload: data });
+      foods = data.foods || [];
+      consumables = data.consumables || [];
+      clientProjectiles = data.projectiles || [];
+    }
+
+    // 2. Estado autoritativo para el HUD: al instante
+    snakes.forEach(function (localSnake) {
+      const serverSnake = data.players.find(function (p) { return p.id === localSnake.id; });
+      if (serverSnake) {
+        localSnake.segments = copySegments(serverSnake.segments);
+        if (!timeline) {
+          localSnake.renderSegments = copySegments(serverSnake.segments);
+          localSnake.direction = { x: serverSnake.direction.x, y: serverSnake.direction.y };
+          localSnake.activeConsumable = serverSnake.activeConsumable;
         }
-        localSnake.direction = { ...serverSnake.direction };
         localSnake.score = serverSnake.score;
         localSnake.gameover = serverSnake.gameover;
         localSnake.scoreLeftToGrow = serverSnake.scoreLeftToGrow;
         localSnake.color = serverSnake.color;
-        localSnake.activeConsumable = serverSnake.activeConsumable;
-      }
-    });    
-    
-    const serverProjectiles = data.projectiles || [];
-    
-    clientProjectiles.forEach(clientProjectile => {
-      const serverProjectile = serverProjectiles.find(p => p.id === clientProjectile.id);
-      if (serverProjectile) {
-        clientProjectile.updateTarget(serverProjectile);
       }
     });
-    
-    clientProjectiles = clientProjectiles.filter(clientProjectile => 
-      serverProjectiles.some(p => p.id === clientProjectile.id)
-    );
-    
-    serverProjectiles.forEach(serverProjectile => {
-      if (!clientProjectiles.find(cp => cp.id === serverProjectile.id)) {
-        clientProjectiles.push(new ClientProjectile(serverProjectile));
-      }
-    });
-    
-    foods = data.foods || [];
-    consumables = data.consumables || [];
+
     gameState = data.gameState;
-    projectiles = data.projectiles || [];
-    
-    if (data.consumableEvents && data.consumableEvents.length > 0) {
-      data.consumableEvents.forEach(event => {
-        const style = consumableStyles[event.consumableType];
-        if (style) {
-          addCanvasNotification(`${event.playerName} obtuvo ${style.name}!`, 'success');
-        }
-      });
-    }
-    
-    if (data.gameState.roundTimeLeft !== undefined) {
+
+    if (data.gameState && data.gameState.roundTimeLeft !== undefined) {
       roundTimeLeft = data.gameState.roundTimeLeft;
     }
+
+    // 3. HUD y tensión
+    updateHUD();
+    checkTension();
   });
 
-  socket.on('roundEnd', (data) => {
-    stopRenderLoop();
-    roomScores = data.scores;
-    
-    addCanvasNotification(`¡Tiempo agotado! Ronda ${data.round} terminada`, 'info');
-    if (data.winner) {
-      addCanvasNotification(`Ganador de la ronda: ${data.winner.name} (${data.winner.score} segmentos)`, 'success');
-    }
-    
-    updatePlayerList(snakes);
-    drawInfoCanvas();
-    
-    /*if (data.nextRound) {
-      setTimeout(() => {
-        addCanvasNotification(`Preparando ronda ${data.round + 1}...`, 'info');
-      }, 2000);
-    }*/
-    
-    if (isHost && data.nextRound) {
-      showElement(startGameButton);
-      updateConfigPanel();
-    }
-    
-    // NUEVO: Actualizar lista con botones (ronda terminada, juego pausado)
-    socket.emit('getOnlinePlayers');
-  });
+  // Fin de la partida: la arena se congela sobre el ganador y después entra la pantalla final.
+  // La sala ya volvió a espera en el servidor: el anfitrión puede jugar de nuevo desde ahí.
+  socket.on('gameEnd', function (data) {
+    data = data || {};
+    settleTimeline();
+    roundLive = false;
+    countdownActive = false;
+    matchFinished = true;
+    freezeUntil = perfNow() + FREEZE_MS;
+    resetTension();
+    gameState = Object.assign({}, gameState, { playing: false });
 
-  socket.on('gameEnd', (data) => {
-    stopRenderLoop();
-    addCanvasNotification(`¡Juego Terminado! Campeón: ${data.winner.name}`, 'success');
-    
+    const winners = Array.isArray(data.winners) ? data.winners : [];
+    if (Arena) ui(function () { Arena.onRoundEnd({ winnerId: winners.length === 1 ? winners[0] : null }); });
+    ui(function () { Backdrop.setMood('game'); }); // sale de tension
+    clearTimeout(finalTimer);
+    finalTimer = setTimeout(function () {
+      finalTimer = 0;
+      if (!matchFinished) return; // ya arrancó otra partida
+      ui(function () { Overlays.final(data, { isMe: function (id) { return !isSpectating && id === socket.id; } }); });
+      syncFinalControls();
+    }, FINAL_DELAY_MS);
+
     if (currentPlayerId) {
       socket.emit('getPlayerStats', currentPlayerId);
     }
-    
-    if (data.roomFinished) {
-      showFinalScreen(data.winner, data.finalScores);
-    } else {
-      showGameOverScreen(`Campeón: ${data.winner.name}`, data.finalScores);
-      if (isHost) {
-        showElement(startGameButton);
-        updateConfigPanel();
-      }
-    }
-    
-    // NUEVO: Actualizar lista con botones (juego terminado)
+    updateHUD();
+    updatePlayerList();
+    syncRoomControls();
+
+    // Actualizar lista con botones (partida terminada)
     socket.emit('getOnlinePlayers');
   });
 
-  socket.on('playerStats', (data) => {
+  // El servidor actual no lo emite; se conserva por compatibilidad
+  socket.on('roomFinished', function (data) {
+    roundLive = false;
+    countdownActive = false;
+    resetTension();
+    ui(function () {
+      Overlays.final({ ranking: [], winners: [], reason: (data && data.reason) || 'La sala se cerró' }, {});
+    });
+  });
+
+  // ===========================================================================
+  // Socket: perfil, ranking, menú
+  // ===========================================================================
+  socket.on('playerStats', function (data) {
     if (data.playerId === currentPlayerId) {
       playerProfile = data;
       savePlayerProfile(data);
@@ -1172,813 +1271,718 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   });
 
-  socket.on('profileLoaded', (profile) => {
+  socket.on('profileLoaded', function (profile) {
+    autoProfilePending = false;
+    cancelProfileRetry();
     playerProfile = profile;
     currentPlayerId = profile.playerId;
     savePlayerProfile(profile);
     updateProfileDisplay(profile.stats);
-    
-    hideElement(document.getElementById('loginView'));
-    showElement(document.getElementById('profileView'));
-    showElement(document.getElementById('roomSelection'));
-    hideElement(document.getElementById('gameInterface'));
-    
-    // NUEVO: Mostrar panel de jugadores en línea
-    showElement(onlinePlayersPanel);
+    setJoinBusy(false);
+    clearInvalid(usernameInput);
     updateLogoutButtonVisibility();
-    addCanvasNotification(`¡Bienvenido, ${profile.stats.name}!`, 'success');
-    
-    // NUEVO: Solicitar lista de jugadores después de un breve delay
-    setTimeout(() => {
+
+    const scene = Scenes.current();
+    if (!currentRoomId && (scene === null || scene === 'intro' || scene === 'login')) {
+      ui(function () { Scenes.go('lobby', { greeting: profile.stats.name }); });
+    }
+    refreshRooms();
+
+    // Pedir la lista de jugadores después de un breve delay
+    setTimeout(function () {
       socket.emit('getOnlinePlayers');
     }, 500);
   });
 
-  socket.on('profileError', (message) => {
-    addCanvasNotification(message, 'error');
-    
-    clearPlayerProfile();
-    usernameInput.value = '';
-    showElement(document.getElementById('loginView'));
-    hideElement(document.getElementById('profileView'));
-    hideElement(document.getElementById('roomSelection'));
-    hideElement(onlinePlayersPanel);
+  socket.on('profileError', function (message) {
+    const automatic = autoProfilePending;
+    autoProfilePending = false;
+    const nameBusy = /ya está conectado/i.test(String(message));
+
+    // Re-registro automático y el nombre figura conectado: casi siempre es nuestro propio socket viejo
+    // que el servidor todavía no descartó. Se reintenta con espera creciente sin tocar la sesión guardada.
+    if (automatic && nameBusy && playerProfile && currentPlayerId && profileRetryCount < PROFILE_RETRY_MAX) {
+      const delay = Math.min(15000, 1500 * Math.pow(2, profileRetryCount));
+      profileRetryCount++;
+      if (profileRetryCount === 1) toast('Recuperando tu sesión…', 'info', 4000);
+      if (profileRetryTimer) clearTimeout(profileRetryTimer);
+      const retryProfile = { stats: playerProfile.stats, playerId: currentPlayerId };
+      profileRetryTimer = setTimeout(function () {
+        profileRetryTimer = 0;
+        if (isConnected) requestSavedProfile(retryProfile);
+      }, delay);
+      return;
+    }
+    cancelProfileRetry();
+
+    const typedByUser = !automatic && Scenes.current() === 'login';
+    toast(translateServerMessage(message), 'error');
+
+    if (automatic) {
+      // La sesión guardada no se borra por un fallo automático: el próximo intento (o el login manual
+      // con el mismo nombre, ver buildIdentity) la recupera. Solo se suelta el perfil en memoria.
+      playerProfile = null;
+      currentPlayerId = null;
+    } else {
+      clearPlayerProfile();
+    }
+    setJoinBusy(false);
+    if (typedByUser) markInvalid(usernameInput);
+    else if (!automatic) usernameInput.value = '';
+    updateProfileDisplay(null);
     updateLogoutButtonVisibility();
+    if (currentRoomId) leaveRoomLocally();
+    ui(function () { Scenes.go('login'); });
   });
 
-  socket.on('leaderboard', (leaderboard) => {
+  socket.on('leaderboard', function (leaderboard) {
     showLeaderboard(leaderboard);
   });
 
-  socket.on('roomFinished', (data) => {
-    stopRenderLoop();
-    showFinalScreen(null, data.finalScores, data.reason);
-  });
+  socket.on('backToMenuSuccess', function () {
+    leaveRoomLocally();
+    ui(function () { Scenes.go('lobby'); }); // no-op si ya se pidió desde el botón
+    refreshRooms();
 
-  socket.on('backToMenuSuccess', () => {
-    stopRenderLoop();
-    currentRoomId = null;
-    isHost = false;
-    isSpectating = false;
-    roomConfig = {};
-    showRoomSelection();
-    updateSpectatorIndicator();
-    addCanvasNotification('Regresaste al menú', 'info');
-    
-    // NUEVO: Actualizar lista sin botones (fuera de sala)
+    // Actualizar lista sin botones (fuera de sala)
     socket.emit('getOnlinePlayers');
   });
 
-  // NUEVO: Eventos para sistema de invitaciones
-  socket.on('onlinePlayersList', (players) => {
+  socket.on('onlinePlayersList', function (players) {
     updateOnlinePlayersList(players);
-	console.log(players);
+    // El servidor reenvía esta lista ante cada cambio de salas: en el lobby, la lista de salas se refresca con ella
+    if (Scenes.current() === 'lobby') scheduleRoomsRefresh();
   });
 
-  socket.on('invitationReceived', (invitationData) => {
+  socket.on('invitationReceived', function (invitationData) {
     handleInvitationReceived(invitationData);
   });
 
-  socket.on('invitationSent', (data) => {
-    addCanvasNotification(`Invitación enviada a ${data.toPlayer}`, 'success');
+  socket.on('invitationSent', function (data) {
+    toast('Invitación enviada a ' + data.toPlayer, 'success');
   });
 
+  // Estado local al salir de una sala (vuelta al lobby, cierre de sesión o reconexión)
+  function leaveRoomLocally() {
+    clearTimeout(finalTimer); finalTimer = 0;
+    currentRoomId = null;
+    isHost = false;
+    isSpectating = false;
+    roomHostId = null;
+    roomHostName = '';
+    roomConfig = {};
+    gameState = { playing: false, round: 1 };
+    snakes = [];
+    foods = [];
+    consumables = [];
+    resetTimeline();
+    roundLive = false;
+    freezeUntil = 0;
+    countdownActive = false;
+    startRequested = false;
+    matchFinished = false;
+    resetTension();
+    previewList = [];
+    knownPlayerIds = new Set();
+    ui(function () { HUD.reset(); });
+    updateSpectatorIndicator();
+    updateRoomInfo();
+    updatePlayerList();
+    syncRoomControls();
+    updateConfigPanel();
+    updateOnlinePlayersList(onlinePlayers);
+  }
+
+  // ===========================================================================
+  // Panel de la sala
+  // ===========================================================================
   function updateConfigPanel() {
-    if (currentRoomId && !gameState.playing) {
-      showElement(configPanel);
-      if (isHost) {
-        showElement(saveConfigButton);
-        setConfigInputsEnabled(true);
-        toggleConfigButton.textContent = '⚙️ Configuración';
-      } else {
-        hideElement(saveConfigButton);
-        setConfigInputsEnabled(false);
-        toggleConfigButton.textContent = '👁️ Ver Configuración';
-      }
+    const visible = !!currentRoomId && !isSpectating && !gameState.playing && !roundLive && !countdownActive;
+    toggleElement(configPanel, visible);
+    if (!visible) return;
+    if (isHost) {
+      setConfigInputsEnabled(true);
+      toggleConfigButton.textContent = 'Configuración';
     } else {
-      hideElement(configPanel);
+      setConfigInputsEnabled(false);
+      toggleConfigButton.textContent = 'Ver configuración';
     }
+    toggleConfigButton.setAttribute('aria-expanded', configSettings.classList.contains('hidden') ? 'false' : 'true');
   }
 
   function setConfigInputsEnabled(enabled) {
-    maxPlayersInput.disabled = !enabled;
-    minPlayersInput.disabled = !enabled;
-    gameSpeedInput.disabled = !enabled;
-    segmentSizeInput.disabled = !enabled;
-    
-    if (immunityEnabledInput) immunityEnabledInput.disabled = !enabled;
-    if (immunityIntervalInput) immunityIntervalInput.disabled = !enabled;
-    if (immunityDurationInput) immunityDurationInput.disabled = !enabled;
+    difficultyInputs.forEach(function (input) { input.disabled = !enabled; });
   }
 
   function updateConfigInputs(config) {
-    maxPlayersInput.value = config.maxPlayers;
-    minPlayersInput.value = config.minPlayers;
-    gameSpeedInput.value = config.gameSpeed;
-    segmentSizeInput.value = config.segmentSize;
-    
-    if (config.consumables && config.consumables.immunity) {
-      if (immunityEnabledInput) immunityEnabledInput.checked = config.consumables.immunity.enabled !== false;
-      if (immunityIntervalInput) immunityIntervalInput.value = config.consumables.immunity.spawnInterval || 13;
-      if (immunityDurationInput) immunityDurationInput.value = config.consumables.immunity.duration || 5;
-    }
+    if (!config) return;
+    const level = difficultyKey(config.difficulty);
+    difficultyInputs.forEach(function (input) { input.checked = input.value === level; });
   }
 
-  function updateCanvasSize(config) {
-    canvas.width = 600;
-    canvas.height = 600;
-    segmentSize = config.segmentSize;
-    handleResize();
+  function readConfigInputs() {
+    const checked = difficultyInputs.filter(function (input) { return input.checked; })[0];
+    return { difficulty: checked ? checked.value : 'medium' };
   }
 
-  function saveConfiguration() {
-    if (!isHost) {
-      addCanvasNotification('Solo el anfitrión puede modificar la configuración', 'error');
-      return;
-    }
+  // Botón de inicio, mensaje de espera y caption del modo atracción
+  function syncRoomControls() {
+    const inRoom = !!currentRoomId && !isSpectating;
+    const count = snakes.length;
+    const min = (roomConfig && roomConfig.minPlayers) || 2;
+    const idleRoom = inRoom && !gameState.playing && !roundLive && !countdownActive;
+    const canStart = idleRoom && isHost && count >= min;
 
-    const newConfig = {
-      maxPlayers: parseInt(maxPlayersInput.value),
-      minPlayers: parseInt(minPlayersInput.value),
-      gameSpeed: parseInt(gameSpeedInput.value),
-      segmentSize: parseInt(segmentSizeInput.value),
-      consumables: {
-        immunity: {
-          enabled: immunityEnabledInput ? immunityEnabledInput.checked : true,
-          spawnInterval: immunityIntervalInput ? parseInt(immunityIntervalInput.value) : 5,
-          duration: immunityDurationInput ? parseInt(immunityDurationInput.value) : 5
-        }
+    toggleElement(startGameButton, canStart);
+    startGameButton.disabled = startRequested;
+
+    let waitText = '';
+    if (idleRoom) {
+      if (count < min) {
+        const missing = min - count;
+        waitText = missing === 1 ? 'Falta 1 jugador para empezar' : 'Faltan ' + missing + ' jugadores para empezar';
+      } else if (!isHost) {
+        waitText = 'Esperando a que el anfitrión inicie la partida';
       }
-    };
-
-    if (newConfig.minPlayers > newConfig.maxPlayers) {
-      addCanvasNotification('Los jugadores mínimos no pueden exceder los máximos', 'error');
-      return;
+    }
+    if (waitText) {
+      if (waitingSpan.textContent !== waitText) waitingSpan.textContent = waitText;
+      showElement(waitingSpan);
+    } else {
+      hideElement(waitingSpan);
     }
 
-    socket.emit('updateRoomConfig', newConfig);
+    if (!idleRoom) idleCaption = '';
+    else if (count < min) idleCaption = 'Esperando jugadores';
+    else idleCaption = isHost ? 'Todo listo: inicia la partida cuando quieras' : 'Esperando al anfitrión';
+
+    if (leaveRoomButton) toggleElement(leaveRoomButton, idleRoom);
+    syncFinalControls();
   }
 
-  function showRoomSelection() {
-    showElement(document.getElementById('roomSelection'));
-    hideElement(document.getElementById('gameInterface'));
-  }
-
-  function updateRoomsList(rooms) {
-    roomsList.innerHTML = '';
-    
-    if (rooms.length === 0) {
-      const emptyMsg = document.createElement('li');
-      emptyMsg.textContent = 'No hay salas disponibles';
-      emptyMsg.className = 'empty-room';
-      roomsList.appendChild(emptyMsg);
-      return;
+  // Botones de la pantalla final. El anfitrión puede jugar de nuevo con los que sigan en la sala; los
+  // invitados vuelven a la sala o esperan; un espectador solo puede volver a las salas.
+  function syncFinalControls() {
+    if (!playAgainButton) return;
+    const player = !!currentRoomId && !isSpectating;
+    const min = (roomConfig && roomConfig.minPlayers) || 2;
+    const missing = Math.max(0, min - snakes.length);
+    toggleElement(playAgainButton, player && isHost);
+    playAgainButton.disabled = startRequested || missing > 0;
+    toggleElement(backToRoomButton, player);
+    const leaveText = player ? 'Salir a las salas' : 'Volver a las salas';
+    if (backToMenuButton.textContent !== leaveText) backToMenuButton.textContent = leaveText;
+    backToMenuButton.classList.toggle('btn-quiet', player);
+    backToMenuButton.classList.toggle('btn-primary', !player);
+    let hint = '';
+    if (player) {
+      if (missing > 0) hint = missing === 1 ? 'Falta 1 jugador para jugar de nuevo' : 'Faltan ' + missing + ' jugadores para jugar de nuevo';
+      else if (!isHost) hint = (roomHostName || 'El anfitrión') + ' puede iniciar otra partida';
     }
-    
-    rooms.forEach(room => {
-      const roomItem = document.createElement('li');
-      roomItem.className = 'room-item';
-      const consumablesStatus = (room.config.consumables && room.config.consumables.immunity && room.config.consumables.immunity.enabled) ? '🛡️' : '';
-      const isPlaying = room.playing || false;
-      
-      let buttonsHtml = '';
-      if (isPlaying) {
-        buttonsHtml = `<button onclick="spectateRoom('${room.id}')" class="join-room-btn" style="background: #333; color: #00ffff; border-color: #00ffff;">👁️ Espectar</button>`;
-      } else if (room.players < room.maxPlayers) {
-        buttonsHtml = `<button onclick="joinSpecificRoom('${room.id}')" class="join-room-btn">Unirse</button>`;
-      } else {
-        buttonsHtml = `<span style="color: #888; font-size: 0.9em;">Llena</span>`;
+    if (finalHint.textContent !== hint) finalHint.textContent = hint;
+    toggleElement(finalHint, !!hint);
+  }
+
+  function updatePlayerList() {
+    if (!playerList) return;
+    const playing = !!gameState.playing && roundLive;
+    // En partida, por largo; en la sala, en el orden en que entraron
+    const sortedPlayers = playing ? snakes.slice().sort(function (a, b) { return b.score - a.score; }) : snakes.slice();
+
+    const nextIds = new Set();
+    const frag = document.createDocumentFragment();
+    const now = Date.now();
+    sortedPlayers.forEach(function (player, index) {
+      nextIds.add(player.id);
+      const isMe = !isSpectating && player.id === socket.id;
+      const listItem = el('li', 'player-item' + (player.gameover ? ' eliminated' : '') + (isMe ? ' current-player' : ''));
+      if (!knownPlayerIds.has(player.id)) listItem.setAttribute('data-reveal', '');
+      const colors = bio(player.color);
+      listItem.style.setProperty('--c', colors.body);
+      listItem.style.setProperty('--t', colors.text);
+
+      listItem.appendChild(el('span', 'player-rank', index + 1));
+      const dot = el('i', 'player-dot');
+      dot.setAttribute('aria-hidden', 'true');
+      listItem.appendChild(dot);
+      const name = el('span', 'player-name', player.name);
+      name.title = player.name;
+      listItem.appendChild(name);
+      if (player.id === roomHostId) listItem.appendChild(el('span', 'player-host', 'Anfitrión'));
+
+      const score = el('span', 'player-score');
+      if (playing) score.textContent = String(player.score);
+      listItem.appendChild(score);
+
+      const status = el('span', 'player-status');
+      const ac = player.activeConsumable;
+      if (!player.gameover && ac && ac.type === 'immunity' && now < ac.endTime) {
+        status.setAttribute('role', 'img');
+        status.setAttribute('aria-label', 'Con escudo');
+        status.appendChild(iconEl('i-medusa'));
       }
-      
-      roomItem.innerHTML = `
-        <div class="room-info">
-          <strong>Sala: ${room.id}</strong> ${isPlaying ? '🎮' : ''} ⚔️${consumablesStatus}<br>
-          Anfitrión: ${room.hostName}<br>
-          Jugadores: ${room.players}/${room.maxPlayers}${isPlaying ? ' (En juego)' : ''}
-          <div class="room-config">
-            3 rondas • 35s • 600x600 • Velocidad: ${room.config.gameSpeed}ms
-          </div>
-        </div>
-        ${buttonsHtml}
-      `;
-      roomsList.appendChild(roomItem);
+      listItem.appendChild(status);
+
+      frag.appendChild(listItem);
     });
+
+    clearNode(playerList);
+    playerList.appendChild(frag);
+    knownPlayerIds = nextIds;
+
+    if (playersCount) {
+      const max = roomConfig && roomConfig.maxPlayers;
+      playersCount.textContent = currentRoomId && snakes.length ? '(' + snakes.length + (max ? ' de ' + max : '') + ')' : '';
+    }
   }
 
-  function updateRoomInfo(roomData) {
-    if (roomInfo && roomData) {
-      let statusText = '';
-      if (isSpectating) {
-        statusText = '<strong style="color: #00ffff;">👁️ Modo Espectador</strong><br>';
-      } else if (roomData.host === socket.id) {
-        statusText = '<strong>Anfitrión:</strong> Tú<br>';
-      } else {
-        statusText = '<strong>Anfitrión:</strong> Otro jugador<br>';
-      }
-      
-      roomInfo.innerHTML = `
-        ${statusText}
-        <strong>Sala:</strong> ${roomData.roomId}
-      `;
-    }
+  function updateRoomInfo() {
+    if (!roomInfo) return;
+    clearNode(roomInfo);
+    if (!currentRoomId) return;
+    const title = el('p', 'room-title');
+    title.appendChild(document.createTextNode('Sala'));
+    title.appendChild(el('span', 'room-code', currentRoomId));
+    roomInfo.appendChild(title);
+
+    // El espectador ya lo ve en el badge del HUD y en la indicación de controles: sin línea de rol aquí
+    if (isSpectating) return;
+    const role = isHost ? 'Eres el anfitrión' : (roomHostName ? 'Anfitrión: ' + roomHostName : 'Anfitrión: otro jugador');
+    roomInfo.appendChild(el('p', 'room-role', role));
   }
 
   function updateSpectatorIndicator() {
-    const spectatorBanner = document.getElementById('spectatorBanner');
-    if (spectatorBanner) {
-      if (isSpectating) {
-        showElement(spectatorBanner);
-      } else {
-        hideElement(spectatorBanner);
+    toggleElement(spectatorBanner, isSpectating);
+    if (!controlsHint) return;
+    let variant = 'player';
+    if (isSpectating) variant = 'spectator';
+    else if (coarseQuery && coarseQuery.matches && !keyboardSeen) variant = 'touch';
+    if (controlsHint.getAttribute('data-variant') !== variant) controlsHint.setAttribute('data-variant', variant);
+  }
+
+  // ===========================================================================
+  // Lobby: lista de salas
+  // ===========================================================================
+  // Nivel conocido o "medium" (salas de un servidor viejo, espectador sin el campo)
+  function difficultyKey(difficulty) {
+    return Object.prototype.hasOwnProperty.call(DIFFICULTY_NAMES, difficulty) ? difficulty : 'medium';
+  }
+
+  // 120 -> "2 min", 90 -> "1 min 30 s", 10 -> "10 s"
+  function durationText(seconds) {
+    const m = Math.floor(seconds / 60), r = seconds % 60;
+    if (!m) return r + ' s';
+    return m + ' min' + (r ? ' ' + r + ' s' : '');
+  }
+
+  function roomConfigText(config) {
+    const cfg = config || {};
+    return 'Partida de ' + durationText(+cfg.roundTime || 120) + ', nivel ' + DIFFICULTY_NAMES[difficultyKey(cfg.difficulty)];
+  }
+
+  // Firma de lo que muestra una fila: si no cambió, la fila (y su botón, con foco o puntero encima) queda intacta
+  function roomSignature(room) {
+    const cfg = room.config || {};
+    return [room.playing ? 1 : 0, room.players | 0, room.maxPlayers | 0, room.hostName || '',
+      cfg.roundTime, cfg.difficulty || ''].join('|');
+  }
+
+  // Arma (o actualiza en el lugar) la fila de una sala. El botón de acción se conserva si la acción
+  // no cambió: reconstruirlo le sacaba el foco y perdía el clic que cruzaba una actualización.
+  function fillRoomItem(roomItem, room, code) {
+    const isPlaying = !!room.playing;
+    const count = room.players | 0;
+    const max = Math.max(count, room.maxPlayers | 0);
+    const full = !isPlaying && count >= max;
+    const action = isPlaying ? 'spectate' : (full ? '' : 'join');
+
+    let keepButton = null;
+    const oldButton = roomItem.querySelector('button[data-action]');
+    if (oldButton && action && oldButton.getAttribute('data-action') === action) keepButton = oldButton;
+    Array.prototype.slice.call(roomItem.childNodes).forEach(function (child) {
+      if (child !== keepButton) roomItem.removeChild(child);
+    });
+
+    roomItem.setAttribute('data-state', isPlaying ? 'playing' : (full ? 'full' : 'open'));
+
+    const info = el('div', 'room-info');
+    info.appendChild(el('span', 'room-code', code));
+    if (isPlaying) info.appendChild(el('span', 'room-live', 'En juego'));
+    const host = el('span', 'room-host', 'Anfitrión: ' + (room.hostName || ''));
+    host.title = room.hostName || '';
+    info.appendChild(host);
+    const capacity = el('span', 'room-capacity');
+    capacity.setAttribute('role', 'img');
+    capacity.setAttribute('aria-label', count + ' de ' + max + ' jugadores');
+    for (let i = 0; i < max && i < 16; i++) capacity.appendChild(el('i', i < count ? 'is-on' : null));
+    info.appendChild(capacity);
+    info.appendChild(el('span', 'room-config', roomConfigText(room.config)));
+    roomItem.insertBefore(info, roomItem.firstChild);
+
+    if (keepButton) return;
+    if (action === 'spectate') {
+      const spectate = el('button', 'join-room-btn is-spectate', 'Mirar');
+      spectate.type = 'button';
+      spectate.setAttribute('data-room-id', code);
+      spectate.setAttribute('data-action', 'spectate');
+      spectate.setAttribute('aria-label', 'Mirar la sala ' + code);
+      roomItem.appendChild(spectate);
+    } else if (action === 'join') {
+      const join = el('button', 'join-room-btn', 'Unirse');
+      join.type = 'button';
+      join.setAttribute('data-room-id', code);
+      join.setAttribute('data-action', 'join');
+      join.setAttribute('aria-label', 'Unirse a la sala ' + code);
+      roomItem.appendChild(join);
+    } else {
+      roomItem.appendChild(el('span', 'room-full', 'Llena'));
+    }
+  }
+
+  function updateRoomsList(rooms) {
+    if (!roomsList) return;
+    const list = Array.isArray(rooms) ? rooms : [];
+    const nextCodes = new Set();
+    const ordered = [];
+
+    list.forEach(function (room) {
+      const code = String(room.id || '');
+      if (!code || nextCodes.has(code)) return;
+      nextCodes.add(code);
+      const sig = roomSignature(room);
+      let entry = roomNodes.get(code);
+      if (!entry) {
+        const li = el('li', 'room-item');
+        if (!knownRoomCodes.has(code)) li.setAttribute('data-reveal', '');
+        entry = { li: li, sig: '' };
+        roomNodes.set(code, entry);
+      } else if (entry.li.hasAttribute('data-reveal')) {
+        entry.li.removeAttribute('data-reveal'); // la animación de entrada es solo para filas nuevas
+      }
+      if (entry.sig !== sig) {
+        fillRoomItem(entry.li, room, code);
+        entry.sig = sig;
+      }
+      ordered.push(entry.li);
+    });
+
+    // Fuera: salas que ya no están y cualquier otro nodo (mensaje de lista vacía, "Buscando salas…")
+    roomNodes.forEach(function (entry, code) {
+      if (!nextCodes.has(code)) roomNodes.delete(code);
+    });
+    Array.prototype.slice.call(roomsList.childNodes).forEach(function (child) {
+      if (ordered.indexOf(child) === -1) roomsList.removeChild(child);
+    });
+
+    if (ordered.length === 0) {
+      roomsList.appendChild(el('li', 'empty-room', 'No hay salas abiertas. Crea una y comparte el código.'));
+    } else {
+      // Solo se mueven las filas fuera de orden (mover un nodo enfocado le saca el foco)
+      for (let i = 0; i < ordered.length; i++) {
+        const current = roomsList.children[i];
+        if (current !== ordered[i]) roomsList.insertBefore(ordered[i], current || null);
       }
     }
-    
-    // Actualizar controles hint
-    const controlsHint = document.querySelector('.controls-hint');
-    if (controlsHint && isSpectating) {
-      controlsHint.innerHTML = '<strong>👁️ MODO ESPECTADOR</strong><br>Estás viendo la partida en tiempo real';
-    } else if (controlsHint) {
-      controlsHint.innerHTML = `
-        <strong>Controles:</strong><br>
-        ⬆️⬇️⬅️➡️ Flechas o WASD<br>
-        🎯 Espacio - Atacar
-      `;
-    }
+    knownRoomCodes = nextCodes;
   }
 
-  function spectateRoom(roomId) {
-    if (!playerProfile || !currentPlayerId) {
-      addCanvasNotification('Necesitas estar conectado para espectar', 'error');
-      return;
-    }
-    
-    socket.emit('spectateRoom', { 
-      roomId: roomId,
-      spectatorName: playerProfile.stats.name
-    });
-  }
-
-  window.spectateRoom = spectateRoom;
-
-  function updateHostControls() {
-    if (isHost && gameState && !gameState.playing) {
-      showElement(startGameButton);
-    } else {
-      hideElement(startGameButton);
-    }
-  }
+  roomsList.addEventListener('click', function (event) {
+    const button = event.target.closest ? event.target.closest('button[data-action]') : null;
+    if (!button || !roomsList.contains(button)) return;
+    const roomId = button.getAttribute('data-room-id');
+    if (button.getAttribute('data-action') === 'spectate') spectateRoom(roomId, button);
+    else joinSpecificRoom(roomId, button);
+  });
 
   function refreshRooms() {
     socket.emit('getRooms');
   }
-
-  function drawGrid() {
-    for (let x = 0; x <= canvas.width; x += segmentSize) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, canvas.height);
-      ctx.stroke();
-    }
-    
-    for (let y = 0; y <= canvas.height; y += segmentSize) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(canvas.width, y);
-      ctx.stroke();
-    }
+  function scheduleRoomsRefresh() {
+    if (roomsRefreshTimer) return;
+    roomsRefreshTimer = setTimeout(function () {
+      roomsRefreshTimer = 0;
+      if (Scenes.current() === 'lobby') refreshRooms();
+    }, 300);
   }
 
-  function drawPlayers() {
-    snakes.forEach((snake, index) => {
-      if (!snake.gameover && snake.getRenderSegments) {
-        const isCurrentPlayer = snake.id === socket.id;
-        const baseColor = snake.color;
-        const renderSegments = snake.getRenderSegments();
-        
-        const hasImmunity = snake.activeConsumable && 
-                           snake.activeConsumable.type === 'immunity' && 
-                           Date.now() < snake.activeConsumable.endTime;
-        
-        renderSegments.forEach((segment, segIndex) => {
-          const isHead = segIndex === 0;
-          
-          drawRetroSnakeSegment(
-            ctx, 
-            segment.x, 
-            segment.y, 
-            segmentSize, 
-            baseColor, 
-            isHead, 
-            isHead ? snake.direction : null,
-            isCurrentPlayer,
-            hasImmunity
-          );
-        });
-      }
-    });
-
-    if (foods && foods.length > 0) {
-      foods.forEach(food => {
-        drawRetroFood(ctx, food, segmentSize);
-      });
+  function spectateRoom(roomId, button) {
+    if (!playerProfile || !currentPlayerId) {
+      toast('Inicia sesión para mirar partidas', 'error');
+      return;
     }
-
-    if (consumables && consumables.length > 0) {
-      consumables.forEach(consumable => {
-        drawRetroConsumable(ctx, consumable, segmentSize);
-      });
-    }
-
-    if (clientProjectiles && clientProjectiles.length > 0) {
-      clientProjectiles.forEach(projectile => {
-        drawRetroProjectile(ctx, projectile, segmentSize);
-      });
-    }
-  }
-  
-  function drawCountdown() {
-	if (roundTimeLeft > 10 || roundTimeLeft < 0) return;
-	  
-	  const centerX = canvas.width / 2;
-	  const centerY = canvas.height / 2;
-	  
-	  // Configurar el contexto para el countdown
-	  ctx.save();
-	  
-	  // Tamaño de fuente dinámico basado en el tiempo restante
-	  const fontSize = 220 + (10 - roundTimeLeft) * 8; // Crece a medida que se acerca a 0
-	  ctx.font = `bold ${fontSize}px Share Tech Mono, monospace`;
-	  ctx.textAlign = 'center';
-	  ctx.textBaseline = 'middle';
-	  
-	  // Efecto de pulsación
-	  const pulseScale = 1 + Math.sin(Date.now() * 0.01) * 0.1;
-	  ctx.scale(pulseScale, pulseScale);
-	  
-      // Color y transparencia basados en urgencia
-      let alpha, strokeColor, fillColor;
-      if (roundTimeLeft <= 3) {
-		// Rojo urgente para últimos 3 segundos
-		alpha = 0.2;
-		strokeColor = '#f85149';
-		fillColor = '#f85149';
-	  } else if (roundTimeLeft <= 5) {
-		// Amarillo de advertencia
-		alpha = 0.15;
-		strokeColor = '#d29922';
-		fillColor = '#d29922';
-	  } else {
-		// Azul normal
-		alpha = 0.1;
-		strokeColor = '#58a6ff';
-		fillColor = '#58a6ff';
-	  }
-	  
-	  // Sombra/Glow para mejor visibilidad
-	  ctx.shadowColor = strokeColor;
-	  ctx.shadowBlur = 20;
-	  ctx.globalAlpha = alpha;
-	  
-	  // Dibujar contorno grueso
-	  ctx.strokeStyle = strokeColor;
-	  ctx.lineWidth = 6;
-	  ctx.strokeText(roundTimeLeft.toString(), centerX / pulseScale, centerY / pulseScale);
-	  
-	  // Dibujar texto principal
-	  ctx.fillStyle = fillColor;
-	  ctx.fillText(roundTimeLeft.toString(), centerX / pulseScale, centerY / pulseScale);
-	  
-	  // Texto adicional "TIEMPO!" en los últimos 3 segundos
-	  if (roundTimeLeft <= 1) {
-		ctx.font = `400 48px Share Tech Mono, monospace`;
-		ctx.globalAlpha = alpha * 0.8;
-		ctx.fillStyle = fillColor;
-		ctx.strokeStyle = strokeColor;
-		ctx.lineWidth = 2;
-		
-		const warningY = (centerY / pulseScale) + 160;
-		ctx.strokeText('¡TIEMPO!', centerX / pulseScale, warningY);
-		ctx.fillText('¡TIEMPO!', centerX / pulseScale, warningY);
-	  }
-	  
-	  ctx.restore();
-	}
-
-  function gameLoop() {
-    ctx.fillStyle = retroColors.background;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    drawGrid();
-    drawPlayers();
-	drawCountdown();
-    updatePlayerList(snakes);
-    
-    // Actualizar canvas de información
-    drawInfoCanvas();
-  }
-
-  function updatePlayerList(players) {
-    playerList.innerHTML = '';
-    
-    const sortedPlayers = players.sort((a, b) => {
-      if (gameState.playing) {
-        return b.score - a.score;
-      } else {
-        const aTotal = (roomScores && roomScores[a.id]) ? roomScores[a.id].totalScore : 0;
-        const bTotal = (roomScores && roomScores[b.id]) ? roomScores[b.id].totalScore : 0;
-        return bTotal - aTotal;
-      }
-    });
-    
-    sortedPlayers.forEach((player, index) => {
-      const listItem = document.createElement('li');
-      listItem.className = `player-item ${player.gameover ? 'eliminated' : ''} ${player.id === socket.id ? 'current-player' : ''}`;
-      
-      const rank = document.createElement('span');
-      rank.className = 'player-rank';
-      rank.textContent = `#${index + 1}`;
-      
-      const name = document.createElement('span');
-      name.className = 'player-name';
-      name.textContent = player.name;
-      
-      const score = document.createElement('span');
-      score.className = 'player-score';
-      
-      if (gameState.playing) {
-        score.textContent = player.score;
-      } else {
-        const totalScore = (roomScores && roomScores[player.id]) ? roomScores[player.id].totalScore : 0;
-        const roundWins = (roomScores && roomScores[player.id]) ? roomScores[player.id].roundWins : 0;
-        score.innerHTML = `${totalScore}<br><small>${roundWins}V</small>`;
-      }
-      
-      const status = document.createElement('span');
-      status.className = 'player-status';
-      
-      let statusText = player.gameover ? '💀' : '🐍';
-      if (player.activeConsumable && !player.gameover) {
-        if (player.activeConsumable.type === 'immunity' && Date.now() < player.activeConsumable.endTime) {
-          statusText = '🛡️';
-        }
-      }
-      status.textContent = statusText;
-      
-      listItem.appendChild(rank);
-      listItem.appendChild(name);
-      listItem.appendChild(score);
-      listItem.appendChild(status);
-      
-      playerList.appendChild(listItem);
+    if (button) setPendingButton(button);
+    socket.emit('spectateRoom', {
+      roomId: roomId,
+      spectatorName: playerProfile.stats.name
     });
   }
+  window.spectateRoom = function (roomId) { spectateRoom(roomId); };
 
-  function showFinalScreen(winner, finalScores, reason = null) {
-    const finalScreen = document.getElementById('finalScreen');
-    const finalTitle = document.getElementById('finalTitle');
-    const finalMessage = document.getElementById('finalMessage');
-    const finalScoresList = document.getElementById('finalScoresList');
-    
-    if (reason) {
-      finalTitle.textContent = 'Sala Terminada';
-      finalMessage.textContent = reason;
-    } else {
-      finalTitle.textContent = '¡Juego Completo!';
-      finalMessage.textContent = winner ? `Campeón: ${winner.name}` : 'Juego terminado';
+  function joinSpecificRoom(roomId, button) {
+    const username = currentUsername();
+    if (!isValidUsername(username)) {
+      toast('El nombre debe tener entre 2 y 20 caracteres', 'error');
+      ui(function () { Scenes.go('login'); });
+      return;
     }
-    
-    finalScoresList.innerHTML = '';
-    const sortedScores = Object.values(finalScores).sort((a, b) => b.totalScore - a.totalScore);
-    
-    sortedScores.forEach((player, index) => {
-      const item = document.createElement('li');
-      item.className = 'final-score-item';
-      item.innerHTML = `
-        <span class="final-rank">#${index + 1}</span>
-        <span class="final-name">${player.name}</span>
-        <span class="final-total">${player.totalScore} pts</span>
-        <span class="final-wins">${player.roundWins} victorias</span>
-      `;
-      finalScoresList.appendChild(item);
-    });
-    
-    hideElement(gameInterface);
-    showElement(finalScreen);
+    if (button) setPendingButton(button);
+    socket.emit('joinRoom', buildIdentity(username, { roomId: roomId }));
   }
+  window.joinSpecificRoom = function (roomId) { joinSpecificRoom(roomId); };
 
-  function hideFinalScreen() {
-    hideElement(document.getElementById('finalScreen'));
-  }
+  function joinRoomFromInput() {
+    const username = currentUsername();
+    const roomId = roomIdInput.value.trim().toUpperCase();
 
-  function showGameOverScreen(message, scores) {
-    gameOverScreen.classList.remove('hidden');
-    scoreDisplay.textContent = message;
-  }
-
-  function hideGameOverScreen() {
-    gameOverScreen.classList.add('hidden');
-  }
-
-  function showElement(element) {
-    if (element) element.classList.remove('hidden');
-  }
-
-  function hideElement(element) {
-    if (element) element.classList.add('hidden');
-  }
-
-  function handleResize() {
-    const container = canvas.parentElement;
-    const maxWidth = container.clientWidth; //- 40;
-    const maxHeight = window.innerHeight - 20;
-    
-    if (canvas.width > maxWidth || canvas.height > maxHeight) {
-      const scale = Math.min(maxWidth / canvas.width, maxHeight / canvas.height);
-      canvas.style.transform = `scale(${scale})`;
-      canvas.style.transformOrigin = 'top left';
-      
-      if (infoCanvas) {
-        infoCanvas.style.transform = `scale(${scale})`;
-        infoCanvas.style.transformOrigin = 'top left';
-      }
-    } else {
-      canvas.style.transform = 'none';
-      if (infoCanvas) {
-        infoCanvas.style.transform = 'none';
-      }
+    if (!isValidUsername(username)) {
+      toast('El nombre debe tener entre 2 y 20 caracteres', 'error');
+      ui(function () { Scenes.go('login'); });
+      return;
     }
-  }
-
-  function resetPlayerProfile() {
-    socket.emit('logout', { currentRoomId });
-    
-    clearPlayerProfile();
-    usernameInput.value = '';
-    const profileInfo = document.getElementById('profileInfo');
-    if (profileInfo) {
-      profileInfo.innerHTML = '<div class="profile-stats"><span>Ingresa tu nombre para ver estadísticas</span></div>';
+    if (!roomId || roomId.length !== 6) {
+      markInvalid(roomIdInput);
+      toast('El código de sala tiene 6 caracteres', 'error');
+      roomIdInput.focus();
+      return;
     }
-    
-    showElement(document.getElementById('loginView'));
-    hideElement(document.getElementById('profileView'));
-    hideElement(document.getElementById('roomSelection'));
-    hideElement(document.getElementById('gameInterface'));
-    hideElement(onlinePlayersPanel);
-    updateLogoutButtonVisibility();
-    addCanvasNotification('Sesión cerrada.', 'info');
+    clearInvalid(roomIdInput);
+    setPendingButton(joinRoomButton);
+    socket.emit('joinRoom', buildIdentity(username, { roomId: roomId }));
   }
 
-  function showGameInterface() {
-    hideElement(document.getElementById('roomSelection'));
-    showElement(document.getElementById('gameInterface'));
-  }
-
+  // ===========================================================================
+  // Ranking global
+  // ===========================================================================
   function requestLeaderboard() {
+    if (leaderboardList) {
+      clearNode(leaderboardList);
+      leaderboardList.appendChild(el('li', 'leaderboard-item loading', 'Cargando ranking…'));
+    }
+    ui(function () { Overlays.open(leaderboardModal); });
     socket.emit('getLeaderboard');
   }
 
   function showLeaderboard(leaderboard) {
-    const leaderboardModal = document.getElementById('leaderboardModal');
-    const leaderboardList = document.getElementById('leaderboardList');
-    
-    if (leaderboardModal && leaderboardList) {
-      leaderboardList.innerHTML = '';
-      
-      const sortedLeaderboard = leaderboard.sort((a, b) => {
-        const aHasMinGames = a.games_played >= 3;
-        const bHasMinGames = b.games_played >= 3;
-        
-        if (aHasMinGames && bHasMinGames) {
-          const aWinRate = a.games_played > 0 ? (a.wins / a.games_played) : 0;
-          const bWinRate = b.games_played > 0 ? (b.wins / b.games_played) : 0;
-          
-          if (aWinRate !== bWinRate) {
-            return bWinRate - aWinRate;
-          }
-          return b.wins - a.wins;
-        }
-        
-        if (!aHasMinGames && !bHasMinGames) {
-          if (a.wins !== b.wins) {
-            return b.wins - a.wins;
-          }
-          return b.games_played - a.games_played;
-        }
-        
-        if (aHasMinGames && !bHasMinGames) {
-          return -1;
-        }
-        if (!aHasMinGames && bHasMinGames) {
-          return 1;
-        }
-        
-        return 0;
-      });
-      
-      sortedLeaderboard.forEach((player, index) => {
-        const item = document.createElement('li');
-        item.className = 'leaderboard-item';
-        item.innerHTML = `
-          <span class="rank">#${index + 1}</span>
-          <span class="name">${player.name}</span>
-          <span class="wins">${player.wins}V</span>
-          <span class="games">${player.games_played}P</span>
-          <span class="winrate">${player.games_played > 0 ? Math.round((player.wins / player.games_played) * 100) : 0}%</span>
-        `;
-        leaderboardList.appendChild(item);
-      });
-      
-      showElement(leaderboardModal);
+    if (!leaderboardList) return;
+    const list = Array.isArray(leaderboard) ? leaderboard.slice() : [];
+
+    // Primero quienes tienen 3 partidas o más, por porcentaje de victorias (orden original)
+    list.sort(function (a, b) {
+      const aHasMinGames = a.games_played >= 3;
+      const bHasMinGames = b.games_played >= 3;
+
+      if (aHasMinGames && bHasMinGames) {
+        const aWinRate = a.games_played > 0 ? (a.wins / a.games_played) : 0;
+        const bWinRate = b.games_played > 0 ? (b.wins / b.games_played) : 0;
+        if (aWinRate !== bWinRate) return bWinRate - aWinRate;
+        return b.wins - a.wins;
+      }
+      if (!aHasMinGames && !bHasMinGames) {
+        if (a.wins !== b.wins) return b.wins - a.wins;
+        return b.games_played - a.games_played;
+      }
+      if (aHasMinGames && !bHasMinGames) return -1;
+      if (!aHasMinGames && bHasMinGames) return 1;
+      return 0;
+    });
+
+    const frag = document.createDocumentFragment();
+    if (list.length === 0) {
+      frag.appendChild(el('li', 'leaderboard-item is-empty', 'Todavía no hay partidas registradas.'));
+    }
+    list.forEach(function (player, index) {
+      const item = el('li', 'leaderboard-item');
+      const games = player.games_played | 0;
+      const wins = player.wins | 0;
+      item.appendChild(el('span', 'rank', index + 1));
+      const name = el('span', 'name', player.name);
+      name.title = player.name;
+      item.appendChild(name);
+      item.appendChild(el('span', 'wins', wins));
+      item.appendChild(el('span', 'games', games));
+      item.appendChild(el('span', 'winrate', (games > 0 ? Math.round((wins / games) * 100) : 0) + ' %'));
+      frag.appendChild(item);
+    });
+    clearNode(leaderboardList);
+    leaderboardList.appendChild(frag);
+  }
+
+  // ===========================================================================
+  // Sesión
+  // ===========================================================================
+  function resetPlayerProfile() {
+    socket.emit('logout', { currentRoomId: currentRoomId });
+    cancelProfileRetry();
+    autoProfilePending = false;
+
+    clearPlayerProfile();
+    leaveRoomLocally();
+    usernameInput.value = '';
+    clearInvalid(usernameInput);
+    setJoinBusy(false);
+    updateProfileDisplay(null);
+    updateLogoutButtonVisibility();
+    onlinePlayers = [];
+    clearNode(onlinePlayersList);
+    onlinePlayersList.appendChild(el('li', 'online-players-empty', 'Buscando jugadores…'));
+    if (dockCount) dockCount.textContent = '';
+    ui(function () {
+      Overlays.hideAll();
+      Overlays.close(leaderboardModal);
+      Scenes.go('login');
+    });
+    toast('Sesión cerrada', 'info');
+  }
+  window.resetPlayerProfile = resetPlayerProfile;
+
+  function submitLogin() {
+    const username = usernameInput.value.trim();
+    if (isValidUsername(username)) {
+      clearInvalid(usernameInput);
+      setJoinBusy(true);
+      cancelProfileRetry();
+      autoProfilePending = false;
+      // Tras "sesión abierta en otra pestaña" el servidor nos desconectó y socket.io no reconecta solo
+      if (!socket.connected) socket.connect();
+      socket.emit('getOrCreateProfile', buildIdentity(username));
+    } else {
+      markInvalid(usernameInput);
+      toast('El nombre debe tener entre 2 y 20 caracteres', 'error');
+      usernameInput.focus();
     }
   }
 
-  window.addEventListener('resize', handleResize);
-
-  window.joinSpecificRoom = function(roomId) {
-    const username = usernameInput.value.trim();
-    if (!username || username.length < 2 || username.length > 20) {
-      addCanvasNotification('Por favor ingresa un nombre válido (2-20 caracteres)', 'error');
-      usernameInput.focus();
-      return;
-    }
-    
-    const dataToSend = { roomId, username };
-    if (currentPlayerId && playerProfile && playerProfile.stats.name.toLowerCase() === username.toLowerCase()) {
-      dataToSend.playerId = currentPlayerId;
-    } else {
-      currentPlayerId = null;
-    }
-    
-    socket.emit('joinRoom', dataToSend);
-  };
-
-  window.resetPlayerProfile = resetPlayerProfile;
-
-  // Event Listeners
-  toggleConfigButton.addEventListener('click', () => {
-    if (configSettings.classList.contains('hidden')) {
-      showElement(configSettings);
-      toggleConfigButton.textContent = '▼ Configuración';
-    } else {
-      hideElement(configSettings);
-      toggleConfigButton.textContent = '⚙️ Configuración';
-    }
+  // ===========================================================================
+  // Listeners de la interfaz
+  // ===========================================================================
+  toggleConfigButton.addEventListener('click', function () {
+    const opening = configSettings.classList.contains('hidden');
+    toggleElement(configSettings, opening);
+    toggleConfigButton.setAttribute('aria-expanded', opening ? 'true' : 'false');
   });
 
-  saveConfigButton.addEventListener('click', () => {
-    saveConfiguration();
+  // El anfitrión cambia de nivel con un toque: el servidor lo reparte a toda la sala
+  difficultyInputs.forEach(function (input) {
+    input.addEventListener('change', function () {
+      if (isHost && input.checked) socket.emit('updateRoomConfig', readConfigInputs());
+    });
   });
 
-  maxPlayersInput.addEventListener('change', () => {
-    const maxVal = parseInt(maxPlayersInput.value);
-    const minVal = parseInt(minPlayersInput.value);
-    if (minVal > maxVal) {
-      minPlayersInput.value = maxVal;
-    }
-  });
-
-  minPlayersInput.addEventListener('change', () => {
-    const maxVal = parseInt(maxPlayersInput.value);
-    const minVal = parseInt(minPlayersInput.value);
-    if (minVal > maxVal) {
-      minPlayersInput.value = maxVal;
-    }
-  });
-
-  restartButton.addEventListener('click', () => {
-    hideGameOverScreen();
-  });
-
-  joinButton.addEventListener('click', (event) => {
+  joinButton.addEventListener('click', function (event) {
     event.preventDefault();
-    const username = usernameInput.value.trim();
-    if (username && username.length >= 2 && username.length <= 20) {
-      const dataToSend = { username };
-      if (currentPlayerId && playerProfile && playerProfile.stats.name.toLowerCase() === username.toLowerCase()) {
-        dataToSend.playerId = currentPlayerId;
-      } else {
-        currentPlayerId = null;
-      }
-      
-      addCanvasNotification('Cargando perfil...', 'info');
-      socket.emit('getOrCreateProfile', dataToSend);
+    submitLogin();
+  });
+  usernameInput.addEventListener('keydown', function (event) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      if (!joinButton.disabled) submitLogin();
+    }
+  });
+  usernameInput.addEventListener('input', function () { clearInvalid(usernameInput); });
+
+  createRoomButton.addEventListener('click', function () {
+    const username = currentUsername();
+    if (isValidUsername(username)) {
+      setPendingButton(createRoomButton);
+      socket.emit('createRoom', buildIdentity(username));
     } else {
-      addCanvasNotification('El nombre debe tener 2-20 caracteres', 'error');
-      usernameInput.focus();
+      toast('El nombre debe tener entre 2 y 20 caracteres', 'error');
+      ui(function () { Scenes.go('login'); });
     }
   });
 
-  createRoomButton.addEventListener('click', () => {
-    const username = usernameInput.value.trim();
-    if (username && username.length >= 2 && username.length <= 20) {
-      const dataToSend = { username };
-      if (currentPlayerId && playerProfile && playerProfile.stats.name.toLowerCase() === username.toLowerCase()) {
-        dataToSend.playerId = currentPlayerId;
-      } else {
-        currentPlayerId = null;
-      }
-      
-      socket.emit('createRoom', dataToSend);
-    } else {
-      addCanvasNotification('El nombre debe tener 2-20 caracteres', 'error');
-      usernameInput.focus();
+  joinRoomButton.addEventListener('click', function () {
+    joinRoomFromInput();
+  });
+  roomIdInput.addEventListener('keydown', function (event) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      joinRoomFromInput();
     }
   });
-
-  joinRoomButton.addEventListener('click', () => {
-    const username = usernameInput.value.trim();
-    const roomId = roomIdInput.value.trim().toUpperCase();
-    
-    if (!username || username.length < 2) {
-      addCanvasNotification('El nombre debe tener 2-20 caracteres', 'error');
-      usernameInput.focus();
-      return;
-    }
-    
-    if (!roomId || roomId.length !== 6) {
-      addCanvasNotification('Por favor ingresa un ID de sala válido', 'error');
-      roomIdInput.focus();
-      return;
-    }
-    
-    const dataToSend = { roomId, username };
-    if (currentPlayerId && playerProfile && playerProfile.stats.name.toLowerCase() === username.toLowerCase()) {
-      dataToSend.playerId = currentPlayerId;
-    } else {
-      currentPlayerId = null;
-    }
-    
-    socket.emit('joinRoom', dataToSend);
+  roomIdInput.addEventListener('input', function (event) {
+    event.target.value = event.target.value.toUpperCase();
+    clearInvalid(roomIdInput);
   });
 
-  startGameButton.addEventListener('click', () => {
-    // Guardar configuración antes de iniciar
-    if (isHost) {
-      const finalConfig = {
-        maxPlayers: parseInt(maxPlayersInput.value),
-        minPlayers: parseInt(minPlayersInput.value),
-        gameSpeed: parseInt(gameSpeedInput.value),
-        segmentSize: parseInt(segmentSizeInput.value),
-        consumables: {
-          immunity: {
-            enabled: immunityEnabledInput ? immunityEnabledInput.checked : true,
-            spawnInterval: immunityIntervalInput ? parseInt(immunityIntervalInput.value) : 13,
-            duration: immunityDurationInput ? parseInt(immunityDurationInput.value) : 5
-          }
-        }
-      };
-      
-      if (finalConfig.minPlayers <= finalConfig.maxPlayers) {
-        socket.emit('updateRoomConfig', finalConfig);
-      }
-    }
-    
+  startGameButton.addEventListener('click', function () {
+    if (startRequested) return;
+    // Reenviar el nivel antes de iniciar, por si el último cambio no llegó
+    if (isHost) socket.emit('updateRoomConfig', readConfigInputs());
+    startRequested = true;
+    startGameButton.disabled = true;
     socket.emit('startGame');
+    // Si el servidor no arranca (por ejemplo, faltan jugadores) el botón vuelve con el gameError
+    setTimeout(function () {
+      if (startRequested && !countdownActive && !roundLive) { startRequested = false; syncRoomControls(); }
+    }, 5000);
   });
 
-  refreshRoomsButton.addEventListener('click', () => {
+  refreshRoomsButton.addEventListener('click', function () {
     refreshRooms();
   });
 
-  document.getElementById('backToMenuButton').addEventListener('click', () => {
-    if (isSpectating) {
-      // Si está espectando, salir de la sala
-      if (currentRoomId) {
-        socket.leave(currentRoomId);
-        currentRoomId = null;
-        isSpectating = false;
-        stopRenderLoop();
-        showRoomSelection();
-        updateSpectatorIndicator();
-        socket.emit('getRooms');
-      }
-    } else {
-      socket.emit('backToMenu');
-      hideFinalScreen();
-    }
+  // Salir de la sala ("Salir de la sala", y en el final "Salir a las salas" o, para un espectador,
+  // "Volver a las salas"): jugadores y espectadores salen por el mismo evento del servidor
+  function leaveRoom() {
+    socket.emit('backToMenu');
+    leaveRoomLocally();
+    ui(function () {
+      Overlays.hideAll();
+      Scenes.go('lobby');
+    });
+  }
+  backToMenuButton.addEventListener('click', leaveRoom);
+  if (leaveRoomButton) leaveRoomButton.addEventListener('click', leaveRoom);
+
+  // Pantalla final: la sala ya está en espera; "Volver a la sala" solo cambia de escena
+  if (backToRoomButton) backToRoomButton.addEventListener('click', function () {
+    ui(function () { Scenes.go('room'); });
+  });
+  if (playAgainButton) playAgainButton.addEventListener('click', function () {
+    if (!isHost || startRequested) return;
+    startRequested = true;
+    syncFinalControls();
+    socket.emit('startGame');
+    // Si el servidor no arranca (por ejemplo, alguien se fue) el botón vuelve con el gameError
+    setTimeout(function () {
+      if (startRequested && !countdownActive && !roundLive) { startRequested = false; syncRoomControls(); }
+    }, 3000);
   });
 
-  document.getElementById('leaderboardButton').addEventListener('click', () => {
+  $('leaderboardButton').addEventListener('click', function () {
     requestLeaderboard();
   });
 
-  document.getElementById('loginLeaderboardButton').addEventListener('click', () => {
+  $('loginLeaderboardButton').addEventListener('click', function () {
     requestLeaderboard();
   });
 
-  document.getElementById('closeLeaderboardModal').addEventListener('click', () => {
-    hideElement(document.getElementById('leaderboardModal'));
+  // Overlays ya cierra el modal con #closeLeaderboardModal, Escape y clic en el fondo; esto es idempotente
+  $('closeLeaderboardModal').addEventListener('click', function () {
+    ui(function () { Overlays.close(leaderboardModal); });
+    if (!window.Overlays) hideElement(leaderboardModal);
   });
 
-  roomIdInput.addEventListener('input', (e) => {
-    e.target.value = e.target.value.toUpperCase();
+  if (coarseQuery) {
+    const onPointerChange = function () { updateSpectatorIndicator(); };
+    if (coarseQuery.addEventListener) coarseQuery.addEventListener('change', onPointerChange);
+    else if (coarseQuery.addListener) coarseQuery.addListener(onPointerChange);
+  }
+
+  // Al llegar al lobby: salas y jugadores al día
+  ui(function () {
+    Scenes.onEnter('lobby', function () {
+      refreshRooms();
+      if (playerProfile) socket.emit('getOnlinePlayers');
+    });
   });
 
-  // Inicializar interfaz y render loop para notificaciones
+  // ===========================================================================
+  // Arranque
+  // ===========================================================================
+  updateSpectatorIndicator();
+  syncRoomControls();
+  updateConfigPanel();
   initializeUserInterface();
-  handleResize();
-  
-  // Iniciar loop de renderizado para las notificaciones (siempre activo)
-  isGameRunning = true;
-  startRenderLoop();
 });
