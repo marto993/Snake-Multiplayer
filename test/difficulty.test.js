@@ -12,13 +12,13 @@ test('nivel medio por defecto y ante valores desconocidos', () => {
 
 test('valores por nivel', () => {
   assert.deepEqual(levels.map(c => c.difficulty), ['easy', 'medium', 'hard']);
-  assert.deepEqual(levels.map(c => c.gameSpeed), [70, 54, 42]);
-  assert.deepEqual(levels.map(c => c.projectileCells), [2, 2, 3]);
-  assert.deepEqual(levels.map(c => c.foodExtra), [14, 10, 7]);
+  assert.deepEqual(levels.map(c => c.gameSpeed), [70, 66, 60]);
+  assert.deepEqual(levels.map(c => c.projectileCells), [3, 3, 3]);
+  assert.deepEqual(levels.map(c => c.foodExtra), [24, 20, 18]);
   assert.deepEqual(levels.map(c => c.consumables.immunity), [
-    { enabled: true, spawnInterval: 6, duration: 7 },
-    { enabled: true, spawnInterval: 10, duration: 5 },
-    { enabled: true, spawnInterval: 15, duration: 3 }
+    { enabled: true, spawnInterval: 6, duration: 5 },
+    { enabled: true, spawnInterval: 8, duration: 4 },
+    { enabled: true, spawnInterval: 10, duration: 3 }
   ]);
 });
 
@@ -41,5 +41,5 @@ test('roundTime viene de afuera (override ROUND_TIME)', () => {
 test('cada llamada devuelve un objeto nuevo', () => {
   const a = buildRoomConfig('easy', { roundTime: 60 });
   a.consumables.immunity.duration = 99;
-  assert.equal(buildRoomConfig('easy', { roundTime: 60 }).consumables.immunity.duration, 7);
+  assert.equal(buildRoomConfig('easy', { roundTime: 60 }).consumables.immunity.duration, 5);
 });
