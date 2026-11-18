@@ -15,9 +15,9 @@ const DEFAULT_DIFFICULTY = 'medium';
 // foodExtra: comida en la arena = jugadores + foodExtra
 // shieldEvery / shieldLasts: cada cuántos segundos aparece el escudo y cuánto dura (s)
 const LEVELS = {
-  easy:   { crossSeconds: 3.5, projectileCells: 2, foodExtra: 14, shieldEvery: 6,  shieldLasts: 7 },
-  medium: { crossSeconds: 2.7, projectileCells: 2, foodExtra: 10, shieldEvery: 10, shieldLasts: 5 },
-  hard:   { crossSeconds: 2.1, projectileCells: 3, foodExtra: 7,  shieldEvery: 15, shieldLasts: 3 }
+  easy:   { crossSeconds: 3.5, projectileCells: 3, foodExtra: 24, shieldEvery: 6,  shieldLasts: 5 },
+  medium: { crossSeconds: 3.3, projectileCells: 3, foodExtra: 20, shieldEvery: 8, shieldLasts: 4 },
+  hard:   { crossSeconds: 3.0, projectileCells: 3, foodExtra: 18,  shieldEvery: 10, shieldLasts: 3 }
 };
 
 function buildRoomConfig(difficulty, opts) {
