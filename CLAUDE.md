@@ -37,6 +37,8 @@ fly deploy     # deploy to Fly.io
 
 Script load order matters (index.html): socket.io → snakeClass → motion → particles → arena → backdrop → scenes → SnakeGame. Each module is an IIFE that exposes its API on `window`; no ES modules.
 
+**Browser support:** This project's Baseline target is Baseline Widely available. Newly available features are allowed when they degrade gracefully (e.g. entry animations with `@starting-style`) or are feature-detected.
+
 `game_stats.db` is auto-created. Schema lives in `index.js` near the top.
 
 ## Architecture
