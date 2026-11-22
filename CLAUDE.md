@@ -22,6 +22,7 @@ fly deploy     # deploy to Fly.io
 | `game/geometry.js` | ~70 | Free-turn geometry: wrap-aware distances, swept contact (`touchedAlong`), portal wrap by center (`wrapPoint`), grid cell of a float position (pure) |
 | `game/remains.js` | ~55 | `cutSnake()` (hit damage) and `dropRemains()`: what a hit cuts off stays as food for 10 s (pure) |
 | `game/match.js` | ~25 | `matchResult()`: ranking by length and winners (ties all win) at the end of the match |
+| `lib/assets.js` | ~170 | Serves the text files in `public/` precompressed (brotli 11 / gzip 9, in memory) and versions `index.html`'s local scripts and styles by content hash |
 | `public/SnakeGame.js` | ~2000 | Client glue: socket handlers, game/UI state, wiring events into the modules below. No drawing code. |
 | `public/snakeClass.js` | ~350 | Snake entity — runs on **both** client and server |
 | `public/index.html` | ~360 | Scene markup only (no inline CSS) |
@@ -33,7 +34,7 @@ fly deploy     # deploy to Fly.io
 | `public/js/ui/scenes.js` | ~2300 | `window.Scenes` / `Overlays` / `Toasts` / `HUD`: scene transitions, intro, countdown, final screen, toasts, DOM HUD |
 | `docs/VISUAL_SPEC.md` | ~1400 | Visual spec: palette, typography, motion, scene map, effects catalog. Read it before touching visuals. |
 | `docs/MOTION_SPEC.md` | ~160 | Design: fixed difficulty levels (implemented) and continuous 4000×4000 movement (not yet) |
-| `test/` | | Unit tests (`node --test`): motion timeline, `Snake.reset`, difficulty table, projectile trace, remains, match result |
+| `test/` | | Unit tests (`node --test`): motion timeline, `Snake`, difficulty table, geometry, projectile trace, remains, match result, static assets |
 
 Script load order matters (index.html): socket.io → snakeClass → motion → particles → arena → backdrop → scenes → SnakeGame. Each module is an IIFE that exposes its API on `window`; no ES modules. Declarations use `const`, and `let` only when the variable is reassigned; no `var`.
 
@@ -46,6 +47,8 @@ Script load order matters (index.html): socket.io → snakeClass → motion → 
 **Server-authoritative.** Server runs `gameLogicLoop()` at `config.gameSpeed` (70 / 66 / 60 ms for easy / medium / hard), validates everything, broadcasts `gameLogicFrame`. The client does not predict: input goes to the server (`newMove`, `attack`) and shows up in the next frames.
 
 **Interpolation.** `SnakeGame.js` pushes every `gameLogicFrame` into a `Motion` timeline keyed by the server `timestamp`. Each animation frame renders the instant one tick (plus a jitter margin) behind the newest frame, interpolating linearly between the two frames around it, so visible speed is constant at any monitor refresh rate. Late frames are extrapolated up to half a tick. Clock corrections from each new frame are spread over time (render speed changes at most 5 %), so network jitter doesn't cause micro-stutters. Frames are interpolated on a smoothed server time (one tick after the previous frame, eased 10 % toward the real `timestamp`, kept in `frame.raw`), because the server doesn't tick exactly every `gameSpeed` ms and at 42 ms a 3 ms gap changes visible speed by 7 %. Foods, consumables, immunity and `Arena.on*` effects come from the frame the render has reached, so effects line up with the head. `snakeClass.js` still has the old `updateRenderPosition()` lerp, but the client no longer calls it.
+
+**Network payload.** Socket.IO runs with `perMessageDeflate` (threshold 1 KB): consecutive frames are nearly identical, so with the shared compression context a frame goes from ~4.7 KB to ~0.11 KB on the wire (measured). Keep the default 32 KB window; a small one loses the cross-frame context. Static files go through `lib/assets.js` before `express.static`: `index.html` and plain URLs are `no-cache` with an ETag, and `index.html` rewrites `./…` script/style URLs to `?v=<hash>`, which are cached for a year. Reference new local scripts and styles as `./path` so they get versioned. Fly's proxy also compresses, but only at a fast brotli level; precompressed responses pass through as they are.
 
 **Room state.** All state lives in `rooms` Map keyed by 6-char room code. Each room owns its own players, gameboard, foods, consumables, projectiles, timers, spectators. No global player state — players exist only inside a room.
 
@@ -72,7 +75,7 @@ Script load order matters (index.html): socket.io → snakeClass → motion → 
 
 ## Testing
 
-`npm test` runs the unit tests in `test/` (Node's built-in runner). They cover the pieces that load in Node without a browser or a running server: `motion.js`, `Snake` (reset and steering), `game/difficulty.js`, `game/geometry.js`, `game/projectiles.js`, `game/remains.js` and `game/match.js`. Gameplay still needs a manual check: validate changes by running `npm run dev` and opening multiple browser windows (use incognito for distinct sessions). Inspect DB with `sqlite3 game_stats.db`.
+`npm test` runs the unit tests in `test/` (Node's built-in runner). They cover the pieces that load in Node without a browser or a running server: `motion.js`, `Snake` (reset and steering), `game/difficulty.js`, `game/geometry.js`, `game/projectiles.js`, `game/remains.js`, `game/match.js` and `lib/assets.js`. Gameplay still needs a manual check: validate changes by running `npm run dev` and opening multiple browser windows (use incognito for distinct sessions). Inspect DB with `sqlite3 game_stats.db`.
 
 `ROUND_TIME=10 npm run dev` shortens the match for testing (positive integers only; default 120). Headless browser checks work with `puppeteer-core` + `/snap/bin/chromium` (the snap can't write to host `/tmp`, so use a dir under `~`).
 
