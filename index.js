@@ -7,6 +7,7 @@ const { traceProjectile } = require('./game/projectiles');
 const { touchedAlong, wrapPoint, cellIndex } = require('./game/geometry');
 const { cutSnake, dropRemains } = require('./game/remains');
 const { matchResult } = require('./game/match');
+const { createAssets } = require('./lib/assets');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 
@@ -173,6 +174,10 @@ function getPlayerStats(playerId) {
   });
 }
 
+// Archivos de texto precomprimidos (brotli/gzip) y versionados por contenido (lib/assets.js);
+// lo demás, express.static
+const assets = createAssets(path.join(__dirname, 'public'));
+app.use(assets.middleware);
 app.use(express.static('public'));
 
 let rooms = new Map();
@@ -1678,4 +1683,6 @@ process.on('SIGINT', () => {
 
 server.listen(port, () => {
   console.log(`Server listening on port ${port}`);
+  // Precompresión en segundo plano: no demora el arranque (Fly apaga la máquina sin jugadores)
+  assets.warm().catch(error => console.error('Error compressing assets:', error));
 });
