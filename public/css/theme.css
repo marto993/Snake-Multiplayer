@@ -229,8 +229,7 @@ strong, b { font-weight: 600; }
   min-width: 0;
   display: flex;
   flex-direction: column;
-  padding-left: var(--bio-gutter);
-  padding-right: var(--bio-gutter);
+  padding-inline: var(--bio-gutter);
 }
 .scene[data-state="hidden"] { display: none; }
 .scene[data-state="leaving"] { pointer-events: none; z-index: 0; }
@@ -297,7 +296,7 @@ body:not([data-scene="lobby"]):not([data-scene="room"]) #dock { transform: trans
   border: 1px solid var(--bio-panel-border);
   background: var(--bio-panel);
   color: var(--bio-ink);
-  text-align: left;
+  text-align: start;
   transition: border-color var(--bio-dur-hover) var(--bio-ease-standard), background-color var(--bio-dur-hover) var(--bio-ease-standard);
 }
 .profile-chip:hover { border-color: rgba(31, 242, 210, 0.45); background-color: rgba(11, 39, 56, 0.94); }
@@ -936,7 +935,7 @@ kbd {
 .join-row .btn { flex: 0 0 auto; }
 .rooms { display: flex; flex-direction: column; gap: 12px; padding-top: 20px; border-top: 1px solid rgba(163, 199, 209, 0.08); }
 .rooms-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.rooms-head .btn-quiet { margin-right: -12px; }
+.rooms-head .btn-quiet { margin-inline-end: -12px; }
 .rooms-list {
   display: flex;
   flex-direction: column;
@@ -1163,7 +1162,7 @@ kbd {
   line-height: 28px;
   color: var(--bio-turquoise-soft);
 }
-.room-meta .room-title .room-code { margin-left: 4px; }
+.room-meta .room-title .room-code { margin-inline-start: 4px; }
 .room-meta .room-role { color: var(--bio-ink-2); }
 .room-meta strong { color: var(--bio-ink); font-weight: 600; }
 
@@ -1257,7 +1256,7 @@ kbd {
   font-feature-settings: "tnum" 1;
   line-height: 18px;
   color: var(--bio-ink);
-  text-align: right;
+  text-align: end;
 }
 .player-score small {
   font-size: var(--bio-fs-12);
@@ -1320,7 +1319,7 @@ kbd {
   background: transparent;
   color: var(--bio-ink);
   font-weight: 600;
-  text-align: left;
+  text-align: start;
   transition: background-color var(--bio-dur-hover) var(--bio-ease-standard);
 }
 .config-toggle:hover { background: rgba(31, 242, 210, 0.05); }
@@ -1392,8 +1391,8 @@ kbd {
 .difficulty-option:has(input:disabled) { opacity: 0.6; cursor: not-allowed; }
 .config-info {
   margin: 14px 0 16px;
-  padding-left: 12px;
-  border-left: 2px solid rgba(159, 244, 255, 0.4);
+  padding-inline-start: 12px;
+  border-inline-start: 2px solid rgba(159, 244, 255, 0.4);
   font-size: var(--bio-fs-14);
   line-height: 20px;
   color: var(--bio-ink-2);
@@ -1606,7 +1605,7 @@ kbd {
 .hud-row:not(.is-immune) .hud-immune-icon { display: none; }
 .hud-score {
   flex: 0 0 auto;
-  margin-left: auto;
+  margin-inline-start: auto;
   font-weight: 700;
   font-size: var(--bio-fs-16);
   font-variation-settings: var(--bio-mono);
@@ -1634,7 +1633,7 @@ kbd {
   gap: 4px;
   color: var(--bio-ink-3);
 }
-.hud-board-caption { padding-left: 10px; font-size: var(--bio-fs-12); line-height: 16px; color: var(--bio-ink-3); }
+.hud-board-caption { padding-inline-start: 10px; font-size: var(--bio-fs-12); line-height: 16px; color: var(--bio-ink-3); }
 
 /* --------------------------------------------------------------------------
    11. Overlays de la arena: cuenta regresiva, inicio de ronda, fin de ronda
@@ -1754,7 +1753,7 @@ kbd {
   width: 100%;
   margin-top: 8px;
   padding: 24px;
-  text-align: left;
+  text-align: start;
   border-radius: var(--bio-radius-membrane);
   background: var(--bio-panel);
   border: 1px solid var(--bio-panel-border);
@@ -1842,7 +1841,7 @@ kbd {
 }
 .modal-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
 .modal-title { font-size: var(--bio-fs-36); line-height: 40px; color: var(--bio-ink); text-shadow: 0 0 2px rgba(138, 247, 230, 0.4), 0 0 18px rgba(31, 242, 210, 0.18); }
-.modal-close { margin-right: -8px; }
+.modal-close { margin-inline-end: -8px; }
 .modal-body { min-height: 0; flex: 1 1 auto; display: flex; flex-direction: column; }
 
 .leaderboard-head,
@@ -1860,7 +1859,7 @@ kbd {
   font-weight: 600;
   color: var(--bio-ink-3);
 }
-.leaderboard-head .wins, .leaderboard-head .games, .leaderboard-head .winrate { text-align: right; }
+.leaderboard-head .wins, .leaderboard-head .games, .leaderboard-head .winrate { text-align: end; }
 .leaderboard-list {
   display: flex;
   flex-direction: column;
@@ -1884,7 +1883,7 @@ kbd {
 .leaderboard-item .rank { font-weight: 700; color: var(--rank-c); font-variation-settings: var(--bio-mono); text-align: center; }
 .leaderboard-item .name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--bio-ink); }
 .leaderboard-item .wins, .leaderboard-item .games, .leaderboard-item .winrate {
-  text-align: right;
+  text-align: end;
   font-variation-settings: var(--bio-mono);
   font-feature-settings: "tnum" 1;
   white-space: nowrap;
@@ -2165,7 +2164,7 @@ body[data-scene="final"] #toasts { top: 20px; }
   }
   .hud-rank, .hud-len, .hud-me-tag { display: none; }
   .hud-name { max-width: 8ch; font-size: var(--bio-fs-14); }
-  .hud-score { margin-left: 2px; font-size: var(--bio-fs-14); }
+  .hud-score { margin-inline-start: 2px; font-size: var(--bio-fs-14); }
   .hud-row.is-me {
     position: sticky;
     left: 0;
@@ -2190,7 +2189,7 @@ body[data-scene="final"] #toasts { top: 20px; }
 /* Hasta 768 px: móvil */
 @media (width <= 768px) {
   :root { --bio-col-gap: 16px; }
-  .profile-chip { padding-right: 10px; }
+  .profile-chip { padding-inline-end: 10px; }
   .profile-chip-name { max-width: 11ch; }
 
   .login-card, .lobby-card { padding: 24px; }
@@ -2199,7 +2198,7 @@ body[data-scene="final"] #toasts { top: 20px; }
   .join-row .btn { width: 100%; }
   .rooms-list { max-height: none; overflow: visible; }
   .room-item { flex-wrap: wrap; padding: 12px 12px 12px 16px; }
-  .room-item .join-room-btn { margin-left: auto; }
+  .room-item .join-room-btn { margin-inline-start: auto; }
 
   #scene-lobby, #scene-arena { padding-bottom: 24px; }
   #scene-login { padding-bottom: 32px; }
@@ -2229,7 +2228,7 @@ body[data-scene="final"] #toasts { top: 20px; }
     box-shadow: none;
   }
   .dock-toggle .dock-count { min-width: 22px; height: 22px; font-size: var(--bio-fs-12); }
-  .dock-toggle:has(.dock-count:empty) { padding-right: 14px; }
+  .dock-toggle:has(.dock-count:empty) { padding-inline-end: 14px; }
   .dock-toggle-label {
     position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
     overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
