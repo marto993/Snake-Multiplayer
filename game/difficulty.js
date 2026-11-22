@@ -28,6 +28,28 @@ const LEVELS = {
   hard:   { crossSeconds: 3.0, projectileCells: 3, foodExtra: 18,  shieldEvery: 10, shieldLasts: 3, turnDegrees: 40, shotCooldownMs: 200 }
 };
 
+// Poderes (docs/GAMEPLAY_SPEC.md): por ahora iguales en los tres niveles. Para ajustar uno por
+// nivel, pasarlo a LEVELS.
+// bigMouth / fan: aparecen cada spawnInterval s y duran duration s una vez tomados
+// bigMouthReach: alcance para comer con la boca grande, en celdas (el normal es 0,85)
+// fanDegrees: apertura de cada disparo lateral del abanico
+const POWERS = {
+  bigMouth: { spawnInterval: 12, duration: 6 },
+  fan: { spawnInterval: 12, duration: 6 },
+  bigMouthReach: 2.55,
+  fanDegrees: 12
+};
+
+// Cuántos consumibles de un tipo puede haber a la vez en el mapa
+function consumableLimit(type, playerCount) {
+  switch (type) {
+    case 'immunity': return Math.max(3, playerCount + 1);
+    case 'bigMouth':
+    case 'fan': return playerCount >= 5 ? 2 : 1;
+    default: return 0;
+  }
+}
+
 function buildRoomConfig(difficulty, opts) {
   const key = typeof difficulty === 'string' && Object.prototype.hasOwnProperty.call(LEVELS, difficulty)
     ? difficulty
@@ -48,10 +70,14 @@ function buildRoomConfig(difficulty, opts) {
     foodExtra: level.foodExtra,
     turnDegrees: level.turnDegrees,
     shotCooldownMs: level.shotCooldownMs,
+    bigMouthReach: POWERS.bigMouthReach,
+    fanDegrees: POWERS.fanDegrees,
     consumables: {
-      immunity: { enabled: true, spawnInterval: level.shieldEvery, duration: level.shieldLasts }
+      immunity: { enabled: true, spawnInterval: level.shieldEvery, duration: level.shieldLasts },
+      bigMouth: { enabled: true, ...POWERS.bigMouth },
+      fan: { enabled: true, ...POWERS.fan }
     }
   };
 }
 
-module.exports = { buildRoomConfig, DEFAULT_DIFFICULTY };
+module.exports = { buildRoomConfig, consumableLimit, DEFAULT_DIFFICULTY };

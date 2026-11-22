@@ -2,7 +2,7 @@ const http = require('http');
 const express = require('express');
 const socketIO = require('socket.io');
 const Snake = require('./public/snakeClass.js');
-const { buildRoomConfig } = require('./game/difficulty');
+const { buildRoomConfig, consumableLimit } = require('./game/difficulty');
 const { traceProjectile } = require('./game/projectiles');
 const { touchedAlong, wrapPoint, cellIndex } = require('./game/geometry');
 const { cutSnake, dropRemains } = require('./game/remains');
@@ -503,10 +503,10 @@ function initializeConsumableSystem(room) {
   });
   room.consumableTimers = {};
   
-  // Inicializar consumibles de inmunidad si están habilitados
-  if (room.config.consumables.immunity.enabled) {
-    startConsumableTimer(room, 'immunity');
-  }
+  // Un temporizador por tipo habilitado (escudo, boca grande, abanico)
+  Object.keys(room.config.consumables).forEach(type => {
+    if (room.config.consumables[type].enabled) startConsumableTimer(room, type);
+  });
 }
 
 function startConsumableTimer(room, consumableType) {
@@ -567,13 +567,7 @@ function restartConsumableTimer(room, consumableType) {
 
 function getMaxConsumablesForType(room, consumableType) {
   const playerCount = room.players.filter(p => !p.gameover).length;
-  
-  switch(consumableType) {
-    case 'immunity':
-      return Math.max(3, playerCount+1);
-    default:
-      return 1;
-  }
+  return consumableLimit(consumableType, playerCount);
 }
 
 function spawnConsumable(room, type) {
