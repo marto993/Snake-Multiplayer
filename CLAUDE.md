@@ -35,7 +35,7 @@ fly deploy     # deploy to Fly.io
 | `docs/MOTION_SPEC.md` | ~160 | Design: fixed difficulty levels (implemented) and continuous 4000×4000 movement (not yet) |
 | `test/` | | Unit tests (`node --test`): motion timeline, `Snake.reset`, difficulty table, projectile trace, remains, match result |
 
-Script load order matters (index.html): socket.io → snakeClass → motion → particles → arena → backdrop → scenes → SnakeGame. Each module is an IIFE that exposes its API on `window`; no ES modules.
+Script load order matters (index.html): socket.io → snakeClass → motion → particles → arena → backdrop → scenes → SnakeGame. Each module is an IIFE that exposes its API on `window`; no ES modules. Declarations use `const`, and `let` only when the variable is reassigned; no `var`.
 
 **Browser support:** This project's Baseline target is Baseline Widely available. Newly available features are allowed when they degrade gracefully (e.g. entry animations with `@starting-style`) or are feature-detected.
 
