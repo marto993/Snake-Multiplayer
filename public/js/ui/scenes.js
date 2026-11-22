@@ -1008,7 +1008,7 @@
       try {
         const cs = global.getComputedStyle(ring);
         if (cs.position === 'static' && cs.borderStyle === 'none') {
-          ring.style.cssText += ';position:absolute;left:50%;top:50%;width:calc(var(--arena-size, 600px) * 0.42);height:calc(var(--arena-size, 600px) * 0.42);margin:calc(var(--arena-size, 600px) * -0.21) 0 0 calc(var(--arena-size, 600px) * -0.21);border:2px solid currentColor;border-radius:50%;opacity:0;pointer-events:none';
+          ring.style.cssText += ';position:absolute;left:50%;top:50%;width:50cqh;height:50cqh;margin:-25cqh 0 0 -25cqh;border:2px solid currentColor;border-radius:50%;opacity:0;pointer-events:none';
         }
       } catch (e) { /* nada */ }
       return { k: k, ring: ring, num: num };

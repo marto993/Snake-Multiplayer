@@ -75,30 +75,30 @@
 
 /* Tamaño de la arena en la sala (spec 4.10): el ancho que entra, limitado por el alto disponible
    multiplicado por la proporción. En partida crece (sección 18). */
-:root { --arena-size: min(calc(100vw - 32px), 720px); }
+:root { --arena-size: min(calc(100cqi - 2 * var(--bio-gutter)), 720px); }
 @media (width > 768px) {
   :root {
     --bio-topbar-h: 64px;
     --bio-arena-top: calc(var(--bio-topbar-h) + 24px);
-    --arena-size: clamp(320px, min(calc(100vw - 48px), calc((100vh - 240px) * var(--arena-aspect))), 960px);
-    --arena-size: clamp(320px, min(calc(100vw - 48px), calc((100svh - 240px) * var(--arena-aspect))), 960px);
+    --arena-size: clamp(320px, min(calc(100cqi - 2 * var(--bio-gutter)), calc((100vh - 240px) * var(--arena-aspect))), 960px);
+    --arena-size: clamp(320px, min(calc(100cqi - 2 * var(--bio-gutter)), calc((100svh - 240px) * var(--arena-aspect))), 960px);
   }
 }
 @media (width >= 1024px) {
   :root {
     --bio-hud-bar-h: 64px;
     --bio-side-w: 260px;
-    /* 360 y no 340: deja lugar a la barra de scroll vertical del escritorio */
-    --arena-size: clamp(320px, min(calc(100vw - 360px), calc((100vh - 200px) * var(--arena-aspect))), 1200px);
-    --arena-size: clamp(320px, min(calc(100vw - 360px), calc((100svh - 200px) * var(--arena-aspect))), 1200px);
+    /* dos columnas: panel + separación + arena, dentro de los márgenes */
+    --arena-size: clamp(320px, min(calc(100cqi - 2 * var(--bio-gutter) - var(--bio-side-w) - var(--bio-col-gap)), calc((100vh - 200px) * var(--arena-aspect))), 1200px);
+    --arena-size: clamp(320px, min(calc(100cqi - 2 * var(--bio-gutter) - var(--bio-side-w) - var(--bio-col-gap)), calc((100svh - 200px) * var(--arena-aspect))), 1200px);
   }
 }
 @media (width >= 1280px) {
   :root {
     --bio-side-w: 300px;
-    /* 720 y no 680: 300 + 280 + 2 × 24 de separación + 2 × 32 de margen + scroll */
-    --arena-size: clamp(320px, min(calc(100vw - 720px), calc((100vh - 200px) * var(--arena-aspect))), 1400px);
-    --arena-size: clamp(320px, min(calc(100vw - 720px), calc((100svh - 200px) * var(--arena-aspect))), 1400px);
+    /* tres columnas: panel + arena + dock, con sus dos separaciones, dentro de los márgenes */
+    --arena-size: clamp(320px, min(calc(100cqi - 2 * var(--bio-gutter) - var(--bio-side-w) - var(--bio-dock-w) - 2 * var(--bio-col-gap)), calc((100vh - 200px) * var(--arena-aspect))), 1400px);
+    --arena-size: clamp(320px, min(calc(100cqi - 2 * var(--bio-gutter) - var(--bio-side-w) - var(--bio-dock-w) - 2 * var(--bio-col-gap)), calc((100svh - 200px) * var(--arena-aspect))), 1400px);
   }
 }
 
@@ -111,6 +111,9 @@ html {
   background-color: var(--bio-abyss-900);
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  /* Contenedor raíz: 100cqi es el ancho disponible sin la barra de scroll (100vw la incluye).
+     En html y no en #scenes, para que el dock, que está afuera, mida contra lo mismo. */
+  container-type: inline-size;
 }
 
 body {
@@ -295,7 +298,7 @@ body:not([data-scene="lobby"]):not([data-scene="room"]) #dock { transform: trans
   align-items: center;
   gap: 10px;
   height: 44px;
-  max-width: min(320px, calc(100vw - 140px));
+  max-width: min(320px, calc(100cqi - 140px));
   padding: 0 12px 0 6px;
   border-radius: var(--bio-radius-pill);
   border: 1px solid var(--bio-panel-border);
@@ -351,7 +354,7 @@ body:not([data-scene="lobby"]):not([data-scene="room"]) #dock { transform: trans
   top: calc(var(--bio-topbar-h) - 4px);
   right: var(--bio-gutter);
   z-index: 2;
-  width: min(300px, calc(100vw - 2 * var(--bio-gutter)));
+  width: min(300px, calc(100cqi - 2 * var(--bio-gutter)));
   margin: 0;
   padding: 20px;
   border: 1px solid var(--bio-panel-border);
@@ -1083,6 +1086,8 @@ kbd {
   --arena-h: calc(var(--arena-size) / var(--arena-aspect));
   width: var(--arena-size);
   height: var(--arena-h);
+  /* los overlays (cuenta regresiva, aro, "¡Ya!") se miden con cqh contra la arena */
+  container-type: size;
   isolation: isolate;
   justify-self: center;
 }
@@ -1671,7 +1676,7 @@ kbd {
 .countdown-number {
   --cd: var(--bio-turquoise);
   display: block;
-  font-size: calc(var(--arena-h) * 0.5);
+  font-size: 50cqh;
   line-height: 1;
   padding: 0 0.14em 0.06em 0.06em;
   color: var(--cd);
@@ -1685,8 +1690,8 @@ kbd {
 .countdown-number[data-n="2"], .overlay-countdown[data-count="2"] .countdown-number { --cd: var(--bio-cyan); }
 .countdown-number[data-n="1"], .overlay-countdown[data-count="1"] .countdown-number { --cd: var(--bio-lime); }
 .countdown-ring {
-  width: calc(var(--arena-h) * 0.5);
-  height: calc(var(--arena-h) * 0.5);
+  width: 50cqh;
+  height: 50cqh;
   border-radius: 50%;
   border: 2px solid currentColor;
   color: var(--bio-turquoise);
@@ -1695,7 +1700,7 @@ kbd {
 .overlay-countdown[data-count="2"] .countdown-ring { color: var(--bio-cyan); }
 .overlay-countdown[data-count="1"] .countdown-ring { color: var(--bio-lime); }
 .round-go {
-  font-size: max(56px, calc(var(--arena-h) * 0.34));
+  font-size: max(56px, 34cqh);
   line-height: 1;
   font-weight: 400;
   padding: 0 0.14em 0.06em 0.06em;
@@ -1734,7 +1739,7 @@ kbd {
 }
 .final-title {
   --champion-c: var(--champion, var(--bio-turquoise-soft));
-  font-size: clamp(48px, 9vw, 112px);
+  font-size: clamp(48px, 9cqi, 112px);
   line-height: 1;
   padding: 0 0.12em 0.06em;
   color: var(--champion-c);
@@ -1925,7 +1930,7 @@ kbd {
   top: calc(var(--bio-topbar-h) + 16px);
   right: var(--bio-gutter);
   width: 360px;
-  max-width: calc(100vw - 2 * var(--bio-gutter));
+  max-width: calc(100cqi - 2 * var(--bio-gutter));
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -2083,7 +2088,7 @@ body[data-scene="final"] #toasts { top: 20px; }
     position: fixed;
     display: flex;
     inset: 0 0 0 auto;
-    width: min(320px, calc(100vw - 32px));
+    width: min(320px, calc(100cqi - 32px));
     height: 100%;
     max-height: none;
     padding: 12px;
@@ -2409,8 +2414,8 @@ body[data-scrolled] #topbar {
   :root {
     --bio-topbar-h: 56px;
     --bio-arena-top: calc(var(--bio-topbar-h) + 12px);
-    --arena-size: clamp(220px, min(calc(100vw - 48px), calc((100vh - 104px) * var(--arena-aspect))), 960px);
-    --arena-size: clamp(220px, min(calc(100vw - 48px), calc((100svh - 104px) * var(--arena-aspect))), 960px);
+    --arena-size: clamp(220px, min(calc(100cqi - 2 * var(--bio-gutter)), calc((100vh - 104px) * var(--arena-aspect))), 960px);
+    --arena-size: clamp(220px, min(calc(100cqi - 2 * var(--bio-gutter)), calc((100svh - 104px) * var(--arena-aspect))), 960px);
   }
   /* la barra del HUD mide lo mismo que la arena: el badge de espectador queda solo con su icono
      (el texto sigue en el árbol de accesibilidad) para no pisar el temporizador */
@@ -2422,7 +2427,7 @@ body[data-scrolled] #topbar {
 .final-title[data-champion] {
   white-space: nowrap;
   overflow-wrap: normal;
-  font-size: min(clamp(48px, 9vw, 112px), calc(min(100vw - 2 * var(--bio-gutter), 640px) * 1.35 / var(--name-len, 6)));
+  font-size: min(clamp(48px, 9cqi, 112px), calc(min(100cqi - 2 * var(--bio-gutter), 640px) * 1.35 / var(--name-len, 6)));
 }
 
 /* El foco y los saltos por teclado no dejan el elemento debajo del topbar fijo */
@@ -2443,7 +2448,7 @@ html { scroll-padding-top: calc(var(--bio-topbar-h) + 12px); }
 #scene-arena[data-mode="game"] {
   --arena-chrome-v: calc(12px + var(--bio-hud-bar-h) + var(--bio-arena-gap) + 20px);
   --arena-board-row: 50px;   /* hasta 1023 px: fila de chips del marcador debajo de la arena */
-  --arena-size: clamp(220px, min(calc(100vw - 2 * var(--bio-gutter)), calc((100svh - var(--arena-chrome-v) - var(--arena-board-row)) * var(--arena-aspect))), 2400px);
+  --arena-size: clamp(220px, min(calc(100cqi - 2 * var(--bio-gutter)), calc((100svh - var(--arena-chrome-v) - var(--arena-board-row)) * var(--arena-aspect))), 2400px);
   padding-top: 12px;
   padding-bottom: 20px;
 }
@@ -2451,7 +2456,7 @@ html { scroll-padding-top: calc(var(--bio-topbar-h) + 12px); }
 @media (width >= 1024px) {
   #scene-arena[data-mode="game"] {
     --arena-board-row: 0px;
-    --arena-size: clamp(320px, min(calc(100vw - var(--bio-side-w) - var(--bio-col-gap) - 2 * var(--bio-gutter) - 16px), calc((100svh - var(--arena-chrome-v)) * var(--arena-aspect))), 2400px);
+    --arena-size: clamp(320px, min(calc(100cqi - var(--bio-side-w) - var(--bio-col-gap) - 2 * var(--bio-gutter)), calc((100svh - var(--arena-chrome-v)) * var(--arena-aspect))), 2400px);
   }
   #scene-arena[data-mode="game"] .arena-layout {
     grid-template-columns: var(--bio-side-w) var(--arena-size);
@@ -2464,7 +2469,7 @@ html { scroll-padding-top: calc(var(--bio-topbar-h) + 12px); }
    para los pulgares, y el joystick y el disparo pueden asomar sobre las esquinas de la arena */
 @media (orientation: landscape) and (height <= 560px) {
   #scene-arena[data-mode="game"] {
-    --arena-size: clamp(240px, min(calc((100svh - 16px) * var(--arena-aspect)), calc(100vw - 2 * 96px - 24px - 16px)), 2400px);
+    --arena-size: clamp(240px, min(calc((100svh - 16px) * var(--arena-aspect)), calc(100cqi - 2 * 96px - 24px - 16px)), 2400px);
     padding-top: 8px;
     padding-bottom: 8px;
   }
