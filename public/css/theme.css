@@ -2505,6 +2505,12 @@ html { scroll-padding-top: calc(var(--bio-topbar-h) + 12px); }
   #scene-arena[data-mode="game"] .hud-name { max-width: 4ch; font-size: var(--bio-fs-12); }
   #scene-arena[data-mode="game"] .hud-score { font-size: var(--bio-fs-12); }
   #scene-arena[data-mode="game"] .hud-row.is-me { top: 0; bottom: 0; }
+  /* en estas columnas angostas no entran la palabra "Escudo" ni el nombre de quien tiene escudo:
+     quedan para el lector de pantalla y se ven el ícono y el tiempo, o el punto de color y el largo */
+  #scene-arena[data-mode="game"] .hud-shield { flex-direction: column; height: auto; max-width: 100%; padding: 4px 6px; gap: 2px; border-radius: 14px; }
+  #scene-arena[data-mode="game"] :is(.hud-shield-label, .hud-row.is-immune .hud-name) {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
 }
 /* En partida la página no rebota ni recarga al arrastrar */
 html:has(> body[data-scene="game"]) { overscroll-behavior: none; }

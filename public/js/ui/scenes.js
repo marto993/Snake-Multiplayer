@@ -650,7 +650,7 @@
       shieldEl = mk('span', 'hud-shield hidden');
       shieldEl.setAttribute('data-reveal', '');
       shieldEl.appendChild(icon('jelly', 'hud-shield-icon', 18));
-      shieldEl.appendChild(doc.createTextNode('Escudo '));
+      shieldEl.appendChild(mk('span', 'hud-shield-label', 'Escudo '));   // en la columna angosta del celular horizontal se oculta a la vista
       shieldTime = mk('b', 'hud-shield-time', '');
       shieldBar = mk('i', 'hud-shield-bar');
       shieldBar.setAttribute('aria-hidden', 'true');
