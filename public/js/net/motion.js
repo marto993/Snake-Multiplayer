@@ -38,8 +38,9 @@
  *   Motion.snakeAhead(a, dir, e, cell, period, out) -> n   segmentos extrapolados en out
  *   Motion.projectileAt(pa, pb, f, cell, out)              out.x, out.y
  *
- * `out` es un array de { x, y } que se reutiliza entre cuadros. `period` es el ancho de la
- * arena en múltiplos de celda (el envoltorio de los portales); 0 desactiva el envoltorio.
+ * `out` es un array de { x, y } que se reutiliza entre cuadros. `period` es el tamaño de la
+ * arena (el envoltorio de los portales): un número si es cuadrada, o { x, y } con el ancho y el
+ * alto; 0 desactiva el envoltorio.
  */
 (function (global) {
   'use strict';
@@ -217,11 +218,18 @@
     o.y = y;
   }
 
-  function step(out, i, sx, sy, tx, ty, f, cell, period) {
-    var dx = wrapDelta(tx - sx, period), dy = wrapDelta(ty - sy, period);
+  // Período de cada eje para la serpiente en curso (lo fija setPeriod al empezar cada llamada)
+  var PX = 0, PY = 0;
+  function setPeriod(period) {
+    if (period && typeof period === 'object') { PX = +period.x || 0; PY = +period.y || 0; }
+    else { PX = +period || 0; PY = PX; }
+  }
+
+  function step(out, i, sx, sy, tx, ty, f, cell) {
+    var dx = wrapDelta(tx - sx, PX), dy = wrapDelta(ty - sy, PY);
     var snap = cell * SNAP_STEPS;
     if (dx > snap || dx < -snap || dy > snap || dy < -snap) setPoint(out, i, tx, ty);
-    else setPoint(out, i, wrapPos(sx + dx * f, cell, period), wrapPos(sy + dy * f, cell, period));
+    else setPoint(out, i, wrapPos(sx + dx * f, cell, PX), wrapPos(sy + dy * f, cell, PY));
   }
 
   function copyInto(src, out) {
@@ -239,10 +247,11 @@
     if (!na) return copyInto(b, out);
     if (!nb) return copyInto(a, out);
     var n = na > nb ? na : nb;
+    setPeriod(period);
     for (var i = 0; i < n; i++) {
       var s = i < na ? a[i] : a[na - 1];
       var t = i < nb ? b[i] : a[i - 1];
-      step(out, i, s.x, s.y, t.x, t.y, f, cell, period);
+      step(out, i, s.x, s.y, t.x, t.y, f, cell);
     }
     out.length = n;
     return n;
@@ -253,8 +262,9 @@
     if (!n) { out.length = 0; return 0; }
     var dx = dir ? dir.x : 0, dy = dir ? dir.y : 0;
     var head = a[0];
-    step(out, 0, head.x, head.y, head.x + dx * cell, head.y + dy * cell, e, cell, period);
-    for (var i = 1; i < n; i++) step(out, i, a[i].x, a[i].y, a[i - 1].x, a[i - 1].y, e, cell, period);
+    setPeriod(period);
+    step(out, 0, head.x, head.y, head.x + dx * cell, head.y + dy * cell, e, cell);
+    for (var i = 1; i < n; i++) step(out, i, a[i].x, a[i].y, a[i - 1].x, a[i - 1].y, e, cell);
     out.length = n;
     return n;
   }
