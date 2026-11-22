@@ -57,7 +57,6 @@
   --bio-z-overlay:40; --bio-z-final:60; --bio-z-modal:70; --bio-z-toast:80;
   /* arena: --arena-size es el ANCHO; el alto sale de la proporción del mundo (768 × 432, 16:9) */
   --arena-aspect: 1.7778;
-  --arena-size: calc(100vw - 2 * var(--bio-gutter));
 
   /* extensión LAYOUT: medidas del chrome y de la grilla de la arena */
   --bio-topbar-h: 56px;
@@ -165,7 +164,6 @@ strong, b { font-weight: 600; }
 ::selection { background: rgba(31, 242, 210, 0.28); color: var(--bio-pearl); }
 
 /* Foco visible (spec 3.4) */
-:focus:not(:focus-visible) { outline: none; }
 :focus-visible {
   outline: 2px solid var(--bio-turquoise);
   outline-offset: 3px;
@@ -331,18 +329,15 @@ body:not([data-scene="lobby"]):not([data-scene="room"]) #dock { transform: trans
   max-width: 16ch;
 }
 .profile-chip-meta { display: none; font-size: var(--bio-fs-14); color: var(--bio-ink-3); white-space: nowrap; }
-.profile-chip-meta:empty { display: none !important; }
 .profile-chip-chevron {
   width: 18px; height: 18px;
   color: var(--bio-ink-3);
   transition: transform var(--bio-dur-quick) var(--bio-ease-standard);
 }
 .profile-chip[aria-expanded="true"],
-.profile-view:has(.profile-popover[data-open="true"]) .profile-chip { border-color: rgba(31, 242, 210, 0.55); background-color: rgba(11, 39, 56, 0.96); }
+.profile-view:has(.profile-popover:is([data-open="true"], :popover-open)) .profile-chip { border-color: rgba(31, 242, 210, 0.55); background-color: rgba(11, 39, 56, 0.96); }
 .profile-chip[aria-expanded="true"] .profile-chip-chevron,
-.profile-view:has(.profile-popover[data-open="true"]) .profile-chip-chevron { transform: rotate(180deg); }
-.profile-view:has(.profile-popover:popover-open) .profile-chip { border-color: rgba(31, 242, 210, 0.55); background-color: rgba(11, 39, 56, 0.96); }
-.profile-view:has(.profile-popover:popover-open) .profile-chip-chevron { transform: rotate(180deg); }
+.profile-view:has(.profile-popover:is([data-open="true"], :popover-open)) .profile-chip-chevron { transform: rotate(180deg); }
 
 /* Popover de perfil: Popover API (popover + popovertarget, sin JS; Escape y clic afuera lo cierran).
    Sin soporte nativo, ESCENAS usa .hidden / data-open y display en línea; la posición vale para ambos. */
@@ -791,8 +786,7 @@ body:not([data-scene="lobby"]):not([data-scene="room"]) #dock { transform: trans
 .field-input { width: 100%; }
 .field-input::placeholder { color: var(--bio-ink-3); opacity: 1; }
 .field-input:hover:not(:disabled) { border-color: rgba(31, 242, 210, 0.35); }
-.field-input:focus { outline: none; }
-.field-input:focus-visible, .field-input:focus {
+.field-input:focus-visible {
   border-color: var(--bio-turquoise);
   outline: 2px solid var(--bio-turquoise);
   outline-offset: 3px;
@@ -891,7 +885,6 @@ kbd {
   align-items: center;
   justify-content: center;
   padding-top: 40px;
-  padding-bottom: calc(var(--bio-footer-h) + 32px);
 }
 .login-wrap {
   width: 100%;
@@ -928,7 +921,6 @@ kbd {
   min-height: 100svh;
   align-items: center;
   padding-top: calc(var(--bio-topbar-h) + 24px);
-  padding-bottom: calc(var(--bio-footer-h) + 48px);
 }
 .lobby-wrap { width: 100%; display: flex; justify-content: center; }
 .lobby-card {
@@ -1056,12 +1048,6 @@ kbd {
    -------------------------------------------------------------------------- */
 #scene-arena {
   padding-top: var(--bio-arena-top);
-  padding-bottom: calc(var(--bio-footer-h) + 32px);
-}
-/* En partida la arena queda a la misma altura: el HUD ocupa el lugar del topbar */
-#scene-arena[data-mode="game"] {
-  padding-top: max(12px, calc(var(--bio-arena-top) - var(--bio-hud-bar-h) - var(--bio-arena-gap)));
-  padding-bottom: 32px;
 }
 
 .arena-layout {
@@ -1202,9 +1188,7 @@ kbd {
 .player-list { display: flex; flex-direction: column; gap: 4px; }
 .player-item {
   position: relative;
-  display: flex;
   align-items: center;
-  gap: 10px;
   min-height: 40px;
   padding: 6px 12px 6px 10px;
   border-radius: var(--bio-radius-md);
@@ -1234,7 +1218,6 @@ kbd {
 .player-item > .player-score { grid-column: 4; }
 .player-item > .player-status { grid-column: 5; }
 .player-rank {
-  flex: 0 0 22px;
   font-size: var(--bio-fs-14);
   font-weight: 600;
   color: var(--bio-ink-3);
@@ -1242,14 +1225,12 @@ kbd {
   text-align: center;
 }
 .player-dot {
-  flex: 0 0 auto;
   width: 10px; height: 10px;
   border-radius: 50%;
   background: var(--c, var(--bio-turquoise));
   box-shadow: 0 0 10px var(--c, var(--bio-turquoise));
 }
 .player-name {
-  flex: 1 1 auto;
   min-width: 0;
   font-weight: 500;
   white-space: nowrap;
@@ -1258,7 +1239,6 @@ kbd {
   color: var(--t, var(--bio-ink));
 }
 .player-host {
-  flex: 0 0 auto;
   height: 20px;
   padding: 0 8px;
   border-radius: var(--bio-radius-pill);
@@ -1269,7 +1249,6 @@ kbd {
   font-weight: 600;
 }
 .player-score {
-  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -1289,7 +1268,6 @@ kbd {
 }
 .player-score br { display: none; }
 .player-status {
-  flex: 0 0 auto;
   display: inline-grid;
   place-items: center;
   min-width: 0;
@@ -1441,7 +1419,7 @@ kbd {
 #scene-arena[data-mode="game"] #configPanel,
 #scene-arena[data-mode="game"] #startGameButton,
 #scene-arena[data-mode="game"] #leaveRoomButton,
-#scene-arena[data-mode="game"] #waitingSpan { display: none !important; }
+#scene-arena[data-mode="game"] #waitingSpan { display: none; }
 #scene-arena[data-mode="game"] .room-panel { padding: 20px; gap: 16px; }
 
 /* --------------------------------------------------------------------------
@@ -1674,7 +1652,6 @@ kbd {
 }
 .overlay > * { grid-area: 1 / 1; }
 .overlay-countdown {
-  background: radial-gradient(closest-side, rgba(1, 5, 9, 0.55), rgba(1, 5, 9, 0.2));
   background: radial-gradient(circle at 50% 50%, rgba(1, 5, 9, 0.55) 0%, rgba(1, 5, 9, 0.2) 75%);
 }
 .overlay-kicker {
@@ -2076,7 +2053,7 @@ body[data-scene="final"] #toasts { top: 20px; }
   #dock:popover-open { inset: auto; top: var(--bio-arena-top); right: var(--dock-right); }
   #dock::backdrop { display: none; }
   .online-players-panel { max-height: calc(100vh - var(--bio-arena-top) - var(--bio-footer-h) - 24px); }
-  #dockToggle { display: none !important; }
+  #dockToggle { display: none; }
   /* el lobby se centra en el espacio libre a la izquierda del dock */
   #scene-lobby {
     padding-right: calc(max(var(--bio-gutter), (100% - var(--arena-size) - 2 * var(--bio-col-gap) - var(--bio-side-w) - var(--bio-dock-w)) / 2) + var(--bio-dock-w) + var(--bio-col-gap));
@@ -2087,7 +2064,7 @@ body[data-scene="final"] #toasts { top: 20px; }
   }
   #scene-arena[data-mode="game"] .arena-layout { grid-template-areas: "board bar rail" "board stage rail"; }
   #scene-arena[data-mode="game"] .arena-side { display: block; grid-area: rail; }
-  .profile-chip-meta { display: block; }
+  .profile-chip-meta:not(:empty) { display: block; }
   /* Ajuste de INTEGRADOR: desde 1280 px el dock fijo ocupa la esquina superior derecha, donde la
      spec 4.19 pone los toasts; en lobby y sala se tapaban. Ahí los toasts bajan del centro del topbar. */
   body[data-scene="lobby"] #toasts,
@@ -2147,7 +2124,7 @@ body[data-scene="final"] #toasts { top: 20px; }
     grid-template-areas: "side stage";
   }
   #scene-arena[data-mode="game"] .arena-layout { grid-template-areas: "board bar" "board stage"; }
-  .profile-chip-meta { display: block; }
+  .profile-chip-meta:not(:empty) { display: block; }
 }
 
 /* Hasta 1023 px: una columna; HUD compacto */
@@ -2213,12 +2190,10 @@ body[data-scene="final"] #toasts { top: 20px; }
 /* Hasta 768 px: móvil */
 @media (max-width: 768px) {
   :root { --bio-col-gap: 16px; }
-  .wordmark { font-size: 32px; }
   .profile-chip { padding-right: 10px; }
   .profile-chip-name { max-width: 11ch; }
 
   .login-card, .lobby-card { padding: 24px; }
-  .scene-title { font-size: var(--bio-fs-36); }
   .join-row { flex-direction: column; align-items: stretch; }
   .field-code { width: 100%; }
   .join-row .btn { width: 100%; }
@@ -2229,7 +2204,6 @@ body[data-scene="final"] #toasts { top: 20px; }
   #scene-lobby, #scene-arena { padding-bottom: 24px; }
   #scene-login { padding-bottom: 32px; }
   .room-panel { padding: 20px; }
-  #startGameButton { position: sticky; bottom: 12px; z-index: 2; }
 
   /* pie en el flujo, al final de la página */
   #gameFooter {
@@ -2307,7 +2281,6 @@ body[data-scene="final"] #toasts { top: 20px; }
   .final-message { font-size: var(--bio-fs-16); line-height: 24px; }
 
   .modal-content { padding: 20px 16px 16px; max-height: 88svh; }
-  .modal-title { font-size: var(--bio-fs-36); }
   .leaderboard-head, .leaderboard-item { grid-template-columns: 26px minmax(0, 1fr) 58px 54px 66px; column-gap: 6px; }
   .leaderboard-head { padding: 0 10px 8px; }
   .leaderboard-item { padding: 0 10px; font-size: var(--bio-fs-14); }
@@ -2418,7 +2391,7 @@ body[data-scrolled] #topbar {
 .online-player-status.in-room { color: var(--bio-turquoise-soft); }
 
 /* Espectador en partida: el badge del HUD ya lo indica; el banner del riel sobraba */
-#scene-arena[data-mode="game"] #spectatorBanner { display: none !important; }
+#scene-arena[data-mode="game"] #spectatorBanner { display: none; }
 
 /* Hasta 1023 px la barra del HUD ocupa todo el ancho: los toasts de la partida van debajo de ella
    (antes tapaban el temporizador y el badge de espectador). */
