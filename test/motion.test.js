@@ -229,3 +229,16 @@ test('proyectiles: nacen una celda atrás y el que desaparece sigue de largo', (
   Motion.projectileAt({ x: 120, y: 60 }, { x: 132, y: 60 }, 0.25, CELL, out);
   assert.deepEqual(out, { x: 123, y: 60 });
 });
+
+test('arena apaisada: cada eje envuelve con su propio período', () => {
+  const out = [];
+  // Sale por la derecha de una arena de 768 × 432: va por el lado corto en x
+  Motion.snakeAt([{ x: 760, y: 200 }], [{ x: -4, y: 200 }], 0.5, CELL, { x: 768, y: 432 }, out);
+  assert.ok(Math.abs(out[0].x - (-6)) < 1e-9 || Math.abs(out[0].x - 762) < 1e-9, JSON.stringify(out[0]));
+  // Sale por abajo: envuelve con 432, no con 768
+  Motion.snakeAt([{ x: 100, y: 424 }], [{ x: 100, y: -4 }], 0.5, CELL, { x: 768, y: 432 }, out);
+  assert.ok(Math.abs(out[0].y - 426) < 1e-9 || Math.abs(out[0].y - (-6)) < 1e-9, JSON.stringify(out[0]));
+  // Un salto real de media arena en y (432 / 2 = 216 < 300) no se confunde con un portal en x
+  Motion.snakeAt([{ x: 100, y: 10 }], [{ x: 100, y: 22 }], 0.5, CELL, { x: 768, y: 432 }, out);
+  assert.equal(out[0].y, 16);
+});

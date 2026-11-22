@@ -55,8 +55,8 @@
   /* capas */
   --bio-z-backdrop:0; --bio-z-scene:10; --bio-z-hud:20; --bio-z-footer:25; --bio-z-chrome:30;
   --bio-z-overlay:40; --bio-z-final:60; --bio-z-modal:70; --bio-z-toast:80;
-  /* arena */
-  --arena-size: calc(100vw - 2 * var(--bio-gutter));
+  /* arena: --arena-size es el ANCHO; el alto sale de la proporción del mundo (768 × 432, 16:9) */
+  --arena-aspect: 1.7778;
 
   /* extensión LAYOUT: medidas del chrome y de la grilla de la arena */
   --bio-topbar-h: 56px;
@@ -70,34 +70,35 @@
   --bio-mono: "MONO" 1;
   --bio-display-axes: "SOFT" 100, "WONK" 1;
 }
-@media (min-width: 769px)  { :root { --bio-gutter:24px; } }
-@media (min-width: 1280px) { :root { --bio-gutter:32px; } }
+@media (width > 768px)  { :root { --bio-gutter:24px; } }
+@media (width >= 1280px) { :root { --bio-gutter:32px; } }
 
-/* Tamaño de la arena (spec 4.10). Mismo valor en sala y partida. */
-:root { --arena-size: min(calc(100vw - 32px), 600px); }
-@media (min-width: 769px) {
+/* Tamaño de la arena en la sala (spec 4.10): el ancho que entra, limitado por el alto disponible
+   multiplicado por la proporción. En partida crece (sección 18). */
+:root { --arena-size: min(calc(100cqi - 2 * var(--bio-gutter)), 720px); }
+@media (width > 768px) {
   :root {
     --bio-topbar-h: 64px;
     --bio-arena-top: calc(var(--bio-topbar-h) + 24px);
-    --arena-size: clamp(320px, min(calc(100vw - 48px), calc(100vh - 240px)), 640px);
-    --arena-size: clamp(320px, min(calc(100vw - 48px), calc(100svh - 240px)), 640px);
+    --arena-size: clamp(320px, min(calc(100cqi - 2 * var(--bio-gutter)), calc((100vh - 240px) * var(--arena-aspect))), 960px);
+    --arena-size: clamp(320px, min(calc(100cqi - 2 * var(--bio-gutter)), calc((100svh - 240px) * var(--arena-aspect))), 960px);
   }
 }
-@media (min-width: 1024px) {
+@media (width >= 1024px) {
   :root {
     --bio-hud-bar-h: 64px;
     --bio-side-w: 260px;
-    /* 360 y no 340: deja lugar a la barra de scroll vertical del escritorio */
-    --arena-size: clamp(320px, min(calc(100vw - 360px), calc(100vh - 200px)), 680px);
-    --arena-size: clamp(320px, min(calc(100vw - 360px), calc(100svh - 200px)), 680px);
+    /* dos columnas: panel + separación + arena, dentro de los márgenes */
+    --arena-size: clamp(320px, min(calc(100cqi - 2 * var(--bio-gutter) - var(--bio-side-w) - var(--bio-col-gap)), calc((100vh - 200px) * var(--arena-aspect))), 1200px);
+    --arena-size: clamp(320px, min(calc(100cqi - 2 * var(--bio-gutter) - var(--bio-side-w) - var(--bio-col-gap)), calc((100svh - 200px) * var(--arena-aspect))), 1200px);
   }
 }
-@media (min-width: 1280px) {
+@media (width >= 1280px) {
   :root {
     --bio-side-w: 300px;
-    /* 720 y no 680: 300 + 280 + 2 × 24 de separación + 2 × 32 de margen + scroll */
-    --arena-size: clamp(320px, min(calc(100vw - 720px), calc(100vh - 200px)), 760px);
-    --arena-size: clamp(320px, min(calc(100vw - 720px), calc(100svh - 200px)), 760px);
+    /* tres columnas: panel + arena + dock, con sus dos separaciones, dentro de los márgenes */
+    --arena-size: clamp(320px, min(calc(100cqi - 2 * var(--bio-gutter) - var(--bio-side-w) - var(--bio-dock-w) - 2 * var(--bio-col-gap)), calc((100vh - 200px) * var(--arena-aspect))), 1400px);
+    --arena-size: clamp(320px, min(calc(100cqi - 2 * var(--bio-gutter) - var(--bio-side-w) - var(--bio-dock-w) - 2 * var(--bio-col-gap)), calc((100svh - 200px) * var(--arena-aspect))), 1400px);
   }
 }
 
@@ -110,6 +111,9 @@ html {
   background-color: var(--bio-abyss-900);
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  /* Contenedor raíz: 100cqi es el ancho disponible sin la barra de scroll (100vw la incluye).
+     En html y no en #scenes, para que el dock, que está afuera, mida contra lo mismo. */
+  container-type: inline-size;
 }
 
 body {
@@ -160,10 +164,14 @@ strong, b { font-weight: 600; }
 
 .mono, kbd, code { font-variation-settings: var(--bio-mono); font-feature-settings: "tnum" 1; }
 
+/* Cortes de línea: títulos parejos y párrafos sin una palabra sola en la última línea.
+   Solo en estos elementos (no en *: tiene costo) y sin balance en cajas visibles. */
+.panel-title, .scene-title, .modal-title, .rotate-hint-title { text-wrap: balance; }
+.field-help, .config-info, .controls-hint > p, .final-message, .final-hint, .rotate-hint-text { text-wrap: pretty; }
+
 ::selection { background: rgba(31, 242, 210, 0.28); color: var(--bio-pearl); }
 
 /* Foco visible (spec 3.4) */
-:focus:not(:focus-visible) { outline: none; }
 :focus-visible {
   outline: 2px solid var(--bio-turquoise);
   outline-offset: 3px;
@@ -229,8 +237,7 @@ strong, b { font-weight: 600; }
   min-width: 0;
   display: flex;
   flex-direction: column;
-  padding-left: var(--bio-gutter);
-  padding-right: var(--bio-gutter);
+  padding-inline: var(--bio-gutter);
 }
 .scene[data-state="hidden"] { display: none; }
 .scene[data-state="leaving"] { pointer-events: none; z-index: 0; }
@@ -291,13 +298,13 @@ body:not([data-scene="lobby"]):not([data-scene="room"]) #dock { transform: trans
   align-items: center;
   gap: 10px;
   height: 44px;
-  max-width: min(320px, calc(100vw - 140px));
+  max-width: min(320px, calc(100cqi - 140px));
   padding: 0 12px 0 6px;
   border-radius: var(--bio-radius-pill);
   border: 1px solid var(--bio-panel-border);
   background: var(--bio-panel);
   color: var(--bio-ink);
-  text-align: left;
+  text-align: start;
   transition: border-color var(--bio-dur-hover) var(--bio-ease-standard), background-color var(--bio-dur-hover) var(--bio-ease-standard);
 }
 .profile-chip:hover { border-color: rgba(31, 242, 210, 0.45); background-color: rgba(11, 39, 56, 0.94); }
@@ -329,18 +336,15 @@ body:not([data-scene="lobby"]):not([data-scene="room"]) #dock { transform: trans
   max-width: 16ch;
 }
 .profile-chip-meta { display: none; font-size: var(--bio-fs-14); color: var(--bio-ink-3); white-space: nowrap; }
-.profile-chip-meta:empty { display: none !important; }
 .profile-chip-chevron {
   width: 18px; height: 18px;
   color: var(--bio-ink-3);
   transition: transform var(--bio-dur-quick) var(--bio-ease-standard);
 }
 .profile-chip[aria-expanded="true"],
-.profile-view:has(.profile-popover[data-open="true"]) .profile-chip { border-color: rgba(31, 242, 210, 0.55); background-color: rgba(11, 39, 56, 0.96); }
+.profile-view:has(.profile-popover:is([data-open="true"], :popover-open)) .profile-chip { border-color: rgba(31, 242, 210, 0.55); background-color: rgba(11, 39, 56, 0.96); }
 .profile-chip[aria-expanded="true"] .profile-chip-chevron,
-.profile-view:has(.profile-popover[data-open="true"]) .profile-chip-chevron { transform: rotate(180deg); }
-.profile-view:has(.profile-popover:popover-open) .profile-chip { border-color: rgba(31, 242, 210, 0.55); background-color: rgba(11, 39, 56, 0.96); }
-.profile-view:has(.profile-popover:popover-open) .profile-chip-chevron { transform: rotate(180deg); }
+.profile-view:has(.profile-popover:is([data-open="true"], :popover-open)) .profile-chip-chevron { transform: rotate(180deg); }
 
 /* Popover de perfil: Popover API (popover + popovertarget, sin JS; Escape y clic afuera lo cierran).
    Sin soporte nativo, ESCENAS usa .hidden / data-open y display en línea; la posición vale para ambos. */
@@ -350,7 +354,7 @@ body:not([data-scene="lobby"]):not([data-scene="room"]) #dock { transform: trans
   top: calc(var(--bio-topbar-h) - 4px);
   right: var(--bio-gutter);
   z-index: 2;
-  width: min(300px, calc(100vw - 2 * var(--bio-gutter)));
+  width: min(300px, calc(100cqi - 2 * var(--bio-gutter)));
   margin: 0;
   padding: 20px;
   border: 1px solid var(--bio-panel-border);
@@ -789,8 +793,7 @@ body:not([data-scene="lobby"]):not([data-scene="room"]) #dock { transform: trans
 .field-input { width: 100%; }
 .field-input::placeholder { color: var(--bio-ink-3); opacity: 1; }
 .field-input:hover:not(:disabled) { border-color: rgba(31, 242, 210, 0.35); }
-.field-input:focus { outline: none; }
-.field-input:focus-visible, .field-input:focus {
+.field-input:focus-visible {
   border-color: var(--bio-turquoise);
   outline: 2px solid var(--bio-turquoise);
   outline-offset: 3px;
@@ -889,7 +892,6 @@ kbd {
   align-items: center;
   justify-content: center;
   padding-top: 40px;
-  padding-bottom: calc(var(--bio-footer-h) + 32px);
 }
 .login-wrap {
   width: 100%;
@@ -926,7 +928,6 @@ kbd {
   min-height: 100svh;
   align-items: center;
   padding-top: calc(var(--bio-topbar-h) + 24px);
-  padding-bottom: calc(var(--bio-footer-h) + 48px);
 }
 .lobby-wrap { width: 100%; display: flex; justify-content: center; }
 .lobby-card {
@@ -942,7 +943,7 @@ kbd {
 .join-row .btn { flex: 0 0 auto; }
 .rooms { display: flex; flex-direction: column; gap: 12px; padding-top: 20px; border-top: 1px solid rgba(163, 199, 209, 0.08); }
 .rooms-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.rooms-head .btn-quiet { margin-right: -12px; }
+.rooms-head .btn-quiet { margin-inline-end: -12px; }
 .rooms-list {
   display: flex;
   flex-direction: column;
@@ -1054,12 +1055,6 @@ kbd {
    -------------------------------------------------------------------------- */
 #scene-arena {
   padding-top: var(--bio-arena-top);
-  padding-bottom: calc(var(--bio-footer-h) + 32px);
-}
-/* En partida la arena queda a la misma altura: el HUD ocupa el lugar del topbar */
-#scene-arena[data-mode="game"] {
-  padding-top: max(12px, calc(var(--bio-arena-top) - var(--bio-hud-bar-h) - var(--bio-arena-gap)));
-  padding-bottom: 32px;
 }
 
 .arena-layout {
@@ -1088,11 +1083,17 @@ kbd {
 .arena-stage {
   grid-area: stage;
   position: relative;
+  --arena-h: calc(var(--arena-size) / var(--arena-aspect));
   width: var(--arena-size);
-  height: var(--arena-size);
+  height: var(--arena-h);
+  /* los overlays (cuenta regresiva, aro, "¡Ya!") se miden con cqh contra la arena */
+  container-type: size;
   isolation: isolate;
   justify-self: center;
 }
+/* Partida en curso: el mouse apunta el rumbo y el clic dispara */
+.arena-stage.is-aiming,
+.arena-stage.is-aiming * { cursor: crosshair; }
 .arena-stage::before,
 .arena-stage::after {
   content: "";
@@ -1171,7 +1172,7 @@ kbd {
   line-height: 28px;
   color: var(--bio-turquoise-soft);
 }
-.room-meta .room-title .room-code { margin-left: 4px; }
+.room-meta .room-title .room-code { margin-inline-start: 4px; }
 .room-meta .room-role { color: var(--bio-ink-2); }
 .room-meta strong { color: var(--bio-ink); font-weight: 600; }
 
@@ -1196,9 +1197,7 @@ kbd {
 .player-list { display: flex; flex-direction: column; gap: 4px; }
 .player-item {
   position: relative;
-  display: flex;
   align-items: center;
-  gap: 10px;
   min-height: 40px;
   padding: 6px 12px 6px 10px;
   border-radius: var(--bio-radius-md);
@@ -1228,7 +1227,6 @@ kbd {
 .player-item > .player-score { grid-column: 4; }
 .player-item > .player-status { grid-column: 5; }
 .player-rank {
-  flex: 0 0 22px;
   font-size: var(--bio-fs-14);
   font-weight: 600;
   color: var(--bio-ink-3);
@@ -1236,14 +1234,12 @@ kbd {
   text-align: center;
 }
 .player-dot {
-  flex: 0 0 auto;
   width: 10px; height: 10px;
   border-radius: 50%;
   background: var(--c, var(--bio-turquoise));
   box-shadow: 0 0 10px var(--c, var(--bio-turquoise));
 }
 .player-name {
-  flex: 1 1 auto;
   min-width: 0;
   font-weight: 500;
   white-space: nowrap;
@@ -1252,7 +1248,6 @@ kbd {
   color: var(--t, var(--bio-ink));
 }
 .player-host {
-  flex: 0 0 auto;
   height: 20px;
   padding: 0 8px;
   border-radius: var(--bio-radius-pill);
@@ -1263,7 +1258,6 @@ kbd {
   font-weight: 600;
 }
 .player-score {
-  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -1272,7 +1266,7 @@ kbd {
   font-feature-settings: "tnum" 1;
   line-height: 18px;
   color: var(--bio-ink);
-  text-align: right;
+  text-align: end;
 }
 .player-score small {
   font-size: var(--bio-fs-12);
@@ -1283,7 +1277,6 @@ kbd {
 }
 .player-score br { display: none; }
 .player-status {
-  flex: 0 0 auto;
   display: inline-grid;
   place-items: center;
   min-width: 0;
@@ -1336,7 +1329,7 @@ kbd {
   background: transparent;
   color: var(--bio-ink);
   font-weight: 600;
-  text-align: left;
+  text-align: start;
   transition: background-color var(--bio-dur-hover) var(--bio-ease-standard);
 }
 .config-toggle:hover { background: rgba(31, 242, 210, 0.05); }
@@ -1408,8 +1401,8 @@ kbd {
 .difficulty-option:has(input:disabled) { opacity: 0.6; cursor: not-allowed; }
 .config-info {
   margin: 14px 0 16px;
-  padding-left: 12px;
-  border-left: 2px solid rgba(159, 244, 255, 0.4);
+  padding-inline-start: 12px;
+  border-inline-start: 2px solid rgba(159, 244, 255, 0.4);
   font-size: var(--bio-fs-14);
   line-height: 20px;
   color: var(--bio-ink-2);
@@ -1435,7 +1428,7 @@ kbd {
 #scene-arena[data-mode="game"] #configPanel,
 #scene-arena[data-mode="game"] #startGameButton,
 #scene-arena[data-mode="game"] #leaveRoomButton,
-#scene-arena[data-mode="game"] #waitingSpan { display: none !important; }
+#scene-arena[data-mode="game"] #waitingSpan { display: none; }
 #scene-arena[data-mode="game"] .room-panel { padding: 20px; gap: 16px; }
 
 /* --------------------------------------------------------------------------
@@ -1622,7 +1615,7 @@ kbd {
 .hud-row:not(.is-immune) .hud-immune-icon { display: none; }
 .hud-score {
   flex: 0 0 auto;
-  margin-left: auto;
+  margin-inline-start: auto;
   font-weight: 700;
   font-size: var(--bio-fs-16);
   font-variation-settings: var(--bio-mono);
@@ -1650,7 +1643,7 @@ kbd {
   gap: 4px;
   color: var(--bio-ink-3);
 }
-.hud-board-caption { padding-left: 10px; font-size: var(--bio-fs-12); line-height: 16px; color: var(--bio-ink-3); }
+.hud-board-caption { padding-inline-start: 10px; font-size: var(--bio-fs-12); line-height: 16px; color: var(--bio-ink-3); }
 
 /* --------------------------------------------------------------------------
    11. Overlays de la arena: cuenta regresiva, inicio de ronda, fin de ronda
@@ -1668,7 +1661,6 @@ kbd {
 }
 .overlay > * { grid-area: 1 / 1; }
 .overlay-countdown {
-  background: radial-gradient(closest-side, rgba(1, 5, 9, 0.55), rgba(1, 5, 9, 0.2));
   background: radial-gradient(circle at 50% 50%, rgba(1, 5, 9, 0.55) 0%, rgba(1, 5, 9, 0.2) 75%);
 }
 .overlay-kicker {
@@ -1684,7 +1676,7 @@ kbd {
 .countdown-number {
   --cd: var(--bio-turquoise);
   display: block;
-  font-size: calc(var(--arena-size) * 0.42);
+  font-size: 50cqh;
   line-height: 1;
   padding: 0 0.14em 0.06em 0.06em;
   color: var(--cd);
@@ -1698,8 +1690,8 @@ kbd {
 .countdown-number[data-n="2"], .overlay-countdown[data-count="2"] .countdown-number { --cd: var(--bio-cyan); }
 .countdown-number[data-n="1"], .overlay-countdown[data-count="1"] .countdown-number { --cd: var(--bio-lime); }
 .countdown-ring {
-  width: calc(var(--arena-size) * 0.42);
-  height: calc(var(--arena-size) * 0.42);
+  width: 50cqh;
+  height: 50cqh;
   border-radius: 50%;
   border: 2px solid currentColor;
   color: var(--bio-turquoise);
@@ -1708,7 +1700,7 @@ kbd {
 .overlay-countdown[data-count="2"] .countdown-ring { color: var(--bio-cyan); }
 .overlay-countdown[data-count="1"] .countdown-ring { color: var(--bio-lime); }
 .round-go {
-  font-size: max(72px, calc(var(--arena-size) * 0.28));
+  font-size: max(56px, 34cqh);
   line-height: 1;
   font-weight: 400;
   padding: 0 0.14em 0.06em 0.06em;
@@ -1747,7 +1739,7 @@ kbd {
 }
 .final-title {
   --champion-c: var(--champion, var(--bio-turquoise-soft));
-  font-size: clamp(48px, 9vw, 112px);
+  font-size: clamp(48px, 9cqi, 112px);
   line-height: 1;
   padding: 0 0.12em 0.06em;
   color: var(--champion-c);
@@ -1771,7 +1763,7 @@ kbd {
   width: 100%;
   margin-top: 8px;
   padding: 24px;
-  text-align: left;
+  text-align: start;
   border-radius: var(--bio-radius-membrane);
   background: var(--bio-panel);
   border: 1px solid var(--bio-panel-border);
@@ -1859,7 +1851,7 @@ kbd {
 }
 .modal-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
 .modal-title { font-size: var(--bio-fs-36); line-height: 40px; color: var(--bio-ink); text-shadow: 0 0 2px rgba(138, 247, 230, 0.4), 0 0 18px rgba(31, 242, 210, 0.18); }
-.modal-close { margin-right: -8px; }
+.modal-close { margin-inline-end: -8px; }
 .modal-body { min-height: 0; flex: 1 1 auto; display: flex; flex-direction: column; }
 
 .leaderboard-head,
@@ -1877,7 +1869,7 @@ kbd {
   font-weight: 600;
   color: var(--bio-ink-3);
 }
-.leaderboard-head .wins, .leaderboard-head .games, .leaderboard-head .winrate { text-align: right; }
+.leaderboard-head .wins, .leaderboard-head .games, .leaderboard-head .winrate { text-align: end; }
 .leaderboard-list {
   display: flex;
   flex-direction: column;
@@ -1901,7 +1893,7 @@ kbd {
 .leaderboard-item .rank { font-weight: 700; color: var(--rank-c); font-variation-settings: var(--bio-mono); text-align: center; }
 .leaderboard-item .name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--bio-ink); }
 .leaderboard-item .wins, .leaderboard-item .games, .leaderboard-item .winrate {
-  text-align: right;
+  text-align: end;
   font-variation-settings: var(--bio-mono);
   font-feature-settings: "tnum" 1;
   white-space: nowrap;
@@ -1938,7 +1930,7 @@ kbd {
   top: calc(var(--bio-topbar-h) + 16px);
   right: var(--bio-gutter);
   width: 360px;
-  max-width: calc(100vw - 2 * var(--bio-gutter));
+  max-width: calc(100cqi - 2 * var(--bio-gutter));
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -2053,7 +2045,7 @@ body[data-scene="final"] #toasts { top: 20px; }
    -------------------------------------------------------------------------- */
 
 /* Desde 1280 px: dock fijo a la derecha, alineado con la columna derecha de la grilla */
-@media (min-width: 1280px) {
+@media (width >= 1280px) {
   #dock {
     --dock-right: max(var(--bio-gutter), calc((100% - var(--arena-size) - 2 * var(--bio-col-gap) - var(--bio-side-w) - var(--bio-dock-w)) / 2));
     margin: 0;
@@ -2070,7 +2062,7 @@ body[data-scene="final"] #toasts { top: 20px; }
   #dock:popover-open { inset: auto; top: var(--bio-arena-top); right: var(--dock-right); }
   #dock::backdrop { display: none; }
   .online-players-panel { max-height: calc(100vh - var(--bio-arena-top) - var(--bio-footer-h) - 24px); }
-  #dockToggle { display: none !important; }
+  #dockToggle { display: none; }
   /* el lobby se centra en el espacio libre a la izquierda del dock */
   #scene-lobby {
     padding-right: calc(max(var(--bio-gutter), (100% - var(--arena-size) - 2 * var(--bio-col-gap) - var(--bio-side-w) - var(--bio-dock-w)) / 2) + var(--bio-dock-w) + var(--bio-col-gap));
@@ -2081,7 +2073,7 @@ body[data-scene="final"] #toasts { top: 20px; }
   }
   #scene-arena[data-mode="game"] .arena-layout { grid-template-areas: "board bar rail" "board stage rail"; }
   #scene-arena[data-mode="game"] .arena-side { display: block; grid-area: rail; }
-  .profile-chip-meta { display: block; }
+  .profile-chip-meta:not(:empty) { display: block; }
   /* Ajuste de INTEGRADOR: desde 1280 px el dock fijo ocupa la esquina superior derecha, donde la
      spec 4.19 pone los toasts; en lobby y sala se tapaban. Ahí los toasts bajan del centro del topbar. */
   body[data-scene="lobby"] #toasts,
@@ -2090,13 +2082,13 @@ body[data-scene="final"] #toasts { top: 20px; }
 
 /* Hasta 1279 px: el dock es un panel que abre #dockToggle (Popover API: clic afuera y Escape lo cierran).
    Respaldo sin soporte nativo: ESCENAS pone #dock[data-open="true"] y lo anima. */
-@media (max-width: 1279px) {
+@media (width < 1280px) {
   #dock { display: none; }
   #dock:is([data-open="true"], :popover-open) {
     position: fixed;
     display: flex;
     inset: 0 0 0 auto;
-    width: min(320px, calc(100vw - 32px));
+    width: min(320px, calc(100cqi - 32px));
     height: 100%;
     max-height: none;
     padding: 12px;
@@ -2135,17 +2127,17 @@ body[data-scene="final"] #toasts { top: 20px; }
 }
 
 /* 1024 a 1279 px: dos columnas en sala, marcador + arena en partida */
-@media (min-width: 1024px) and (max-width: 1279px) {
+@media (1024px <= width < 1280px) {
   .arena-layout {
     grid-template-columns: var(--bio-side-w) var(--arena-size);
     grid-template-areas: "side stage";
   }
   #scene-arena[data-mode="game"] .arena-layout { grid-template-areas: "board bar" "board stage"; }
-  .profile-chip-meta { display: block; }
+  .profile-chip-meta:not(:empty) { display: block; }
 }
 
 /* Hasta 1023 px: una columna; HUD compacto */
-@media (max-width: 1023px) {
+@media (width < 1024px) {
   .hud-bar {
     padding: 0 12px;
     gap: 8px;
@@ -2182,7 +2174,7 @@ body[data-scene="final"] #toasts { top: 20px; }
   }
   .hud-rank, .hud-len, .hud-me-tag { display: none; }
   .hud-name { max-width: 8ch; font-size: var(--bio-fs-14); }
-  .hud-score { margin-left: 2px; font-size: var(--bio-fs-14); }
+  .hud-score { margin-inline-start: 2px; font-size: var(--bio-fs-14); }
   .hud-row.is-me {
     position: sticky;
     left: 0;
@@ -2196,7 +2188,7 @@ body[data-scene="final"] #toasts { top: 20px; }
 }
 
 /* 769 a 1023 px: sala con #gameInterface en dos columnas internas */
-@media (min-width: 769px) and (max-width: 1023px) {
+@media (768px < width < 1024px) {
   .room-panel {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -2205,25 +2197,22 @@ body[data-scene="final"] #toasts { top: 20px; }
 }
 
 /* Hasta 768 px: móvil */
-@media (max-width: 768px) {
+@media (width <= 768px) {
   :root { --bio-col-gap: 16px; }
-  .wordmark { font-size: 32px; }
-  .profile-chip { padding-right: 10px; }
+  .profile-chip { padding-inline-end: 10px; }
   .profile-chip-name { max-width: 11ch; }
 
   .login-card, .lobby-card { padding: 24px; }
-  .scene-title { font-size: var(--bio-fs-36); }
   .join-row { flex-direction: column; align-items: stretch; }
   .field-code { width: 100%; }
   .join-row .btn { width: 100%; }
   .rooms-list { max-height: none; overflow: visible; }
   .room-item { flex-wrap: wrap; padding: 12px 12px 12px 16px; }
-  .room-item .join-room-btn { margin-left: auto; }
+  .room-item .join-room-btn { margin-inline-start: auto; }
 
   #scene-lobby, #scene-arena { padding-bottom: 24px; }
   #scene-login { padding-bottom: 32px; }
   .room-panel { padding: 20px; }
-  #startGameButton { position: sticky; bottom: 12px; z-index: 2; }
 
   /* pie en el flujo, al final de la página */
   #gameFooter {
@@ -2249,7 +2238,7 @@ body[data-scene="final"] #toasts { top: 20px; }
     box-shadow: none;
   }
   .dock-toggle .dock-count { min-width: 22px; height: 22px; font-size: var(--bio-fs-12); }
-  .dock-toggle:has(.dock-count:empty) { padding-right: 14px; }
+  .dock-toggle:has(.dock-count:empty) { padding-inline-end: 14px; }
   .dock-toggle-label {
     position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
     overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
@@ -2301,24 +2290,23 @@ body[data-scene="final"] #toasts { top: 20px; }
   .final-message { font-size: var(--bio-fs-16); line-height: 24px; }
 
   .modal-content { padding: 20px 16px 16px; max-height: 88svh; }
-  .modal-title { font-size: var(--bio-fs-36); }
   .leaderboard-head, .leaderboard-item { grid-template-columns: 26px minmax(0, 1fr) 58px 54px 66px; column-gap: 6px; }
   .leaderboard-head { padding: 0 10px 8px; }
   .leaderboard-item { padding: 0 10px; font-size: var(--bio-fs-14); }
 }
 
-@media (max-width: 480px) {
+@media (width <= 480px) {
   .login-wordmark { font-size: var(--bio-fs-48); }
   .profile-chip-name { max-width: 8ch; }
   .footer-content { flex-direction: column; gap: 4px; }
 }
 
 /* backdrop-filter solo en modal y final, desde 769 px y con puntero fino (spec 7.1) */
-@media (min-width: 769px) and (pointer: fine) {
+@media (width > 768px) and (pointer: fine) {
   .modal, .final-screen { -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
 }
 /* sin desenfoque (móvil o táctil) el velo del final sube para que la clasificación se lea limpia */
-@media (max-width: 768px), (pointer: coarse) {
+@media (width <= 768px), (pointer: coarse) {
   .final-screen {
     background:
       radial-gradient(70% 50% at 50% 30%, color-mix(in srgb, var(--champion, var(--bio-turquoise)) 10%, transparent), transparent 70%),
@@ -2391,7 +2379,7 @@ body[data-scrolled] #topbar {
 /* Pie: desde 769 px va en el flujo (como en móvil) en las escenas donde se ve. Las escenas descuentan
    su altura, así queda al pie de la ventana si el contenido es corto y debajo del contenido si es largo:
    nunca encima de filas de jugadores o de la tarjeta de salas. */
-@media (min-width: 769px) {
+@media (width > 768px) {
   body:is([data-scene="login"], [data-scene="lobby"], [data-scene="room"]) #gameFooter { position: relative; }
   body:is([data-scene="login"], [data-scene="lobby"], [data-scene="room"]) #scenes,
   body:is([data-scene="login"], [data-scene="lobby"], [data-scene="room"]) #scene-login,
@@ -2412,22 +2400,22 @@ body[data-scrolled] #topbar {
 .online-player-status.in-room { color: var(--bio-turquoise-soft); }
 
 /* Espectador en partida: el badge del HUD ya lo indica; el banner del riel sobraba */
-#scene-arena[data-mode="game"] #spectatorBanner { display: none !important; }
+#scene-arena[data-mode="game"] #spectatorBanner { display: none; }
 
 /* Hasta 1023 px la barra del HUD ocupa todo el ancho: los toasts de la partida van debajo de ella
    (antes tapaban el temporizador y el badge de espectador). */
-@media (max-width: 1023px) {
+@media (width < 1024px) {
   body[data-scene="game"] #toasts { top: calc(var(--bio-arena-top) + 8px); }
 }
 
 /* Teléfono en horizontal y ventanas bajas (769 a 1023 px de ancho, hasta 500 px de alto):
    la arena baja de su mínimo de 320 px para entrar entera en la ventana. */
-@media (min-width: 769px) and (max-width: 1023px) and (max-height: 500px) {
+@media (768px < width < 1024px) and (height <= 500px) {
   :root {
     --bio-topbar-h: 56px;
     --bio-arena-top: calc(var(--bio-topbar-h) + 12px);
-    --arena-size: clamp(220px, min(calc(100vw - 48px), calc(100vh - 104px)), 640px);
-    --arena-size: clamp(220px, min(calc(100vw - 48px), calc(100svh - 104px)), 640px);
+    --arena-size: clamp(220px, min(calc(100cqi - 2 * var(--bio-gutter)), calc((100vh - 104px) * var(--arena-aspect))), 960px);
+    --arena-size: clamp(220px, min(calc(100cqi - 2 * var(--bio-gutter)), calc((100svh - 104px) * var(--arena-aspect))), 960px);
   }
   /* la barra del HUD mide lo mismo que la arena: el badge de espectador queda solo con su icono
      (el texto sigue en el árbol de accesibilidad) para no pisar el temporizador */
@@ -2439,7 +2427,7 @@ body[data-scrolled] #topbar {
 .final-title[data-champion] {
   white-space: nowrap;
   overflow-wrap: normal;
-  font-size: min(clamp(48px, 9vw, 112px), calc(min(100vw - 2 * var(--bio-gutter), 640px) * 1.35 / var(--name-len, 6)));
+  font-size: min(clamp(48px, 9cqi, 112px), calc(min(100cqi - 2 * var(--bio-gutter), 640px) * 1.35 / var(--name-len, 6)));
 }
 
 /* El foco y los saltos por teclado no dejan el elemento debajo del topbar fijo */
@@ -2449,3 +2437,229 @@ html { scroll-padding-top: calc(var(--bio-topbar-h) + 12px); }
    (.final-name es nowrap) el contenido se ensanchaba y cortaba el mensaje y los puntos a la derecha. */
 .final-screen { grid-template-columns: minmax(0, 1fr); }
 .final-content { min-width: 0; }
+
+/* --------------------------------------------------------------------------
+   18. Partida: la arena ocupa la pantalla
+   En sala la arena comparte la ventana con el panel y el dock. En partida pasa a ocupar todo el
+   espacio disponible: el ancho que entra, limitado por el alto (12 px arriba, la barra del HUD, la
+   separación, la arena y 20 px abajo) por la proporción 16:9. Scenes anima el cambio (FLIP) al
+   empezar la cuenta regresiva y ARENA rehace el canvas al tamaño nuevo.
+   -------------------------------------------------------------------------- */
+#scene-arena[data-mode="game"] {
+  --arena-chrome-v: calc(12px + var(--bio-hud-bar-h) + var(--bio-arena-gap) + 20px);
+  --arena-board-row: 50px;   /* hasta 1023 px: fila de chips del marcador debajo de la arena */
+  --arena-size: clamp(220px, min(calc(100cqi - 2 * var(--bio-gutter)), calc((100svh - var(--arena-chrome-v) - var(--arena-board-row)) * var(--arena-aspect))), 2400px);
+  padding-top: 12px;
+  padding-bottom: 20px;
+}
+/* Desde 1024 px: marcador a la izquierda y arena con todo el resto; el riel de la sala no se muestra */
+@media (width >= 1024px) {
+  #scene-arena[data-mode="game"] {
+    --arena-board-row: 0px;
+    --arena-size: clamp(320px, min(calc(100cqi - var(--bio-side-w) - var(--bio-col-gap) - 2 * var(--bio-gutter)), calc((100svh - var(--arena-chrome-v)) * var(--arena-aspect))), 2400px);
+  }
+  #scene-arena[data-mode="game"] .arena-layout {
+    grid-template-columns: var(--bio-side-w) var(--arena-size);
+    grid-template-areas: "board bar" "board stage";
+  }
+  #scene-arena[data-mode="game"] .arena-side { display: none; }
+}
+/* Pantallas bajas en horizontal (celulares): arena al centro con todo el alto que entre, la barra
+   del HUD apilada a la izquierda y el marcador a la derecha; los costados (al menos 96 px) quedan
+   para los pulgares, y el joystick y el disparo pueden asomar sobre las esquinas de la arena */
+@media (orientation: landscape) and (height <= 560px) {
+  #scene-arena[data-mode="game"] {
+    --arena-size: clamp(240px, min(calc((100svh - 16px) * var(--arena-aspect)), calc(100cqi - 2 * 96px - 24px - 16px)), 2400px);
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+  #scene-arena[data-mode="game"] .arena-layout {
+    grid-template-columns: minmax(0, 1fr) var(--arena-size) minmax(0, 1fr);
+    grid-template-areas: "bar stage board";
+    column-gap: 12px;
+    padding-left: max(8px, env(safe-area-inset-left));
+    padding-right: max(8px, env(safe-area-inset-right));
+  }
+  #scene-arena[data-mode="game"] .arena-side { display: none; }
+  #scene-arena[data-mode="game"] .hud-bar {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    justify-self: center;
+    width: 100%;
+    max-width: 220px;
+    height: auto;
+    padding: 10px 8px;
+    gap: 6px;
+  }
+  /* la meta no entra en una columna tan angosta: queda el aro del tiempo y el largo propio */
+  #scene-arena[data-mode="game"] .hud-goal { display: none; }
+  #scene-arena[data-mode="game"] .hud-side { justify-self: center; width: 100%; max-width: 220px; }
+  #scene-arena[data-mode="game"] .hud-board {
+    flex-direction: column;
+    overflow-x: visible;
+    overflow-y: auto;
+    max-height: calc(100svh - 140px); /* no llega al botón de disparo */
+    scroll-snap-type: y proximity;
+  }
+  #scene-arena[data-mode="game"] .hud-row { max-width: 100%; padding: 0 8px 0 7px; gap: 5px; }
+  #scene-arena[data-mode="game"] .hud-name { max-width: 4ch; font-size: var(--bio-fs-12); }
+  #scene-arena[data-mode="game"] .hud-score { font-size: var(--bio-fs-12); }
+  #scene-arena[data-mode="game"] .hud-row.is-me { top: 0; bottom: 0; }
+  /* en estas columnas angostas no entran la palabra "Escudo" ni el nombre de quien tiene escudo:
+     quedan para el lector de pantalla y se ven el ícono y el tiempo, o el punto de color y el largo */
+  #scene-arena[data-mode="game"] .hud-shield { flex-direction: column; height: auto; max-width: 100%; padding: 4px 6px; gap: 2px; border-radius: 14px; }
+  #scene-arena[data-mode="game"] :is(.hud-shield-label, .hud-row.is-immune .hud-name) {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+}
+/* En partida la página no rebota ni recarga al arrastrar */
+html:has(> body[data-scene="game"]) { overscroll-behavior: none; }
+
+/* --------------------------------------------------------------------------
+   19. Controles táctiles (partida en pantallas táctiles)
+   Joystick flotante: aparece donde se apoya el pulgar, en cualquier parte de la pantalla fuera del
+   botón de disparo, y sigue al dedo; en reposo queda tenue abajo a la izquierda. Disparo: botón
+   abajo a la derecha, con un área táctil más grande que el círculo. SnakeGame.js los muestra a los
+   jugadores (no a quien mira) desde la cuenta regresiva y mueve el joystick con transform.
+   -------------------------------------------------------------------------- */
+.touch-controls {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--bio-z-hud) + 1);
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.touch-controls[hidden] { display: none; }
+.touch-stick-zone {
+  position: absolute;
+  inset: 0;
+  padding: 0 0 env(safe-area-inset-bottom) env(safe-area-inset-left);
+  pointer-events: auto;
+  touch-action: none;
+}
+.touch-stick {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 128px;
+  height: 128px;
+  margin: -64px 0 0 -64px;
+  border-radius: 50%;
+  border: 1px solid rgba(31, 242, 210, 0.32);
+  background:
+    radial-gradient(circle, rgba(31, 242, 210, 0.10) 0%, rgba(31, 242, 210, 0.04) 62%, transparent 72%),
+    rgba(2, 10, 18, 0.35);
+  box-shadow: 0 0 24px rgba(31, 242, 210, 0.10), inset 0 0 18px rgba(31, 242, 210, 0.08);
+  opacity: 0.45;
+  transition: opacity var(--bio-dur-quick) var(--bio-ease-standard);
+  will-change: transform;
+}
+.touch-controls[data-stick="active"] .touch-stick { opacity: 1; transition-duration: var(--bio-dur-press); }
+.touch-stick-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 56px;
+  height: 56px;
+  margin: -28px 0 0 -28px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 34%, var(--bio-turquoise-soft), var(--bio-turquoise) 45%, rgba(31, 242, 210, 0.55) 100%);
+  box-shadow: 0 0 22px var(--bio-glow-turquoise);
+  will-change: transform;
+}
+.touch-fire {
+  position: absolute;
+  right: max(20px, env(safe-area-inset-right));
+  bottom: max(20px, env(safe-area-inset-bottom));
+  display: grid;
+  place-items: center;
+  width: 88px;
+  height: 88px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(200, 255, 60, 0.5);
+  background: radial-gradient(circle at 40% 35%, rgba(228, 255, 154, 0.30), rgba(200, 255, 60, 0.14) 55%, rgba(2, 10, 18, 0.6) 100%);
+  box-shadow: 0 0 28px var(--bio-glow-lime);
+  pointer-events: auto;
+  touch-action: none;
+  transition: transform var(--bio-dur-press) var(--bio-ease-standard), opacity var(--bio-dur-quick) var(--bio-ease-standard);
+}
+.touch-fire-core {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--bio-pearl) 0%, var(--bio-lime) 55%, rgba(200, 255, 60, 0) 72%);
+  box-shadow: 0 0 16px var(--bio-glow-lime);
+}
+.touch-fire::before {
+  /* área táctil más grande que el círculo: un toque que roza el botón dispara igual */
+  content: "";
+  position: absolute;
+  inset: -20px;
+  border-radius: 50%;
+}
+.touch-fire.is-pressed { transform: scale(0.9); }
+/* con menos de 2 segmentos no se puede disparar */
+.touch-fire[data-ready="false"] { opacity: 0.4; }
+/* Pantallas muy bajas (celular chico en horizontal): joystick y disparo más compactos */
+@media (height <= 400px) {
+  .touch-stick { width: 112px; height: 112px; margin: -56px 0 0 -56px; }
+  .touch-stick-knob { width: 50px; height: 50px; margin: -25px 0 0 -25px; }
+  .touch-fire { width: 80px; height: 80px; right: max(14px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); }
+}
+
+/* --------------------------------------------------------------------------
+   20. La partida se juega en horizontal
+   En pantallas táctiles en vertical, con la partida en pantalla (desde la cuenta regresiva), un
+   aviso tapa todo y pide girar el teléfono; los controles táctiles no se muestran. Donde el
+   navegador lo permite (Android), el botón pone pantalla completa y fija la orientación.
+   -------------------------------------------------------------------------- */
+.rotate-hint {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--bio-z-toast) - 2);
+  display: none;
+  place-items: center;
+  padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
+  background:
+    radial-gradient(80% 50% at 50% 40%, rgba(31, 242, 210, 0.08), transparent 70%),
+    rgba(1, 5, 9, 0.94);
+  text-align: center;
+  touch-action: none;
+}
+.rotate-hint-card {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  max-width: 320px;
+}
+.rotate-phone {
+  width: 84px;
+  height: 84px;
+  color: var(--bio-turquoise);
+  filter: drop-shadow(0 0 14px var(--bio-glow-turquoise));
+  animation: bio-rotate-phone 2400ms var(--bio-ease-in-out) infinite;
+}
+@keyframes bio-rotate-phone {
+  0%, 20% { transform: rotate(0deg); }
+  50%, 80% { transform: rotate(-90deg); }
+  100% { transform: rotate(0deg); }
+}
+.rotate-hint-title {
+  font-family: var(--bio-font-display);
+  font-size: var(--bio-fs-36);
+  line-height: 1.1;
+  color: var(--bio-ink);
+}
+.rotate-hint-text { font-size: var(--bio-fs-16); line-height: 24px; color: var(--bio-ink-2); }
+.rotate-hint-full { margin-top: 6px; }
+@media (pointer: coarse) and (orientation: portrait) {
+  body[data-scene="game"] .rotate-hint { display: grid; }
+  body[data-scene="game"] .touch-controls { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rotate-phone { animation: none; transform: rotate(-90deg); }
+}

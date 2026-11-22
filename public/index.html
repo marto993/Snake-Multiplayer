@@ -68,7 +68,7 @@
                 </div>
                 <div class="profile-actions">
                     <button type="button" id="leaderboardButton" class="btn btn-secondary">Ranking global</button>
-                    <button type="button" id="resetProfileButton" class="btn btn-quiet btn-danger-hover" onclick="resetPlayerProfile()" data-reveal>Cerrar sesión</button>
+                    <button type="button" id="resetProfileButton" class="btn btn-quiet btn-danger-hover" data-reveal>Cerrar sesión</button>
                 </div>
             </div>
         </div>
@@ -170,9 +170,9 @@
                             </div>
 
                             <div class="controls-hint" data-variant="player">
-                                <p data-hint="player"><kbd>Flechas</kbd> o <kbd>WASD</kbd> para moverte. <kbd>Espacio</kbd> para disparar: cada disparo cuesta un segmento.</p>
+                                <p data-hint="player">Apunta con el <kbd>mouse</kbd> o usa <kbd>Flechas</kbd> / <kbd>WASD</kbd> (dos a la vez, en diagonal). <kbd>Clic</kbd> o <kbd>Espacio</kbd> para disparar: cada disparo cuesta un segmento.</p>
                                 <p data-hint="spectator">Estás viendo la partida en vivo.</p>
-                                <p data-hint="touch">Para jugar necesitas un teclado. Desde el móvil puedes mirar partidas en curso.</p>
+                                <p data-hint="touch">La partida se juega con el teléfono en horizontal. Apoya el pulgar en cualquier parte de la pantalla y arrástralo hacia donde quieras ir; el botón de la derecha dispara: cada disparo cuesta un segmento.</p>
                             </div>
                         </div>
                     </div>
@@ -189,7 +189,7 @@
 
                 <div class="arena-stage">
                     <div class="arena-frame">
-                        <canvas id="game" width="600" height="600" aria-label="Arena de juego"></canvas>
+                        <canvas id="game" width="768" height="432" aria-label="Arena de juego"></canvas>
                     </div>
                     <div id="overlay-countdown" class="overlay overlay-countdown hidden" aria-hidden="true">
                         <p class="overlay-kicker"></p>
@@ -204,6 +204,27 @@
             </div>
         </section>
     </main>
+
+    <!-- Controles táctiles de la partida: SnakeGame.js los muestra jugando en pantallas táctiles -->
+    <div id="touchControls" class="touch-controls" hidden>
+        <div class="touch-stick-zone">
+            <div class="touch-stick" aria-hidden="true"><span class="touch-stick-knob"></span></div>
+        </div>
+        <button type="button" class="touch-fire" aria-label="Disparar"><span class="touch-fire-core" aria-hidden="true"></span></button>
+    </div>
+
+    <!-- La partida se juega en horizontal: en vertical (táctil, con la partida en pantalla) el CSS muestra este aviso -->
+    <div id="rotateHint" class="rotate-hint" role="dialog" aria-modal="true" aria-labelledby="rotateHintTitle">
+        <div class="rotate-hint-card">
+            <svg class="rotate-phone" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="20" y="6" width="24" height="52" rx="5"/>
+                <path d="M29 51h6"/>
+            </svg>
+            <p id="rotateHintTitle" class="rotate-hint-title">Gira el teléfono</p>
+            <p class="rotate-hint-text">La partida se juega en horizontal: así la arena ocupa toda la pantalla.</p>
+            <button type="button" class="btn btn-primary rotate-hint-full" hidden>Pantalla completa en horizontal</button>
+        </div>
+    </div>
 
     <!-- Dock persistente: jugadores en línea (lobby y sala) -->
     <aside id="dock" class="dock" popover aria-label="Jugadores en línea">

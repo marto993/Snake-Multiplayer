@@ -532,7 +532,7 @@ body[data-scene]
 Notas para LAYOUT:
 
 - `#scenes` es `display: grid` y cada `.scene` ocupa `grid-area: 1 / 1`, así dos escenas se superponen durante la transición sin posicionamiento absoluto, y la página hace scroll normal si una escena es más alta que la pantalla.
-- Se conservan los atributos que el JS actual usa: `onclick="resetPlayerProfile()"` en `#resetProfileButton`, `maxlength` de `#username` (20) y `#roomId` (6), y los `value` de los radios de `#difficultyPicker` (`easy`, `medium` y `hard`, con `medium` marcado).
+- Se conservan los atributos que el JS actual usa: `#resetProfileButton` (sin `onclick` en línea: el listener lo pone SnakeGame.js, para que la CSP no tenga que permitir manejadores en línea), `maxlength` de `#username` (20) y `#roomId` (6), y los `value` de los radios de `#difficultyPicker` (`easy`, `medium` y `hard`, con `medium` marcado).
 - `#roomId` usa cifras MONO, interletrado 0,12em y `text-transform: uppercase` (es un dato, no una etiqueta).
 - `body` tiene `overflow-x: hidden` y fondo `--bio-abyss-900`.
 - Iconos: SVG en línea, trazo de 1,75 px, extremos redondeados, `currentColor`, retícula de 20 px. Se necesitan: medusa (escudo), ojo (espectador), actualizar, cerrar, chevron, corazón (pie), y los tres logos del pie que ya existen. Sin emojis en ningún lugar.
@@ -691,6 +691,14 @@ Grilla de `.arena-layout` según modo y ancho (áreas CSS):
 `#hud` usa `display: contents` en todos los anchos para que `.hud-bar` (área `bar`) y `.hud-side` (área `board`) sean ítems de la grilla. En modo room, ambos llevan `display: none`. `.arena-side` se asigna al área `side` en room y `rail` en game. En partida, `#configPanel`, `#startGameButton`, `#waitingSpan` y `#playerList` no se muestran (el JS ya oculta los primeros; `#playerList` y su título se ocultan por CSS con `[data-mode="game"]`). Por debajo de 1024 px, el badge de espectador lo muestra el HUD.
 
 En partida y con `pointer: coarse` la página no debe hacer scroll al tocar la arena: `.arena-frame` tiene `touch-action: none`.
+
+**Mundo apaisado.** La arena mide 768 × 432 lógicos (16:9, 64 × 36 celdas de 12 px): llena las pantallas anchas y en el celular se juega en horizontal. `--arena-size` es el ancho y el alto sale de `--arena-aspect`.
+
+**Tamaño en partida.** La tabla de 4.10 vale para la sala. En partida la arena crece hasta ocupar el espacio disponible (`theme.css`, sección 18): el ancho que entra, limitado por el alto por 16:9. El cambio se hace al empezar la cuenta regresiva, no al largar, y Scenes lo anima con un FLIP de 520 ms sobre `.arena-stage` mientras ARENA rehace el canvas al tamaño nuevo. Desde 1024 px: marcador a la izquierda y arena con el resto (el riel de la sala no se muestra). Hasta 1023 px: arena arriba y chips del marcador debajo. En horizontal con hasta 560 px de alto (celulares): arena al centro, aro del tiempo y largo propio a la izquierda, marcador a la derecha, con costados de al menos 96 px para los pulgares. El backing store del canvas tiene un tope de 2200 px de ancho.
+
+**Controles táctiles.** `#touchControls`, fijo sobre la escena, visible para quien juega (no para quien mira) en pantallas táctiles desde la cuenta regresiva: joystick flotante que aparece donde se apoya el pulgar, en cualquier parte de la pantalla fuera del botón de disparo, sigue al dedo y en reposo queda tenue abajo a la izquierda; pide un rumbo absoluto. Botón de disparo de 88 px abajo a la derecha, con un área táctil 20 px más grande que el círculo, atenuado con menos de 2 segmentos. Respetan `env(safe-area-inset-*)`.
+
+**Horizontal obligatorio en el celular.** Con `pointer: coarse` en vertical y la partida en pantalla, `#rotateHint` tapa todo con un teléfono que gira y "Gira el teléfono"; los controles táctiles no se muestran. Donde el navegador lo permite (Android), un botón pone pantalla completa y fija la orientación en horizontal.
 
 ### 4.13 Cuenta regresiva 3, 2, 1
 
@@ -1367,7 +1375,6 @@ Al terminar, el servidor (`endMatch`) emite `gameEnd` y enseguida vuelve la sala
 ## 11. Fuera de alcance
 
 - Audio.
-- Controles táctiles para jugar. En pantallas táctiles sin teclado se puede entrar a salas, configurar, invitar y mirar; `.controls-hint` lo explica.
 - Cambiar los valores fijos del servidor (`maxRounds`, `roundTime`, tamaño de 600 × 600, `attacksEnabled`, `index.js:237-257`): la interfaz los muestra como fijos.
 - Traducir los mensajes en inglés dentro del servidor: se resuelve en el cliente (8.6).
 - Modificar `snakeClass.js`.

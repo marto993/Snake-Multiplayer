@@ -15,6 +15,7 @@ test('valores por nivel', () => {
   assert.deepEqual(levels.map(c => c.gameSpeed), [70, 66, 60]);
   assert.deepEqual(levels.map(c => c.projectileCells), [3, 3, 3]);
   assert.deepEqual(levels.map(c => c.foodExtra), [24, 20, 18]);
+  assert.deepEqual(levels.map(c => c.turnDegrees), [40, 40, 40]);
   assert.deepEqual(levels.map(c => c.consumables.immunity), [
     { enabled: true, spawnInterval: 6, duration: 5 },
     { enabled: true, spawnInterval: 8, duration: 4 },
@@ -26,8 +27,10 @@ test('valores fijos en todos los niveles', () => {
   for (const c of levels) {
     assert.equal(c.maxPlayers, 8);
     assert.equal(c.minPlayers, 2);
-    assert.equal(c.canvasWidth, 600);
-    assert.equal(c.canvasHeight, 600);
+    assert.equal(c.canvasWidth, 768);
+    assert.equal(c.canvasHeight, 432);
+    assert.equal(c.canvasWidth % c.segmentSize, 0);
+    assert.equal(c.canvasHeight % c.segmentSize, 0);
     assert.equal(c.segmentSize, 12);
     assert.equal(c.startLength, 3);
     assert.equal(c.attacksEnabled, true);
