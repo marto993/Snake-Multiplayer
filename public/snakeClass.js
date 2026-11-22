@@ -21,8 +21,9 @@ class Snake {
       this.gameover = false;
       this.scoreLeftToGrow = 0;
       
-      // MODIFICADO: Sistema de consumibles basado en tiempo
-      this.activeConsumable = null; // { type: 'immunity', endTime: timestamp }
+      // Efectos de los consumibles: un vencimiento por tipo (hora del servidor en ms), por ejemplo
+      // { immunity: 1732300000000, fan: 1732300002500 }. Cada uno vence por su cuenta.
+      this.effects = {};
       
       // Calcular interpolationSpeed basado en gameSpeed
       this.interpolationSpeed = this.calculateInterpolationSpeed(gameSpeed);
@@ -212,66 +213,39 @@ class Snake {
         // El puntaje se actualiza automáticamente en el método move()
     }
     
-    // MODIFICADO: Consumir consumible con duración por tiempo
-    consumeConsumable(consumableType, durationSeconds) {
-        const endTime = Date.now() + (durationSeconds * 1000);
-        switch(consumableType) {
-            case 'immunity':
-                this.activeConsumable = {
-                    type: 'immunity',
-                    endTime: endTime
-                };
-                break;
-            default:
-                console.warn(`Unknown consumable type: ${consumableType}`);
-        }
+    // Activa un efecto o, si ya estaba activo, reinicia su tiempo a la duración completa (no suma)
+    addEffect(type, durationMs, now) {
+        this.effects[type] = now + durationMs;
     }
-    
-    // MODIFICADO: Verificar si tiene inmunidad activa basado en tiempo
-    hasImmunity() {
-        if (!this.activeConsumable || this.activeConsumable.type !== 'immunity') {
-            return false;
+
+    hasEffect(type, now) {
+        const end = this.effects[type];
+        return end !== undefined && now < end;
+    }
+
+    removeEffect(type) {
+        delete this.effects[type];
+    }
+
+    // Los efectos vigentes, para mandarlos en el frame. Borra los vencidos.
+    activeEffects(now) {
+        const active = {};
+        for (const type of Object.keys(this.effects)) {
+            if (now < this.effects[type]) active[type] = this.effects[type];
+            else delete this.effects[type];
         }
-        
-        const currentTime = Date.now();
-        if (currentTime >= this.activeConsumable.endTime) {
-            this.activeConsumable = null; // Limpiar consumible expirado
-            return false;
-        }
-        
+        return active;
+    }
+
+    // El escudo bloquea un disparo y se consume. `now` es opcional porque traceProjectile pregunta sin hora.
+    hasImmunity(now = Date.now()) {
+        return this.hasEffect('immunity', now);
+    }
+
+    useImmunity(now = Date.now()) {
+        if (!this.hasImmunity(now)) return false;
+        this.removeEffect('immunity');
         return true;
-    }
-    
-    // MODIFICADO: Usar inmunidad (solo eliminar el efecto, sin contar usos)
-    useImmunity() {
-        if (this.hasImmunity()) {
-            this.activeConsumable = null; // Eliminar inmunidad al ser usada
-            return true;
-        }
-        return false;
-    }
-    
-    // MODIFICADO: Obtener información del consumible activo para serialización
-    getActiveConsumable() {
-        // Verificar expiración antes de enviar
-        if (this.activeConsumable) {
-            const currentTime = Date.now();
-            if (currentTime >= this.activeConsumable.endTime) {
-                this.activeConsumable = null;
-                return null;
-            }
-        }
-        return this.activeConsumable ? { ...this.activeConsumable } : null;
-    }
-    
-    // NUEVO: Método para verificar y limpiar consumibles expirados
-    updateConsumables() {
-        if (this.activeConsumable) {
-            const currentTime = Date.now();
-            if (currentTime >= this.activeConsumable.endTime) {
-                this.activeConsumable = null;
-            }
-        }
     }
     
     canAttack() {
@@ -322,8 +296,7 @@ class Snake {
         { x: 0, y: 0 }
       ];
       this.score = 0;
-      // Limpiar consumibles activos
-      this.activeConsumable = null;
+      this.effects = {};
     }
     
     // Reinicia la snake sin "morir": `length` segmentos en línea, el cuerpo detrás de la cabeza
@@ -343,8 +316,7 @@ class Snake {
       this.scoreLeftToGrow = 0;
       this.eatFood = false;
       
-      // Limpiar consumibles activos al reiniciar
-      this.activeConsumable = null;
+      this.effects = {};
     }
     
     // Método para obtener el puntaje actual (tamaño de la snake)

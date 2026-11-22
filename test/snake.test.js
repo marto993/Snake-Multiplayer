@@ -8,7 +8,7 @@ test('reset con largo 3 arma el cuerpo detrás de la cabeza', () => {
   const s = make();
   s.scoreLeftToGrow = 4;
   s.steerTo(Math.PI / 2);
-  s.activeConsumable = { type: 'immunity', endTime: Date.now() + 5000 };
+  s.addEffect('immunity', 5000, Date.now());
   s.reset(60, 120, 1, 0, 3);
   assert.deepEqual(s.segments, [{ x: 60, y: 120 }, { x: 48, y: 120 }, { x: 36, y: 120 }]);
   assert.deepEqual(s.targetSegments, s.segments);
@@ -16,7 +16,7 @@ test('reset con largo 3 arma el cuerpo detrás de la cabeza', () => {
   assert.equal(s.score, 3);
   assert.equal(s.scoreLeftToGrow, 0);
   assert.equal(s.targetHeading, s.heading);
-  assert.equal(s.activeConsumable, null);
+  assert.deepEqual(s.effects, {});
   assert.deepEqual(s.direction, { x: 1, y: 0 });
 });
 
@@ -109,4 +109,43 @@ test('ignora rumbos inválidos', () => {
   const s = turning(40);
   for (const v of [NaN, Infinity, '1', null, undefined, {}]) assert.equal(s.steerTo(v), false);
   assert.equal(s.targetHeading, 0);
+});
+
+// Efectos acumulables: un vencimiento por tipo
+test('efectos: cada uno vence por su cuenta', () => {
+  const s = make();
+  s.addEffect('immunity', 4000, 1000);
+  s.addEffect('fan', 6000, 2000);
+  assert.equal(s.hasEffect('immunity', 4999), true);
+  assert.equal(s.hasEffect('fan', 4999), true);
+  assert.equal(s.hasEffect('immunity', 5000), false);
+  assert.equal(s.hasEffect('fan', 5000), true);
+  assert.deepEqual(s.activeEffects(5000), { fan: 8000 });
+  assert.deepEqual(s.effects, { fan: 8000 });
+});
+
+test('efectos: tomar otro del mismo tipo reinicia su tiempo, no suma', () => {
+  const s = make();
+  s.addEffect('fan', 6000, 0);
+  s.addEffect('fan', 6000, 5000);
+  assert.equal(s.effects.fan, 11000);
+});
+
+test('useImmunity quita solo el escudo', () => {
+  const s = make();
+  s.addEffect('immunity', 4000, 0);
+  s.addEffect('fan', 6000, 0);
+  assert.equal(s.hasImmunity(10), true);
+  assert.equal(s.useImmunity(10), true);
+  assert.equal(s.hasImmunity(10), false);
+  assert.equal(s.hasEffect('fan', 10), true);
+  assert.equal(s.useImmunity(10), false);
+});
+
+test('activeEffects devuelve una copia', () => {
+  const s = make();
+  s.addEffect('bigMouth', 6000, 0);
+  const copy = s.activeEffects(0);
+  copy.bigMouth = 1;
+  assert.equal(s.effects.bigMouth, 6000);
 });
