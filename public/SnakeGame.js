@@ -2012,7 +2012,6 @@ document.addEventListener('DOMContentLoaded', function () {
       spectatorName: playerProfile.stats.name
     });
   }
-  window.spectateRoom = function (roomId) { spectateRoom(roomId); };
 
   function joinSpecificRoom(roomId, button) {
     const username = currentUsername();
@@ -2024,7 +2023,6 @@ document.addEventListener('DOMContentLoaded', function () {
     if (button) setPendingButton(button);
     socket.emit('joinRoom', buildIdentity(username, { roomId: roomId }));
   }
-  window.joinSpecificRoom = function (roomId) { joinSpecificRoom(roomId); };
 
   function joinRoomFromInput() {
     const username = currentUsername();
@@ -2129,7 +2127,9 @@ document.addEventListener('DOMContentLoaded', function () {
     });
     toast('Sesión cerrada', 'info');
   }
-  window.resetPlayerProfile = resetPlayerProfile;
+  // Sin onclick en el HTML: una CSP estricta no permite manejadores en línea
+  const resetProfileButton = $('resetProfileButton');
+  if (resetProfileButton) resetProfileButton.addEventListener('click', resetPlayerProfile);
 
   function submitLogin() {
     const username = usernameInput.value.trim();

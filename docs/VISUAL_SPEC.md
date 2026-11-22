@@ -532,7 +532,7 @@ body[data-scene]
 Notas para LAYOUT:
 
 - `#scenes` es `display: grid` y cada `.scene` ocupa `grid-area: 1 / 1`, así dos escenas se superponen durante la transición sin posicionamiento absoluto, y la página hace scroll normal si una escena es más alta que la pantalla.
-- Se conservan los atributos que el JS actual usa: `onclick="resetPlayerProfile()"` en `#resetProfileButton`, `maxlength` de `#username` (20) y `#roomId` (6), y los `value` de los radios de `#difficultyPicker` (`easy`, `medium` y `hard`, con `medium` marcado).
+- Se conservan los atributos que el JS actual usa: `#resetProfileButton` (sin `onclick` en línea: el listener lo pone SnakeGame.js, para que la CSP no tenga que permitir manejadores en línea), `maxlength` de `#username` (20) y `#roomId` (6), y los `value` de los radios de `#difficultyPicker` (`easy`, `medium` y `hard`, con `medium` marcado).
 - `#roomId` usa cifras MONO, interletrado 0,12em y `text-transform: uppercase` (es un dato, no una etiqueta).
 - `body` tiene `overflow-x: hidden` y fondo `--bio-abyss-900`.
 - Iconos: SVG en línea, trazo de 1,75 px, extremos redondeados, `currentColor`, retícula de 20 px. Se necesitan: medusa (escudo), ojo (espectador), actualizar, cerrar, chevron, corazón (pie), y los tres logos del pie que ya existen. Sin emojis en ningún lugar.
