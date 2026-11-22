@@ -161,6 +161,11 @@ strong, b { font-weight: 600; }
 
 .mono, kbd, code { font-variation-settings: var(--bio-mono); font-feature-settings: "tnum" 1; }
 
+/* Cortes de línea: títulos parejos y párrafos sin una palabra sola en la última línea.
+   Solo en estos elementos (no en *: tiene costo) y sin balance en cajas visibles. */
+.panel-title, .scene-title, .modal-title, .rotate-hint-title { text-wrap: balance; }
+.field-help, .config-info, .controls-hint > p, .final-message, .final-hint, .rotate-hint-text { text-wrap: pretty; }
+
 ::selection { background: rgba(31, 242, 210, 0.28); color: var(--bio-pearl); }
 
 /* Foco visible (spec 3.4) */
