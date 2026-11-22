@@ -45,7 +45,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // Constantes
   // ===========================================================================
   const SVGNS = 'http://www.w3.org/2000/svg';
-  const ARENA_SIZE = 600;               // coordenadas lógicas fijas del servidor
+  const ARENA_W = 768, ARENA_H = 432;   // tamaño del mundo por defecto; el real viene en la config de la sala
   const FREEZE_MS = 2400;               // congelamiento de la arena al terminar la partida (arena.js, 5.14)
   const FINAL_DELAY_MS = 2000;          // la pantalla final entra cuando la arena ya enfocó al ganador
   const INVITE_COOLDOWN_MS = 8000;      // "Enviada" en el botón de invitar
@@ -192,6 +192,9 @@ document.addEventListener('DOMContentLoaded', function () {
   function toggleElement(element, visible) { if (visible) showElement(element); else hideElement(element); }
   function plural(n, one, many) { return n === 1 ? one : many; }
   function perfNow() { return (window.performance && performance.now) ? performance.now() : Date.now(); }
+  // Tamaño del mundo (coordenadas lógicas del servidor): apaisado, 768 × 432
+  function arenaW() { return (roomConfig && +roomConfig.canvasWidth) || ARENA_W; }
+  function arenaH() { return (roomConfig && +roomConfig.canvasHeight) || ARENA_H; }
 
   function bio(hex) {
     try {
@@ -559,6 +562,8 @@ document.addEventListener('DOMContentLoaded', function () {
     return view;
   }
 
+  const period = { x: 0, y: 0 };   // envoltorio de los portales: ancho y alto del mundo (múltiplo de la celda)
+
   function applyTimelineSample(s, now) {
     // Efectos del frame recién alcanzado, antes de dibujarlo: la arena todavía tiene el cuerpo
     // del cuadro anterior, así un corte desprende la parte que se veía
@@ -566,7 +571,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const a = s.a, b = s.b;
     const cell = segmentSize;
-    const period = Math.floor(ARENA_SIZE / cell) * cell;
+    period.x = Math.floor(arenaW() / cell) * cell;
+    period.y = Math.floor(arenaH() / cell) * cell;
     const shotStep = cell * ((roomConfig && +roomConfig.projectileCells) || 1); // lo que avanza un disparo por paso
     for (let i = 0; i < snakes.length; i++) {
       const snake = snakes[i];
@@ -797,8 +803,8 @@ document.addEventListener('DOMContentLoaded', function () {
     const r = canvas.getBoundingClientRect();
     if (!r.width || !r.height) return;
     const half = segmentSize / 2;
-    const dx = (pointer.cx - r.left) / r.width * ARENA_SIZE - (head.x + half);
-    const dy = (pointer.cy - r.top) / r.height * ARENA_SIZE - (head.y + half);
+    const dx = (pointer.cx - r.left) / r.width * arenaW() - (head.x + half);
+    const dy = (pointer.cy - r.top) / r.height * arenaH() - (head.y + half);
     // La zona muerta es al menos el radio de giro: si no, con el puntero sobre una comida la serpiente
     // orbitaría alrededor sin alcanzarla (a ese radio, girar al máximo la mantiene en el círculo)
     const turnRad = ((roomConfig && +roomConfig.turnDegrees) || 40) * Math.PI / 180;
@@ -964,8 +970,8 @@ document.addEventListener('DOMContentLoaded', function () {
       serverSnake.id,
       serverSnake.name,
       segmentSize,
-      ARENA_SIZE,
-      ARENA_SIZE,
+      arenaW(),
+      arenaH(),
       serverSnake.segments[0].x,
       serverSnake.segments[0].y,
       serverSnake.direction.x,
@@ -1004,13 +1010,13 @@ document.addEventListener('DOMContentLoaded', function () {
   if (Arena && canvas) {
     ui(function () {
       Arena.init(canvas);
-      Arena.setConfig({ segmentSize: segmentSize, width: ARENA_SIZE, height: ARENA_SIZE });
+      Arena.setConfig({ segmentSize: segmentSize, width: arenaW(), height: arenaH() });
     });
   }
 
   function applyArenaConfig() {
     if (!Arena) return;
-    ui(function () { Arena.setConfig({ segmentSize: segmentSize, width: ARENA_SIZE, height: ARENA_SIZE }); });
+    ui(function () { Arena.setConfig({ segmentSize: segmentSize, width: arenaW(), height: arenaH() }); });
   }
 
   // Objetos reutilizados por frame (sin allocations en el bucle)
@@ -1356,9 +1362,11 @@ document.addEventListener('DOMContentLoaded', function () {
     startRequested = false;
     matchFinished = false;
     roundTimeLeft = roundTime(); // el anillo del HUD arranca lleno para la partida que viene
-    // "Jugar de nuevo": quien sigue en la pantalla final vuelve a la arena para ver la cuenta
+    // La arena pasa al tamaño de partida al empezar la cuenta, no al largar: así la partida arranca
+    // sobre una arena quieta. "Jugar de nuevo": quien sigue en la pantalla final vuelve a la arena.
     ui(function () {
-      if (Scenes.current() === 'final') Scenes.go('room');
+      const scene = Scenes.current();
+      if (scene === 'room' || scene === 'final') Scenes.go('game');
       Overlays.countdown(count);
     });
     syncRoomControls();

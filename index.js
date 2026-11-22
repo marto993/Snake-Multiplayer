@@ -902,7 +902,7 @@ function gameLogicLoop(room) {
       // no cae en una celda; alinearla a la grilla la correría de costado)
       const portalEventsStart = portalEvents.length;
       const crossed = wrapPoint(head, segmentSize, canvasWidth, canvasHeight);
-      // Sumar el ancho deja ruido de coma flotante (-6.3 + 600 = 593.6999…) que viajaría en cada frame
+      // Sumar el ancho deja ruido de coma flotante (-6.3 + 768 = 761.6999…) que viajaría en cada frame
       head.x = Snake.round1(head.x);
       head.y = Snake.round1(head.y);
       if (crossed.x) {
@@ -1309,8 +1309,8 @@ io.on('connection', (socket) => {
             maxPlayers: Number(room.config.maxPlayers) || 8,
             minPlayers: Number(room.config.minPlayers) || 2,
             gameSpeed: Number(room.config.gameSpeed) || 83,
-            canvasWidth: Number(room.config.canvasWidth) || 600,
-            canvasHeight: Number(room.config.canvasHeight) || 600,
+            canvasWidth: Number(room.config.canvasWidth) || 768,
+            canvasHeight: Number(room.config.canvasHeight) || 432,
             segmentSize: Number(room.config.segmentSize) || 20,
             attacksEnabled: Boolean(room.config.attacksEnabled),
             roundTime: Number(room.config.roundTime) || 60,

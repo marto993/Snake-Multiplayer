@@ -1470,8 +1470,29 @@
   function setBodyScene(name) { if (doc.body) doc.body.setAttribute('data-scene', name); }
   function setMode(mode) {
     var a = $('scene-arena');
-    if (a && a.getAttribute('data-mode') !== mode) a.setAttribute('data-mode', mode);
+    if (a && a.getAttribute('data-mode') !== mode) {
+      // En partida la arena es más grande que en sala (theme.css, sección 18): se anima el cambio
+      var stage = a.querySelector('.arena-stage');
+      var before = stage && !reduced && isShown(stage) ? stage.getBoundingClientRect() : null;
+      a.setAttribute('data-mode', mode);
+      // Se mide después del scrollTop() que los que llaman hacen en el mismo turno, antes de pintar
+      if (before && before.width > 0) Promise.resolve().then(function () { flipStage(stage, before); });
+    }
     HUD._modeChanged(mode);
+  }
+  // FLIP: la arena arranca donde y como se veía y llega a su lugar nuevo. El canvas ya tiene su
+  // tamaño final (ARENA lo rehace por su ResizeObserver); solo se anima el transform.
+  function flipStage(stage, before) {
+    var after = stage.getBoundingClientRect();
+    if (!after.width) return;
+    if (global.Arena && global.Arena.resize) callSafe(global.Arena.resize);
+    var s = before.width / after.width;
+    var dx = before.left - after.left, dy = before.top - after.top;
+    if (Math.abs(s - 1) < 0.01 && Math.abs(dx) < 2 && Math.abs(dy) < 2) return;
+    anim(stage, [
+      { transformOrigin: '0 0', transform: 'translate(' + dx + 'px, ' + dy + 'px) scale(' + s + ')' },
+      { transformOrigin: '0 0', transform: 'none' }
+    ], { duration: M.panel, easing: M.out });
   }
   function showState(node, state) {
     if (!node) return;

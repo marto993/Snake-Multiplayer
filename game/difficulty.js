@@ -4,13 +4,18 @@
  */
 'use strict';
 
-const ARENA = 600;
+// Arena apaisada de 16:9 (64 × 36 celdas): llena las pantallas anchas y se juega con el teléfono en
+// horizontal. Tiene casi la misma superficie que la de 600 × 600 de antes (−8 %), así la comida y
+// los tiempos de cada nivel siguen valiendo.
+const ARENA_W = 768;
+const ARENA_H = 432;
 const SEGMENT = 12;
-const CELLS = ARENA / SEGMENT; // 50 celdas por lado
+// Los niveles se ajustaron cruzando 50 celdas: el paso del servidor sale de esa referencia
+const SPEED_CELLS = 50;
 
 const DEFAULT_DIFFICULTY = 'medium';
 
-// crossSeconds: lo que tarda la serpiente en cruzar la arena de lado a lado
+// crossSeconds: lo que tarda la serpiente en recorrer 50 celdas (el lado de la arena cuadrada de antes)
 // projectileCells: celdas que avanza un disparo por paso
 // foodExtra: comida en la arena = jugadores + foodExtra
 // shieldEvery / shieldLasts: cada cuántos segundos aparece el escudo y cuánto dura (s)
@@ -31,9 +36,9 @@ function buildRoomConfig(difficulty, opts) {
     difficulty: key,
     maxPlayers: 8,
     minPlayers: 2,
-    gameSpeed: Math.round(level.crossSeconds * 1000 / CELLS),
-    canvasWidth: ARENA,
-    canvasHeight: ARENA,
+    gameSpeed: Math.round(level.crossSeconds * 1000 / SPEED_CELLS),
+    canvasWidth: ARENA_W,
+    canvasHeight: ARENA_H,
     segmentSize: SEGMENT,
     startLength: 3,
     attacksEnabled: true,

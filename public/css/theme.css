@@ -55,7 +55,8 @@
   /* capas */
   --bio-z-backdrop:0; --bio-z-scene:10; --bio-z-hud:20; --bio-z-footer:25; --bio-z-chrome:30;
   --bio-z-overlay:40; --bio-z-final:60; --bio-z-modal:70; --bio-z-toast:80;
-  /* arena */
+  /* arena: --arena-size es el ANCHO; el alto sale de la proporción del mundo (768 × 432, 16:9) */
+  --arena-aspect: 1.7778;
   --arena-size: calc(100vw - 2 * var(--bio-gutter));
 
   /* extensión LAYOUT: medidas del chrome y de la grilla de la arena */
@@ -73,14 +74,15 @@
 @media (min-width: 769px)  { :root { --bio-gutter:24px; } }
 @media (min-width: 1280px) { :root { --bio-gutter:32px; } }
 
-/* Tamaño de la arena (spec 4.10). Mismo valor en sala y partida. */
-:root { --arena-size: min(calc(100vw - 32px), 600px); }
+/* Tamaño de la arena en la sala (spec 4.10): el ancho que entra, limitado por el alto disponible
+   multiplicado por la proporción. En partida crece (sección 18). */
+:root { --arena-size: min(calc(100vw - 32px), 720px); }
 @media (min-width: 769px) {
   :root {
     --bio-topbar-h: 64px;
     --bio-arena-top: calc(var(--bio-topbar-h) + 24px);
-    --arena-size: clamp(320px, min(calc(100vw - 48px), calc(100vh - 240px)), 640px);
-    --arena-size: clamp(320px, min(calc(100vw - 48px), calc(100svh - 240px)), 640px);
+    --arena-size: clamp(320px, min(calc(100vw - 48px), calc((100vh - 240px) * var(--arena-aspect))), 960px);
+    --arena-size: clamp(320px, min(calc(100vw - 48px), calc((100svh - 240px) * var(--arena-aspect))), 960px);
   }
 }
 @media (min-width: 1024px) {
@@ -88,16 +90,16 @@
     --bio-hud-bar-h: 64px;
     --bio-side-w: 260px;
     /* 360 y no 340: deja lugar a la barra de scroll vertical del escritorio */
-    --arena-size: clamp(320px, min(calc(100vw - 360px), calc(100vh - 200px)), 680px);
-    --arena-size: clamp(320px, min(calc(100vw - 360px), calc(100svh - 200px)), 680px);
+    --arena-size: clamp(320px, min(calc(100vw - 360px), calc((100vh - 200px) * var(--arena-aspect))), 1200px);
+    --arena-size: clamp(320px, min(calc(100vw - 360px), calc((100svh - 200px) * var(--arena-aspect))), 1200px);
   }
 }
 @media (min-width: 1280px) {
   :root {
     --bio-side-w: 300px;
     /* 720 y no 680: 300 + 280 + 2 × 24 de separación + 2 × 32 de margen + scroll */
-    --arena-size: clamp(320px, min(calc(100vw - 720px), calc(100vh - 200px)), 760px);
-    --arena-size: clamp(320px, min(calc(100vw - 720px), calc(100svh - 200px)), 760px);
+    --arena-size: clamp(320px, min(calc(100vw - 720px), calc((100vh - 200px) * var(--arena-aspect))), 1400px);
+    --arena-size: clamp(320px, min(calc(100vw - 720px), calc((100svh - 200px) * var(--arena-aspect))), 1400px);
   }
 }
 
@@ -1088,8 +1090,9 @@ kbd {
 .arena-stage {
   grid-area: stage;
   position: relative;
+  --arena-h: calc(var(--arena-size) / var(--arena-aspect));
   width: var(--arena-size);
-  height: var(--arena-size);
+  height: var(--arena-h);
   isolation: isolate;
   justify-self: center;
 }
@@ -1687,7 +1690,7 @@ kbd {
 .countdown-number {
   --cd: var(--bio-turquoise);
   display: block;
-  font-size: calc(var(--arena-size) * 0.42);
+  font-size: calc(var(--arena-h) * 0.5);
   line-height: 1;
   padding: 0 0.14em 0.06em 0.06em;
   color: var(--cd);
@@ -1701,8 +1704,8 @@ kbd {
 .countdown-number[data-n="2"], .overlay-countdown[data-count="2"] .countdown-number { --cd: var(--bio-cyan); }
 .countdown-number[data-n="1"], .overlay-countdown[data-count="1"] .countdown-number { --cd: var(--bio-lime); }
 .countdown-ring {
-  width: calc(var(--arena-size) * 0.42);
-  height: calc(var(--arena-size) * 0.42);
+  width: calc(var(--arena-h) * 0.5);
+  height: calc(var(--arena-h) * 0.5);
   border-radius: 50%;
   border: 2px solid currentColor;
   color: var(--bio-turquoise);
@@ -1711,7 +1714,7 @@ kbd {
 .overlay-countdown[data-count="2"] .countdown-ring { color: var(--bio-cyan); }
 .overlay-countdown[data-count="1"] .countdown-ring { color: var(--bio-lime); }
 .round-go {
-  font-size: max(72px, calc(var(--arena-size) * 0.28));
+  font-size: max(56px, calc(var(--arena-h) * 0.34));
   line-height: 1;
   font-weight: 400;
   padding: 0 0.14em 0.06em 0.06em;
@@ -2429,8 +2432,8 @@ body[data-scrolled] #topbar {
   :root {
     --bio-topbar-h: 56px;
     --bio-arena-top: calc(var(--bio-topbar-h) + 12px);
-    --arena-size: clamp(220px, min(calc(100vw - 48px), calc(100vh - 104px)), 640px);
-    --arena-size: clamp(220px, min(calc(100vw - 48px), calc(100svh - 104px)), 640px);
+    --arena-size: clamp(220px, min(calc(100vw - 48px), calc((100vh - 104px) * var(--arena-aspect))), 960px);
+    --arena-size: clamp(220px, min(calc(100vw - 48px), calc((100svh - 104px) * var(--arena-aspect))), 960px);
   }
   /* la barra del HUD mide lo mismo que la arena: el badge de espectador queda solo con su icono
      (el texto sigue en el árbol de accesibilidad) para no pisar el temporizador */
@@ -2452,6 +2455,77 @@ html { scroll-padding-top: calc(var(--bio-topbar-h) + 12px); }
    (.final-name es nowrap) el contenido se ensanchaba y cortaba el mensaje y los puntos a la derecha. */
 .final-screen { grid-template-columns: minmax(0, 1fr); }
 .final-content { min-width: 0; }
+
+/* --------------------------------------------------------------------------
+   18. Partida: la arena ocupa la pantalla
+   En sala la arena comparte la ventana con el panel y el dock. En partida pasa a ocupar todo el
+   espacio disponible: el ancho que entra, limitado por el alto (12 px arriba, la barra del HUD, la
+   separación, la arena y 20 px abajo) por la proporción 16:9. Scenes anima el cambio (FLIP) al
+   empezar la cuenta regresiva y ARENA rehace el canvas al tamaño nuevo.
+   -------------------------------------------------------------------------- */
+#scene-arena[data-mode="game"] {
+  --arena-chrome-v: calc(12px + var(--bio-hud-bar-h) + var(--bio-arena-gap) + 20px);
+  --arena-board-row: 50px;   /* hasta 1023 px: fila de chips del marcador debajo de la arena */
+  --arena-size: clamp(220px, min(calc(100vw - 2 * var(--bio-gutter)), calc((100svh - var(--arena-chrome-v) - var(--arena-board-row)) * var(--arena-aspect))), 2400px);
+  padding-top: 12px;
+  padding-bottom: 20px;
+}
+/* Desde 1024 px: marcador a la izquierda y arena con todo el resto; el riel de la sala no se muestra */
+@media (min-width: 1024px) {
+  #scene-arena[data-mode="game"] {
+    --arena-board-row: 0px;
+    --arena-size: clamp(320px, min(calc(100vw - var(--bio-side-w) - var(--bio-col-gap) - 2 * var(--bio-gutter) - 16px), calc((100svh - var(--arena-chrome-v)) * var(--arena-aspect))), 2400px);
+  }
+  #scene-arena[data-mode="game"] .arena-layout {
+    grid-template-columns: var(--bio-side-w) var(--arena-size);
+    grid-template-areas: "board bar" "board stage";
+  }
+  #scene-arena[data-mode="game"] .arena-side { display: none; }
+}
+/* Pantallas bajas en horizontal (celulares): arena al centro con todo el alto que entre, la barra
+   del HUD apilada a la izquierda y el marcador a la derecha; los costados (al menos 96 px) quedan
+   para los pulgares, y el joystick y el disparo pueden asomar sobre las esquinas de la arena */
+@media (orientation: landscape) and (max-height: 560px) {
+  #scene-arena[data-mode="game"] {
+    --arena-size: clamp(240px, min(calc((100svh - 16px) * var(--arena-aspect)), calc(100vw - 2 * 96px - 24px - 16px)), 2400px);
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+  #scene-arena[data-mode="game"] .arena-layout {
+    grid-template-columns: minmax(0, 1fr) var(--arena-size) minmax(0, 1fr);
+    grid-template-areas: "bar stage board";
+    column-gap: 12px;
+    padding-left: max(8px, env(safe-area-inset-left));
+    padding-right: max(8px, env(safe-area-inset-right));
+  }
+  #scene-arena[data-mode="game"] .arena-side { display: none; }
+  #scene-arena[data-mode="game"] .hud-bar {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    justify-self: center;
+    width: 100%;
+    max-width: 220px;
+    height: auto;
+    padding: 10px 8px;
+    gap: 6px;
+  }
+  /* la meta no entra en una columna tan angosta: queda el aro del tiempo y el largo propio */
+  #scene-arena[data-mode="game"] .hud-goal { display: none; }
+  #scene-arena[data-mode="game"] .hud-side { justify-self: center; width: 100%; max-width: 220px; }
+  #scene-arena[data-mode="game"] .hud-board {
+    flex-direction: column;
+    overflow-x: visible;
+    overflow-y: auto;
+    max-height: calc(100svh - 140px); /* no llega al botón de disparo */
+    scroll-snap-type: y proximity;
+  }
+  #scene-arena[data-mode="game"] .hud-row { max-width: 100%; padding: 0 8px 0 7px; gap: 5px; }
+  #scene-arena[data-mode="game"] .hud-name { max-width: 4ch; font-size: var(--bio-fs-12); }
+  #scene-arena[data-mode="game"] .hud-score { font-size: var(--bio-fs-12); }
+  #scene-arena[data-mode="game"] .hud-row.is-me { top: 0; bottom: 0; }
+}
+/* En partida la página no rebota ni recarga al arrastrar */
+html:has(> body[data-scene="game"]) { overscroll-behavior: none; }
 
 /* --------------------------------------------------------------------------
    19. Controles táctiles (partida en pantallas táctiles)

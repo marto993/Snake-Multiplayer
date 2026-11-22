@@ -1,7 +1,7 @@
 /*
  * arena.js — renderizador bioluminiscente de la arena (window.Arena).
  *
- * Dibuja canvas#game en coordenadas lógicas de 600 x 600, con el backing store
+ * Dibuja canvas#game en coordenadas lógicas de W x H (768 x 432 por defecto), con el backing store
  * escalado por devicePixelRatio. Sin shadowBlur por frame: todo brillo sale de
  * sprites cacheados con globalCompositeOperation 'lighter'. Sin allocations
  * grandes por frame (buffers Float32Array reutilizados, pools de efectos).
@@ -11,7 +11,7 @@
  *
  * API pública:
  *   Arena.init(canvasEl)
- *   Arena.setConfig({ segmentSize, width: 600, height: 600 })
+ *   Arena.setConfig({ segmentSize, width, height })   (tamaño del mundo, del servidor)
  *   Arena.render(state, nowMs)
  *   Arena.renderIdle(nowMs, { snakesPreview: [{ id, name, color, isMe }], caption })
  *   Arena.onFoodEaten(e) / onHit(e) / onBlock(e) / onPortal(e) / onProjectileFired(e)
@@ -24,7 +24,8 @@
 (function (global) {
   'use strict';
 
-  var W = 600, H = 600, HALF_W = 300, HALF_H = 300;
+  // Mundo apaisado de 768 × 432 (16:9); setConfig lo actualiza con canvasWidth / canvasHeight del servidor
+  var W = 768, H = 432, HALF_W = 384, HALF_H = 216;
   var TAU = Math.PI * 2;
   var BG_HEX = '#020A12';
   var BG_RGB = [2, 10, 18];
@@ -233,10 +234,11 @@
   // Estado del módulo
   // ---------------------------------------------------------------------------
   var canvas = null, ctx = null;
-  var cssSize = 600;      // tamaño CSS del canvas (lado)
+  var cssSize = 768;      // ancho CSS del canvas (el alto sale de la proporción del mundo)
   var dprEff = 1;         // devicePixelRatio efectivo
   var K = 1;              // px del backing store por px lógico
-  var arenaScale = 1;     // cssSize / 600
+  var arenaScale = 1;     // cssSize / W
+  var MAX_BACKING = 2200; // ancho máximo del backing store del canvas (px)
   var s = 20;             // segmentSize
   var resizeObs = null, resizeTimer = 0;
   var textEpoch = 1;      // se incrementa al cargar fuentes o cambiar de escala
@@ -289,7 +291,7 @@
     g.globalAlpha = 1;
     g.fillStyle = BG_HEX;
     g.fillRect(0, 0, W, H);
-    var rg = g.createRadialGradient(300, 120, 0, 300, 120, 520);
+    var rg = g.createRadialGradient(W / 2, H * 0.2, 0, W / 2, H * 0.2, Math.max(W, H) * 0.87);
     rg.addColorStop(0, 'rgba(7,37,54,0.55)');
     rg.addColorStop(1, 'rgba(7,37,54,0)');
     g.fillStyle = rg;
@@ -470,7 +472,7 @@
   var digitSprites = new Array(11);
   var digitEpoch = new Int32Array(11);
   function countdownColor(n) { return n >= 6 ? '#1FF2D2' : (n >= 4 ? '#FFB547' : '#FF4D6D'); }
-  function countdownSize(n) { return n <= 3 ? 340 : 300; }
+  function countdownSize(n) { return (n <= 3 ? 340 : 300) * H / 600; }
   function buildDigit(n) {
     var px = countdownSize(n);
     var kd = Math.min(K, 1.1) * 0.85; // resolución reducida: es un elemento suave de fondo
@@ -623,12 +625,13 @@
   // ---------------------------------------------------------------------------
   // Tamaño / DPR
   // ---------------------------------------------------------------------------
+  // Ancho CSS del canvas. Si la caja no tiene la proporción del mundo, manda el lado más chico
   function measureCss() {
     if (!canvas) return cssSize;
     var w = canvas.clientWidth;
     var h = canvas.clientHeight;
     if (!w || w < 10) return cssSize;
-    if (h && h >= 10) w = Math.min(w, h);
+    if (h && h >= 10) w = Math.min(w, h * W / H);
     return w;
   }
 
@@ -638,12 +641,15 @@
     var dprRaw = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
     var dprMax = quality === 0 ? 1.5 : 2;
     var d = Math.min(dprRaw, dprMax);
-    var target = Math.max(64, Math.round(css * d));
-    if (!force && target === canvas.width && css === cssSize && d === dprEff) return;
+    // En partida la arena puede pasar de 1000 px CSS: con DPR 2 serían 4 M de pixeles por cuadro.
+    // El tope deja la nitidez casi igual y el costo de pintar acotado.
+    var target = Math.min(MAX_BACKING, Math.max(64, Math.round(css * d)));
+    var targetH = Math.max(36, Math.round(target * H / W));
+    if (!force && target === canvas.width && targetH === canvas.height && css === cssSize && d === dprEff) return;
     cssSize = css;
     dprEff = d;
     if (canvas.width !== target) canvas.width = target;
-    if (canvas.height !== target) canvas.height = target;
+    if (canvas.height !== targetH) canvas.height = targetH;
     K = target / W;
     arenaScale = cssSize / W;
     lastDprRaw = dprRaw;
@@ -2292,7 +2298,7 @@
     var w = spr._w * scale, h = spr._h * scale;
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = alpha;
-    ctx.drawImage(spr, 300 - w / 2, 312 - h / 2, w, h);
+    ctx.drawImage(spr, W / 2 - w / 2, H / 2 + 12 - h / 2, w, h);
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
   }
@@ -2548,7 +2554,7 @@
   function Creature(id) {
     this.id = id;
     this.rec = new SnakeRec(id);
-    this.x = 300; this.y = 300;
+    this.x = W / 2; this.y = H / 2;
     this.heading = 0;
     this.seed = Math.random() * 100;
     this.period = 3000 + Math.random() * 2000;
@@ -2760,7 +2766,7 @@
     if (w > W - 24) { h = h * (W - 24) / w; w = W - 24; }
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
-    ctx.drawImage(captionSprite, 300 - w / 2, H - 28 - h / 2, w, h);
+    ctx.drawImage(captionSprite, W / 2 - w / 2, H - 28 - h / 2, w, h);
   }
 
   var modeSwitchedFromGame = false;
@@ -3027,7 +3033,7 @@
     haloBoostT0 = now;
     sonarBase = now + 600;
     var f = fxSpawn(FX_WAVE, now, 800);
-    f.x = 300; f.y = 300;
+    f.x = W / 2; f.y = H / 2;
     // descartar colas desprendidas y estelas de la ronda anterior
     for (var i = 0; i < TAIL_MAX; i++) tails[i].on = false;
     trails.forEach(releaseTrail);
@@ -3120,6 +3126,12 @@
 
   function setConfig(cfg) {
     if (!cfg) return;
+    var nw = +cfg.width || W, nh = +cfg.height || H;
+    if (nw !== W || nh !== H) {
+      W = nw; H = nh; HALF_W = W / 2; HALF_H = H / 2;
+      for (var i = 0; i < SNOW_MAX; i++) { snowX[i] = Math.random() * W; snowY[i] = Math.random() * H; }
+      if (canvas) applySize(true);
+    }
     var ns = +cfg.segmentSize || s;
     if (ns !== s) {
       s = ns;
@@ -3140,9 +3152,17 @@
     };
   }
 
+  // Rehace el canvas ya, sin esperar al ResizeObserver: Scenes lo llama al agrandar la arena para
+  // que no se vea estirada mientras anima
+  function resize() {
+    if (resizeTimer) { clearTimeout(resizeTimer); resizeTimer = 0; }
+    applySize(false);
+  }
+
   global.Arena = {
     init: init,
     setConfig: setConfig,
+    resize: resize,
     render: render,
     renderIdle: renderIdle,
     onFoodEaten: onFoodEaten,

@@ -27,8 +27,10 @@ test('valores fijos en todos los niveles', () => {
   for (const c of levels) {
     assert.equal(c.maxPlayers, 8);
     assert.equal(c.minPlayers, 2);
-    assert.equal(c.canvasWidth, 600);
-    assert.equal(c.canvasHeight, 600);
+    assert.equal(c.canvasWidth, 768);
+    assert.equal(c.canvasHeight, 432);
+    assert.equal(c.canvasWidth % c.segmentSize, 0);
+    assert.equal(c.canvasHeight % c.segmentSize, 0);
     assert.equal(c.segmentSize, 12);
     assert.equal(c.startLength, 3);
     assert.equal(c.attacksEnabled, true);
