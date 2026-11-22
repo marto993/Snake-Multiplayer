@@ -184,8 +184,7 @@ document.addEventListener('DOMContentLoaded', function () {
     return svg;
   }
   function clearNode(node) {
-    if (!node) return;
-    while (node.firstChild) node.removeChild(node.firstChild);
+    if (node) node.replaceChildren();
   }
   function showElement(element) { if (element) element.classList.remove('hidden'); }
   function hideElement(element) { if (element) element.classList.add('hidden'); }
@@ -448,8 +447,7 @@ document.addEventListener('DOMContentLoaded', function () {
       frag.appendChild(listItem);
     });
 
-    clearNode(onlinePlayersList);
-    onlinePlayersList.appendChild(frag);
+    onlinePlayersList.replaceChildren(frag);
     knownOnlineIds = nextIds;
     if (dockCount) dockCount.textContent = onlinePlayers.length ? String(onlinePlayers.length) : '';
   }
@@ -1783,7 +1781,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!playerList) return;
     const playing = !!gameState.playing && roundLive;
     // En partida, por largo; en la sala, en el orden en que entraron
-    const sortedPlayers = playing ? snakes.slice().sort(function (a, b) { return b.score - a.score; }) : snakes.slice();
+    const sortedPlayers = playing ? snakes.toSorted(function (a, b) { return b.score - a.score; }) : snakes;
 
     const nextIds = new Set();
     const frag = document.createDocumentFragment();
@@ -1822,8 +1820,7 @@ document.addEventListener('DOMContentLoaded', function () {
       frag.appendChild(listItem);
     });
 
-    clearNode(playerList);
-    playerList.appendChild(frag);
+    playerList.replaceChildren(frag);
     knownPlayerIds = nextIds;
 
     if (playersCount) {
@@ -2049,8 +2046,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // ===========================================================================
   function requestLeaderboard() {
     if (leaderboardList) {
-      clearNode(leaderboardList);
-      leaderboardList.appendChild(el('li', 'leaderboard-item loading', 'Cargando ranking…'));
+      leaderboardList.replaceChildren(el('li', 'leaderboard-item loading', 'Cargando ranking…'));
     }
     ui(function () { Overlays.open(leaderboardModal); });
     socket.emit('getLeaderboard');
@@ -2058,10 +2054,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function showLeaderboard(leaderboard) {
     if (!leaderboardList) return;
-    const list = Array.isArray(leaderboard) ? leaderboard.slice() : [];
-
     // Primero quienes tienen 3 partidas o más, por porcentaje de victorias (orden original)
-    list.sort(function (a, b) {
+    const list = (Array.isArray(leaderboard) ? leaderboard : []).toSorted(function (a, b) {
       const aHasMinGames = a.games_played >= 3;
       const bHasMinGames = b.games_played >= 3;
 
@@ -2097,8 +2091,7 @@ document.addEventListener('DOMContentLoaded', function () {
       item.appendChild(el('span', 'winrate', (games > 0 ? Math.round((wins / games) * 100) : 0) + ' %'));
       frag.appendChild(item);
     });
-    clearNode(leaderboardList);
-    leaderboardList.appendChild(frag);
+    leaderboardList.replaceChildren(frag);
   }
 
   // ===========================================================================
@@ -2117,8 +2110,7 @@ document.addEventListener('DOMContentLoaded', function () {
     updateProfileDisplay(null);
     updateLogoutButtonVisibility();
     onlinePlayers = [];
-    clearNode(onlinePlayersList);
-    onlinePlayersList.appendChild(el('li', 'online-players-empty', 'Buscando jugadores…'));
+    onlinePlayersList.replaceChildren(el('li', 'online-players-empty', 'Buscando jugadores…'));
     if (dockCount) dockCount.textContent = '';
     ui(function () {
       Overlays.hideAll();

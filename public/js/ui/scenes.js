@@ -623,7 +623,7 @@
       board.setAttribute('aria-label', 'Marcador');
       caption.textContent = 'Largo actual';
 
-      while (bar.firstChild) bar.removeChild(bar.firstChild);
+      bar.replaceChildren();
       // Meta de la partida (una sola, por tiempo)
       const rw = mk('div', 'hud-goal');
       rw.appendChild(mk('span', 'hud-goal-label', 'Gana la más larga'));
@@ -1196,7 +1196,7 @@
       }
       const best = fd.winners.length ? fd.winners[0].length : 0;
       if (title) {
-        while (title.firstChild) title.removeChild(title.firstChild);
+        title.replaceChildren();
         title.removeAttribute('aria-label');
         if (fd.reason || !fd.winner) {
           title.textContent = fd.reason ? 'Sala cerrada' : (fd.winners.length > 1 ? 'Empate' : 'Partida terminada');
@@ -1221,7 +1221,7 @@
         } else msg.textContent = '';
       }
       if (ol) {
-        while (ol.firstChild) ol.removeChild(ol.firstChild);
+        ol.replaceChildren();
         for (let i = 0; i < fd.list.length; i++) {
           const it = fd.list[i];
           const li = mk('li', 'final-score-item' + (it.winner && !fd.reason ? ' is-champion' : ''));
@@ -1910,8 +1910,7 @@
     const key = text == null ? '\u0000default' : text;
     if (intro.promptKey === key) return;
     intro.promptKey = key;
-    while (p.firstChild) p.removeChild(p.firstChild);
-    if (text == null) defaultPromptNodes().forEach(function (n) { p.appendChild(n); });
+    if (text == null) p.replaceChildren(...defaultPromptNodes());
     else p.textContent = text;
     if (intro.phase === 'waiting' && !reduced) anim(p, [{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }], { duration: M.base, easing: M.out, composite: 'replace' });
   }
@@ -1920,7 +1919,9 @@
 
   function startIntro() {
     const sc = $('scene-intro');
-    intro.promise = new Promise(function (r) { intro.resolve = r; });
+    const pending = Promise.withResolvers();
+    intro.promise = pending.promise;
+    intro.resolve = pending.resolve;
     if (!sc) { intro.phase = 'done'; intro.resolve({ skipped: false, missing: true }); return; }
     let seen = false;
     try { seen = global.sessionStorage.getItem('bio.introSeen') === '1'; } catch (e) { seen = false; }
