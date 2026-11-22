@@ -105,6 +105,26 @@ test('si el archivo cambia en disco, cambia su versión y la de index.html', asy
   } finally { server.close(); }
 });
 
+test('con transformIndex, index.html se arma en cada respuesta y va sin ETag', async () => {
+  const { root, server } = await setup();   // su close() borra la carpeta: va al final
+  let n = 0;
+  const assets = createAssets(root, { brotliQuality: 5, transformIndex: (html, res) => { res.setHeader('X-Prueba', String(++n)); return html + '<!--' + n + '-->'; } });
+  const srv = http.createServer((req, res) => assets.middleware(req, res, () => { res.statusCode = 404; res.end(); }));
+  await new Promise(r => srv.listen(0, r));
+  const port = srv.address().port;
+  try {
+    const a = await get(port, '/', { 'accept-encoding': 'br' });
+    const b = await get(port, '/index.html', { 'accept-encoding': 'gzip' });
+    assert.equal(a.headers['x-prueba'], '1');
+    assert.equal(a.headers.etag, undefined);
+    assert.equal(a.headers['cache-control'], 'no-cache');
+    assert.match(zlib.brotliDecompressSync(a.body).toString(), /a\.js\?v=[\w-]+".*<!--1-->$/s);
+    assert.match(zlib.gunzipSync(b.body).toString(), /<!--2-->$/);
+    // los demás archivos siguen igual
+    assert.ok((await get(port, '/a.js')).headers.etag);
+  } finally { srv.close(); server.close(); }
+});
+
 test('no sale de la carpeta, deja pasar lo que no es texto y HEAD no manda cuerpo', async () => {
   const { root, server, port } = await setup();
   try {

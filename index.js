@@ -8,6 +8,7 @@ const { touchedAlong, wrapPoint, cellIndex } = require('./game/geometry');
 const { cutSnake, dropRemains } = require('./game/remains');
 const { matchResult } = require('./game/match');
 const { createAssets } = require('./lib/assets');
+const { secureIndex, reportHandler, REPORT_PATH, REPORT_TYPES } = require('./lib/security');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 
@@ -175,8 +176,10 @@ function getPlayerStats(playerId) {
 }
 
 // Archivos de texto precomprimidos (brotli/gzip) y versionados por contenido (lib/assets.js);
-// lo demás, express.static
-const assets = createAssets(path.join(__dirname, 'public'));
+// lo demás, express.static. index.html sale con la CSP en modo solo-reporte y un nonce nuevo
+// en cada respuesta (lib/security.js); los reportes llegan a /csp-report.
+const assets = createAssets(path.join(__dirname, 'public'), { transformIndex: secureIndex });
+app.post(REPORT_PATH, express.json({ type: REPORT_TYPES, limit: '16kb' }), reportHandler());
 app.use(assets.middleware);
 app.use(express.static('public'));
 
