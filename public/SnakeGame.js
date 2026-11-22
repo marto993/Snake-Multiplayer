@@ -644,14 +644,16 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function handleKeyPress(event) {
-    if (!keyboardSeen && !event.ctrlKey && !event.metaKey && !event.altKey) {
-      keyboardSeen = true;
-      updateSpectatorIndicator();
-    }
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     const target = event.target;
     const inField = !!(target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)));
     const key = event.keyCode;
+    // Hay teclado físico si se usan teclas del juego fuera de un campo: escribir el nombre con el
+    // teclado en pantalla del celular también dispara keydown y no debe esconder la ayuda táctil
+    if (!keyboardSeen && !inField && (KEY_TO_ARROW[key] || key === 32)) {
+      keyboardSeen = true;
+      updateSpectatorIndicator();
+    }
     if (!inField && (key === 32 || (key >= 37 && key <= 40)) && swallowsGameKeys(target)) event.preventDefault();
 
     // No permitir controles si se está mirando
@@ -663,13 +665,296 @@ document.addEventListener('DOMContentLoaded', function () {
     const arrow = KEY_TO_ARROW[key];
     if (arrow) {
       event.preventDefault();
-      // WASD se convierte a códigos de flecha para el servidor
-      socket.emit('newMove', { key: arrow });
+      // WASD cuenta como flechas. Las teclas apretadas a la vez suman: arriba + derecha = 45°
+      if (event.repeat && heldArrows.has(arrow)) return;
+      heldArrows.add(arrow);
+      clearTimeout(keyReleaseTimer);
+      steerMode = 'keys';
+      pointer.travel = 0;
+      const angle = keysAngle();
+      if (angle !== null) emitSteer(angle, perfNow());
     } else if (key === 32) {
       event.preventDefault();
       socket.emit('attack');
     }
   }
+
+  // ===========================================================================
+  // Giro libre: el servidor gira la serpiente hacia el rumbo pedido, como mucho
+  // turnDegrees por paso. Teclado: 8 rumbos. Mouse: el rumbo de la cabeza al puntero.
+  // ===========================================================================
+  const heldArrows = new Set();            // códigos de flecha apretados (37 izq, 38 arriba, 39 der, 40 abajo)
+  const KEY_RELEASE_GRACE_MS = 70;         // soltar las dos teclas de una diagonal casi a la vez no la pierde
+  const MOUSE_TAKEOVER_PX = 12;            // lo que hay que mover el mouse (px de pantalla) para que tome el control
+  const MOUSE_DEADZONE_CELLS = 1.5;        // con el puntero encima de la cabeza no se cambia el rumbo (mínimo)
+  const STEER_MIN_DELTA = 2 * Math.PI / 180;
+  const STEER_MIN_INTERVAL_MS = 40;        // como mucho 25 mensajes por segundo (el servidor da un paso cada 60-70 ms)
+  const STEER_REFRESH_MS = 250;            // con el mouse quieto igual se repite, por si el servidor reinició el rumbo
+  let keyReleaseTimer = 0;
+  let steerMode = 'keys';                  // 'keys' | 'mouse'
+  let lastSteerAngle = null;
+  let lastSteerT = 0;
+  const pointer = { cx: 0, cy: 0, has: false, travel: 0 };   // última posición del mouse en pantalla
+  let aimingCursor = false;
+  const arenaStage = canvas ? canvas.closest('.arena-stage') : null;
+
+  function canSteer() {
+    return isConnected && !!gameState.playing && roundLive && !isSpectating;
+  }
+
+  function emitSteer(angle, now) {
+    if (!canSteer()) return;
+    lastSteerAngle = angle;
+    lastSteerT = now;
+    socket.emit('steer', { angle: Math.round(angle * 1000) / 1000 });
+  }
+
+  function keysAngle() {
+    const x = (heldArrows.has(39) ? 1 : 0) - (heldArrows.has(37) ? 1 : 0);
+    const y = (heldArrows.has(40) ? 1 : 0) - (heldArrows.has(38) ? 1 : 0);
+    return x || y ? Math.atan2(y, x) : null;
+  }
+
+  function angleGap(a, b) {
+    let d = (a - b) % (2 * Math.PI);
+    if (d > Math.PI) d -= 2 * Math.PI;
+    else if (d < -Math.PI) d += 2 * Math.PI;
+    return Math.abs(d);
+  }
+
+  // Al soltar una tecla, el rumbo pasa a las que siguen apretadas; soltarlas todas deja el último
+  function handleKeyUp(event) {
+    const arrow = KEY_TO_ARROW[event.keyCode];
+    if (!arrow || !heldArrows.delete(arrow)) return;
+    clearTimeout(keyReleaseTimer);
+    if (!heldArrows.size) return;
+    keyReleaseTimer = setTimeout(function () {
+      if (steerMode !== 'keys' || !heldArrows.size) return;
+      const angle = keysAngle();
+      if (angle !== null && (lastSteerAngle === null || angleGap(angle, lastSteerAngle) > 1e-6)) emitSteer(angle, perfNow());
+    }, KEY_RELEASE_GRACE_MS);
+  }
+
+  function resetSteering() {
+    heldArrows.clear();
+    clearTimeout(keyReleaseTimer);
+    steerMode = touchSeen ? 'touch' : 'keys';
+    lastSteerAngle = null;
+    pointer.travel = 0;
+  }
+
+  // Guarda la posición en pantalla; se pasa a coordenadas de la arena en cada cuadro, porque la
+  // arena cambia de tamaño y de lugar debajo de un mouse quieto (al empezar la partida, al redimensionar)
+  function handlePointerMove(event) {
+    if (event.pointerType && event.pointerType !== 'mouse' && event.pointerType !== 'pen') return;
+    if (stick.id !== null) return; // arrastrando el joystick (en la emulación táctil llega como mouse)
+    if (pointer.has) pointer.travel += Math.abs(event.clientX - pointer.cx) + Math.abs(event.clientY - pointer.cy);
+    pointer.cx = event.clientX;
+    pointer.cy = event.clientY;
+    pointer.has = true;
+    if (steerMode !== 'mouse' && pointer.travel > MOUSE_TAKEOVER_PX && canSteer()) {
+      steerMode = 'mouse';
+      // Equipo híbrido: si se tocó la pantalla pero ahora se usa el mouse, el joystick sobra
+      if (event.pointerType === 'mouse' && !(coarseQuery && coarseQuery.matches)) touchSeen = false;
+    }
+  }
+
+  // Clic en la arena: dispara (y el mouse toma el control del rumbo)
+  function handlePointerDown(event) {
+    if (event.button !== 0 || (event.pointerType && event.pointerType !== 'mouse' && event.pointerType !== 'pen')) return;
+    if (!canSteer()) return;
+    event.preventDefault();
+    handlePointerMove(event);
+    steerMode = 'mouse';
+    socket.emit('attack');
+  }
+
+  // Manda el rumbo sin inundar la red: como mucho cada 40 ms, si cambió 2° o pasaron 250 ms
+  function steerThrottled(angle, now) {
+    if (now - lastSteerT < STEER_MIN_INTERVAL_MS) return;
+    if (lastSteerAngle !== null && angleGap(angle, lastSteerAngle) < STEER_MIN_DELTA && now - lastSteerT < STEER_REFRESH_MS) return;
+    emitSteer(angle, now);
+  }
+
+  // Cada cuadro: mira del mouse, controles táctiles y el rumbo del mouse o del joystick
+  function updateSteering(now) {
+    const aiming = canSteer();
+    if (aiming !== aimingCursor && arenaStage) {
+      aimingCursor = aiming;
+      arenaStage.classList.toggle('is-aiming', aiming);
+    }
+    let me = null;
+    if (aiming) for (let i = 0; i < snakes.length; i++) if (snakes[i].id === socket.id) { me = snakes[i]; break; }
+    updateTouchControls(me);
+    if (!aiming) return;
+    if (steerMode === 'touch') {
+      if (stick.id !== null && stick.angle !== null) steerThrottled(stick.angle, now);
+      return;
+    }
+    if (steerMode !== 'mouse' || !pointer.has || !canvas) return;
+    const head = me && me.renderSegments && me.renderSegments[0];
+    if (!head) return;
+    const r = canvas.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    const half = segmentSize / 2;
+    const dx = (pointer.cx - r.left) / r.width * ARENA_SIZE - (head.x + half);
+    const dy = (pointer.cy - r.top) / r.height * ARENA_SIZE - (head.y + half);
+    // La zona muerta es al menos el radio de giro: si no, con el puntero sobre una comida la serpiente
+    // orbitaría alrededor sin alcanzarla (a ese radio, girar al máximo la mantiene en el círculo)
+    const turnRad = ((roomConfig && +roomConfig.turnDegrees) || 40) * Math.PI / 180;
+    const dead = Math.max(segmentSize * MOUSE_DEADZONE_CELLS, segmentSize / turnRad + 2);
+    if (dx * dx + dy * dy < dead * dead) return;
+    steerThrottled(Math.atan2(dy, dx), now);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Táctil: joystick flotante en la mitad izquierda y botón de disparo a la derecha.
+  // El joystick pide un rumbo absoluto (empujar a la derecha = ir a la derecha); al soltarlo la
+  // serpiente sigue derecho con el último rumbo.
+  // ---------------------------------------------------------------------------
+  const touchControls = $('touchControls');
+  const stickZone = touchControls ? touchControls.querySelector('.touch-stick-zone') : null;
+  const stickBase = touchControls ? touchControls.querySelector('.touch-stick') : null;
+  const stickKnob = touchControls ? touchControls.querySelector('.touch-stick-knob') : null;
+  const fireButton = touchControls ? touchControls.querySelector('.touch-fire') : null;
+  const STICK_RADIUS = 46;          // recorrido del pulgar hasta el tope (px)
+  const STICK_DEADZONE = 10;        // por debajo, el toque no cambia el rumbo
+  const STICK_REST_MARGIN = 28;     // en reposo, separado de la esquina inferior izquierda
+  const stick = { id: null, x: 0, y: 0, angle: null };
+  let touchSeen = false;            // hubo toques en esta pestaña (o el puntero principal es táctil)
+  let touchShown = false;
+  let fireReady = null;
+
+  function setStickBase(x, y) {
+    stick.x = x;
+    stick.y = y;
+    stickBase.style.transform = 'translate3d(' + x + 'px,' + y + 'px,0)';
+  }
+  function setKnob(dx, dy) {
+    stickKnob.style.transform = dx || dy ? 'translate3d(' + dx + 'px,' + dy + 'px,0)' : '';
+  }
+  function stickToRest() {
+    if (!stickZone) return;
+    const r = stickZone.getBoundingClientRect();
+    const cs = getComputedStyle(stickZone);
+    const half = (stickBase.offsetWidth || 128) / 2;
+    setStickBase(parseFloat(cs.paddingLeft) + STICK_REST_MARGIN + half,
+      r.height - parseFloat(cs.paddingBottom) - STICK_REST_MARGIN - half);
+    setKnob(0, 0);
+    touchControls.setAttribute('data-stick', 'idle');
+  }
+
+  // Visibles para quien juega (no para quien mira) desde la cuenta regresiva: así se puede apoyar el
+  // pulgar antes del "¡Ya!" y el rumbo sale apenas empieza la partida
+  function updateTouchControls(me) {
+    if (!touchControls) return;
+    const playing = isConnected && !!currentRoomId && !isSpectating && (countdownActive || canSteer());
+    const show = playing && (touchSeen || !!(coarseQuery && coarseQuery.matches));
+    if (show !== touchShown) {
+      touchShown = show;
+      stick.id = null;
+      touchControls.hidden = !show;
+      if (show) stickToRest();
+    }
+    if (!show) return;
+    const ready = !!(me && me.renderSegments && me.renderSegments.length >= 2);
+    if (ready !== fireReady) {
+      fireReady = ready;
+      fireButton.setAttribute('data-ready', ready ? 'true' : 'false');
+    }
+  }
+
+  // Cualquier toque fuera del botón de disparo maneja el joystick (también un mouse, como el de la
+  // emulación táctil de DevTools): no hay zonas muertas
+  function onStickDown(event) {
+    if (stick.id !== null || !touchShown) return;
+    event.preventDefault();
+    touchSeen = true;
+    stick.id = event.pointerId;
+    try { stickZone.setPointerCapture(event.pointerId); } catch (e) { /* nada */ }
+    const r = stickZone.getBoundingClientRect();
+    setStickBase(event.clientX - r.left, event.clientY - r.top);
+    setKnob(0, 0);
+    stick.angle = null;
+    steerMode = 'touch';
+    touchControls.setAttribute('data-stick', 'active');
+  }
+  function onStickMove(event) {
+    if (event.pointerId !== stick.id) return;
+    event.preventDefault();
+    const r = stickZone.getBoundingClientRect();
+    const px = event.clientX - r.left;
+    const py = event.clientY - r.top;
+    let dx = px - stick.x;
+    let dy = py - stick.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist > STICK_RADIUS) {
+      // La base sigue al pulgar: para ir hacia el otro lado no hace falta recorrer el doble
+      const k = (dist - STICK_RADIUS) / dist;
+      setStickBase(stick.x + dx * k, stick.y + dy * k);
+      dx = px - stick.x;
+      dy = py - stick.y;
+    }
+    setKnob(dx, dy);
+    if (dist > STICK_DEADZONE) {
+      const first = stick.angle === null;
+      stick.angle = Math.atan2(dy, dx);
+      if (first) emitSteer(stick.angle, perfNow()); // el primer rumbo sale enseguida
+    }
+  }
+  function onStickEnd(event) {
+    if (event.pointerId !== stick.id) return;
+    // Al soltar, manda el último rumbo si el throttle lo había retenido
+    if (stick.angle !== null && (lastSteerAngle === null || angleGap(stick.angle, lastSteerAngle) > 1e-6)) emitSteer(stick.angle, perfNow());
+    stick.id = null;
+    stickToRest();
+  }
+
+  function onFireDown(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.pointerType !== 'mouse') touchSeen = true;
+    if (!canSteer()) return;
+    fireButton.classList.add('is-pressed');
+    socket.emit('attack');
+    if (navigator.vibrate) { try { navigator.vibrate(12); } catch (e) { /* nada */ } }
+  }
+  function onFireUp() { fireButton.classList.remove('is-pressed'); }
+
+  if (touchControls && stickZone && stickBase && stickKnob && fireButton) {
+    stickZone.addEventListener('pointerdown', onStickDown);
+    stickZone.addEventListener('pointermove', onStickMove);
+    stickZone.addEventListener('pointerup', onStickEnd);
+    stickZone.addEventListener('pointercancel', onStickEnd);
+    stickZone.addEventListener('lostpointercapture', onStickEnd);
+    fireButton.addEventListener('pointerdown', onFireDown);
+    fireButton.addEventListener('pointerup', onFireUp);
+    fireButton.addEventListener('pointercancel', onFireUp);
+    fireButton.addEventListener('pointerleave', onFireUp);
+    touchControls.addEventListener('contextmenu', function (event) { event.preventDefault(); });
+    window.addEventListener('resize', function () { if (touchShown && stick.id === null) stickToRest(); });
+  }
+  // Aviso de girar el teléfono (lo muestra el CSS): donde se puede (Android), pantalla completa y
+  // orientación fija en horizontal con un toque
+  const rotateFull = document.querySelector('.rotate-hint-full');
+  if (rotateFull && document.fullscreenEnabled && window.screen && screen.orientation && screen.orientation.lock) {
+    rotateFull.hidden = false;
+    rotateFull.addEventListener('click', function () {
+      const root = document.documentElement;
+      const full = document.fullscreenElement ? Promise.resolve() : root.requestFullscreen({ navigationUI: 'hide' });
+      Promise.resolve(full)
+        .then(function () { return screen.orientation.lock('landscape'); })
+        .catch(function () { /* el navegador no deja fijar la orientación: queda el aviso */ });
+    });
+  }
+
+  // Cualquier toque cuenta: en una laptop táctil el joystick aparece recién cuando se usa la pantalla
+  window.addEventListener('pointerdown', function (event) { if (event.pointerType === 'touch') touchSeen = true; }, { capture: true, passive: true });
+
+  document.addEventListener('keyup', handleKeyUp);
+  window.addEventListener('blur', function () { heldArrows.clear(); clearTimeout(keyReleaseTimer); });
+  window.addEventListener('pointermove', handlePointerMove, { passive: true });
+  if (arenaStage) arenaStage.addEventListener('pointerdown', handlePointerDown);
 
   // ===========================================================================
   // Serpientes locales
@@ -767,6 +1052,8 @@ document.addEventListener('DOMContentLoaded', function () {
         idleOptions.caption = scene === 'room' && !countdownActive ? idleCaption : '';
         Arena.renderIdle(now, idleOptions);
       }
+      // Rumbo del mouse (desde la cabeza recién dibujada) o del joystick; mira y controles táctiles
+      updateSteering(perfNow());
     } catch (err) {
       reportOnce(err);
     }
@@ -1094,6 +1381,7 @@ document.addEventListener('DOMContentLoaded', function () {
     roundTimeLeft = data.gameState.roundTimeLeft !== undefined ? data.gameState.roundTimeLeft : roundTime();
 
     roundLive = true;
+    resetSteering();
     freezeUntil = 0;
     countdownActive = false;
     startRequested = false;

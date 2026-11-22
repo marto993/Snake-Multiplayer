@@ -1093,6 +1093,9 @@ kbd {
   isolation: isolate;
   justify-self: center;
 }
+/* Partida en curso: el mouse apunta el rumbo y el clic dispara */
+.arena-stage.is-aiming,
+.arena-stage.is-aiming * { cursor: crosshair; }
 .arena-stage::before,
 .arena-stage::after {
   content: "";
@@ -2449,3 +2452,152 @@ html { scroll-padding-top: calc(var(--bio-topbar-h) + 12px); }
    (.final-name es nowrap) el contenido se ensanchaba y cortaba el mensaje y los puntos a la derecha. */
 .final-screen { grid-template-columns: minmax(0, 1fr); }
 .final-content { min-width: 0; }
+
+/* --------------------------------------------------------------------------
+   19. Controles táctiles (partida en pantallas táctiles)
+   Joystick flotante: aparece donde se apoya el pulgar, en cualquier parte de la pantalla fuera del
+   botón de disparo, y sigue al dedo; en reposo queda tenue abajo a la izquierda. Disparo: botón
+   abajo a la derecha, con un área táctil más grande que el círculo. SnakeGame.js los muestra a los
+   jugadores (no a quien mira) desde la cuenta regresiva y mueve el joystick con transform.
+   -------------------------------------------------------------------------- */
+.touch-controls {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--bio-z-hud) + 1);
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.touch-controls[hidden] { display: none; }
+.touch-stick-zone {
+  position: absolute;
+  inset: 0;
+  padding: 0 0 env(safe-area-inset-bottom) env(safe-area-inset-left);
+  pointer-events: auto;
+  touch-action: none;
+}
+.touch-stick {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 128px;
+  height: 128px;
+  margin: -64px 0 0 -64px;
+  border-radius: 50%;
+  border: 1px solid rgba(31, 242, 210, 0.32);
+  background:
+    radial-gradient(circle, rgba(31, 242, 210, 0.10) 0%, rgba(31, 242, 210, 0.04) 62%, transparent 72%),
+    rgba(2, 10, 18, 0.35);
+  box-shadow: 0 0 24px rgba(31, 242, 210, 0.10), inset 0 0 18px rgba(31, 242, 210, 0.08);
+  opacity: 0.45;
+  transition: opacity var(--bio-dur-quick) var(--bio-ease-standard);
+  will-change: transform;
+}
+.touch-controls[data-stick="active"] .touch-stick { opacity: 1; transition-duration: var(--bio-dur-press); }
+.touch-stick-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 56px;
+  height: 56px;
+  margin: -28px 0 0 -28px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 34%, var(--bio-turquoise-soft), var(--bio-turquoise) 45%, rgba(31, 242, 210, 0.55) 100%);
+  box-shadow: 0 0 22px var(--bio-glow-turquoise);
+  will-change: transform;
+}
+.touch-fire {
+  position: absolute;
+  right: max(20px, env(safe-area-inset-right));
+  bottom: max(20px, env(safe-area-inset-bottom));
+  display: grid;
+  place-items: center;
+  width: 88px;
+  height: 88px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(200, 255, 60, 0.5);
+  background: radial-gradient(circle at 40% 35%, rgba(228, 255, 154, 0.30), rgba(200, 255, 60, 0.14) 55%, rgba(2, 10, 18, 0.6) 100%);
+  box-shadow: 0 0 28px var(--bio-glow-lime);
+  pointer-events: auto;
+  touch-action: none;
+  transition: transform var(--bio-dur-press) var(--bio-ease-standard), opacity var(--bio-dur-quick) var(--bio-ease-standard);
+}
+.touch-fire-core {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--bio-pearl) 0%, var(--bio-lime) 55%, rgba(200, 255, 60, 0) 72%);
+  box-shadow: 0 0 16px var(--bio-glow-lime);
+}
+.touch-fire::before {
+  /* área táctil más grande que el círculo: un toque que roza el botón dispara igual */
+  content: "";
+  position: absolute;
+  inset: -20px;
+  border-radius: 50%;
+}
+.touch-fire.is-pressed { transform: scale(0.9); }
+/* con menos de 2 segmentos no se puede disparar */
+.touch-fire[data-ready="false"] { opacity: 0.4; }
+/* Pantallas muy bajas (celular chico en horizontal): joystick y disparo más compactos */
+@media (max-height: 400px) {
+  .touch-stick { width: 112px; height: 112px; margin: -56px 0 0 -56px; }
+  .touch-stick-knob { width: 50px; height: 50px; margin: -25px 0 0 -25px; }
+  .touch-fire { width: 80px; height: 80px; right: max(14px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); }
+}
+
+/* --------------------------------------------------------------------------
+   20. La partida se juega en horizontal
+   En pantallas táctiles en vertical, con la partida en pantalla (desde la cuenta regresiva), un
+   aviso tapa todo y pide girar el teléfono; los controles táctiles no se muestran. Donde el
+   navegador lo permite (Android), el botón pone pantalla completa y fija la orientación.
+   -------------------------------------------------------------------------- */
+.rotate-hint {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--bio-z-toast) - 2);
+  display: none;
+  place-items: center;
+  padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
+  background:
+    radial-gradient(80% 50% at 50% 40%, rgba(31, 242, 210, 0.08), transparent 70%),
+    rgba(1, 5, 9, 0.94);
+  text-align: center;
+  touch-action: none;
+}
+.rotate-hint-card {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  max-width: 320px;
+}
+.rotate-phone {
+  width: 84px;
+  height: 84px;
+  color: var(--bio-turquoise);
+  filter: drop-shadow(0 0 14px var(--bio-glow-turquoise));
+  animation: bio-rotate-phone 2400ms var(--bio-ease-in-out) infinite;
+}
+@keyframes bio-rotate-phone {
+  0%, 20% { transform: rotate(0deg); }
+  50%, 80% { transform: rotate(-90deg); }
+  100% { transform: rotate(0deg); }
+}
+.rotate-hint-title {
+  font-family: var(--bio-font-display);
+  font-size: var(--bio-fs-36);
+  line-height: 1.1;
+  color: var(--bio-ink);
+}
+.rotate-hint-text { font-size: var(--bio-fs-16); line-height: 24px; color: var(--bio-ink-2); }
+.rotate-hint-full { margin-top: 6px; }
+@media (pointer: coarse) and (orientation: portrait) {
+  body[data-scene="game"] .rotate-hint { display: grid; }
+  body[data-scene="game"] .touch-controls { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rotate-phone { animation: none; transform: rotate(-90deg); }
+}
