@@ -5,13 +5,17 @@ class Snake {
 	  this.color = playerColor;
       this.canvaswidht = canvasWidht;
       this.canvasheight = canvasHeight;
-	  this.moveQueue = []; // Cola de movimientos pendientes
 
       this.segmentSize = segmentSize;
       this.segments = [
         { x: startX, y: startY }
       ];
-      this.direction = { x: directionX, y: directionY };
+      // Giro libre: `heading` es el rumbo (radianes, 0 = derecha, en sentido horario porque y
+      // crece hacia abajo) y `direction` su vector unitario. Cada paso el rumbo gira hacia
+      // `targetHeading` como mucho `turnRate` radianes.
+      this.turnRate = Snake.DEFAULT_TURN_RATE;
+      this.setHeading(Math.atan2(directionY, directionX));
+      this.targetHeading = this.heading;
       this.eatFood = false;
       this.score = 1; // Modificado: iniciar con puntaje 1 (tamaño inicial)
       this.gameover = false;
@@ -87,12 +91,15 @@ class Snake {
 	  this.updateTargets();
 	}
     
-    // Nueva función para lógica de movimiento (servidor)
+    // Lógica de movimiento (servidor): gira hacia el rumbo pedido y avanza un cuerpo.
+    // Las posiciones se redondean a 0,1 px: el frame pesa menos y el paso sigue midiendo una
+    // celda (±0,07 px).
     moveLogic() {
+      this.turn();
       const head = { ...this.targetSegments[0] };
-      head.x += this.direction.x * this.segmentSize;
-      head.y += this.direction.y * this.segmentSize;
-      
+      head.x = Snake.round1(head.x + this.direction.x * this.segmentSize);
+      head.y = Snake.round1(head.y + this.direction.y * this.segmentSize);
+
       this.targetSegments.unshift(head);
   
       if (this.scoreLeftToGrow === 0) {
@@ -165,39 +172,40 @@ class Snake {
       return this.renderSegments.length > 0 ? this.renderSegments : this.segments;
     }
     
+    // Rumbo y su vector unitario, redondeado a 4 decimales: en los ejes queda exacto (0, ±1) y
+    // el frame no arrastra 17 cifras por componente
+    setHeading(angle) {
+      this.heading = Snake.normalizeAngle(angle);
+      this.direction = {
+        x: Math.round(Math.cos(this.heading) * 10000) / 10000 || 0,
+        y: Math.round(Math.sin(this.heading) * 10000) / 10000 || 0
+      };
+    }
+
+    // Rumbo pedido por el jugador (mouse o teclado). El giro ocurre en los próximos pasos.
+    steerTo(angle) {
+      if (typeof angle !== 'number' || !Number.isFinite(angle)) return false;
+      this.targetHeading = Snake.normalizeAngle(angle);
+      return true;
+    }
+
+    // Compatibilidad con clientes viejos (`newMove`): una flecha pide ese rumbo. La vuelta en U
+    // ya no se rechaza: es una curva.
     changeDirection(newDirection) {
-	// Evitar cambiar la dirección opuesta
-	if ((newDirection.x === 1 && this.direction.x === -1) ||
-	(newDirection.x === -1 && this.direction.x === 1) ||
-	(newDirection.y === 1 && this.direction.y === -1) ||
-	(newDirection.y === -1 && this.direction.y === 1)) {
-		return false;
-	}
+      if (!newDirection || (!newDirection.x && !newDirection.y)) return false;
+      return this.steerTo(Math.atan2(newDirection.y, newDirection.x));
+    }
 
-	// Si la cola está vacía o el movimiento es diferente al último en cola
-	if (this.moveQueue.length === 0 || 
-	  (this.moveQueue[this.moveQueue.length - 1].x !== newDirection.x || 
-	   this.moveQueue[this.moveQueue.length - 1].y !== newDirection.y)) {
+    // Un paso de giro: hacia el rumbo pedido por el lado corto, como mucho turnRate.
+    // Si el pedido es justo el opuesto, dobla hacia la derecha de la serpiente.
+    turn() {
+      const delta = Snake.normalizeAngle(this.targetHeading - this.heading);
+      if (delta === 0) return false;
+      if (Math.abs(delta) <= this.turnRate) this.setHeading(this.targetHeading);
+      else this.setHeading(this.heading + Math.sign(delta) * this.turnRate);
+      return true;
+    }
 
-		// Limitar cola a máximo 3 movimientos
-		if (this.moveQueue.length < 3) {
-			this.moveQueue.push({ ...newDirection });
-		}
-	}
-
-	return true;
-	}
-
-	// Agregar nuevo método para procesar la cola:
-	processNextMove() {
-		if (this.moveQueue.length > 0) {
-			const nextMove = this.moveQueue.shift();
-			this.direction = nextMove;
-			return true;
-		}
-			return false;
-	}
-  
     EatFood(scoreFood) {
         this.scoreLeftToGrow += scoreFood; // Modificado: acumular crecimiento
         this.eatFood = true;
@@ -304,7 +312,6 @@ class Snake {
       this.gameover = true;
       this.direction.x = 0;
       this.direction.y = 0;
-	  this.moveQueue = [];
       this.segments = [
         { x: 0, y: 0 }
       ];
@@ -329,11 +336,11 @@ class Snake {
       this.segments = body();
       this.targetSegments = body();
       this.renderSegments = body();
-      this.direction = { x: directionX, y: directionY };
+      this.setHeading(Math.atan2(directionY, directionX));
+      this.targetHeading = this.heading;
       this.score = length;
       this.gameover = false;
       this.scoreLeftToGrow = 0;
-      this.moveQueue = [];
       this.eatFood = false;
       
       // Limpiar consumibles activos al reiniciar
@@ -344,7 +351,23 @@ class Snake {
     getCurrentScore() {
       return this.segments.length;
     }
+
+    // Ángulo en (-π, π]
+    static normalizeAngle(a) {
+      const TAU = Math.PI * 2;
+      a = a % TAU;
+      if (a <= -Math.PI) a += TAU;
+      else if (a > Math.PI) a -= TAU;
+      return a;
+    }
+
+    static round1(v) {
+      return Math.round(v * 10) / 10;
+    }
 }
+
+// Giro máximo por paso si la sala no dice otro (40°, como la tabla de dificultad)
+Snake.DEFAULT_TURN_RATE = 40 * Math.PI / 180;
 
 // Verificar si el código se está ejecutando en Node.js o en el navegador
 if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {

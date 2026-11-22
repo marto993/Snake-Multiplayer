@@ -14,10 +14,12 @@ const DEFAULT_DIFFICULTY = 'medium';
 // projectileCells: celdas que avanza un disparo por paso
 // foodExtra: comida en la arena = jugadores + foodExtra
 // shieldEvery / shieldLasts: cada cuántos segundos aparece el escudo y cuánto dura (s)
+// turnDegrees: cuánto puede girar la serpiente por paso. Como avanza una celda por paso, fija
+// el radio de giro: 40° da unos 17 px (1,4 cuerpos) y una vuelta en U de 5 pasos.
 const LEVELS = {
-  easy:   { crossSeconds: 3.5, projectileCells: 3, foodExtra: 24, shieldEvery: 6,  shieldLasts: 5 },
-  medium: { crossSeconds: 3.3, projectileCells: 3, foodExtra: 20, shieldEvery: 8, shieldLasts: 4 },
-  hard:   { crossSeconds: 3.0, projectileCells: 3, foodExtra: 18,  shieldEvery: 10, shieldLasts: 3 }
+  easy:   { crossSeconds: 3.5, projectileCells: 3, foodExtra: 24, shieldEvery: 6,  shieldLasts: 5, turnDegrees: 40 },
+  medium: { crossSeconds: 3.3, projectileCells: 3, foodExtra: 20, shieldEvery: 8, shieldLasts: 4, turnDegrees: 40 },
+  hard:   { crossSeconds: 3.0, projectileCells: 3, foodExtra: 18,  shieldEvery: 10, shieldLasts: 3, turnDegrees: 40 }
 };
 
 function buildRoomConfig(difficulty, opts) {
@@ -38,6 +40,7 @@ function buildRoomConfig(difficulty, opts) {
     roundTime: opts.roundTime,
     projectileCells: level.projectileCells,
     foodExtra: level.foodExtra,
+    turnDegrees: level.turnDegrees,
     consumables: {
       immunity: { enabled: true, spawnInterval: level.shieldEvery, duration: level.shieldLasts }
     }

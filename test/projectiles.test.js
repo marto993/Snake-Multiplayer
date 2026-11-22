@@ -47,3 +47,37 @@ test('no modifica el proyectil', () => {
   traceProjectile(p, 3, bounds, []);
   assert.deepEqual(p, right(120, 120));
 });
+
+// Giro libre: dirección en cualquier ángulo y contacto por distancia
+const aim = (x, y, deg) => ({ x, y, direction: { x: Math.cos(deg * Math.PI / 180), y: Math.sin(deg * Math.PI / 180) } });
+
+test('en diagonal pega a un segmento que no está en ninguna fila del disparo', () => {
+  const a = snake('a', [{ x: 300, y: 300 }, { x: 137, y: 135 }]);
+  const r = traceProjectile(aim(120, 120, 45), 3, bounds, [a]);
+  assert.deepEqual([r.outcome, r.segmentIndex, r.x, r.y], ['hit', 1, 137, 135]);
+});
+
+test('pega a lo que roza dentro del radio y no a lo que pasa más lejos', () => {
+  const close = snake('a', [{ x: 138, y: 128 }]);   // 8 px al costado de la trayectoria
+  const far = snake('b', [{ x: 138, y: 130 }]);     // 10 px
+  assert.equal(traceProjectile(right(120, 120), 3, bounds, [close]).outcome, 'hit');
+  assert.equal(traceProjectile(right(120, 120), 3, bounds, [far]).outcome, 'alive');
+});
+
+test('toca lo que queda entre dos puntos del tramo, no solo en los puntos', () => {
+  const a = snake('a', [{ x: 126, y: 125 }]);   // a mitad del primer tramo, 5 px al costado
+  const r = traceProjectile(right(120, 120), 1, bounds, [a]);
+  assert.equal(r.outcome, 'hit');
+});
+
+test('entre dos cuerpos en el mismo tramo, pega al primero que encuentra', () => {
+  const a = snake('a', [{ x: 130, y: 120 }]);   // en la trayectoria, a 10 px del inicio del tramo
+  const b = snake('b', [{ x: 126, y: 124 }]);   // a 4 px al costado, a 6 px del inicio
+  const r = traceProjectile(right(120, 120), 1, bounds, [a, b]);
+  assert.equal(r.player, b);
+});
+
+test('pega a un segmento parado justo en el borde antes de expirar', () => {
+  const a = snake('a', [{ x: 593, y: 120 }]);
+  assert.equal(traceProjectile(right(588, 120), 3, bounds, [a]).outcome, 'hit');
+});

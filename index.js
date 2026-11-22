@@ -4,6 +4,7 @@ const socketIO = require('socket.io');
 const Snake = require('./public/snakeClass.js');
 const { buildRoomConfig } = require('./game/difficulty');
 const { traceProjectile } = require('./game/projectiles');
+const { touchedAlong, wrapPoint, cellIndex } = require('./game/geometry');
 const { cutSnake, dropRemains } = require('./game/remains');
 const { matchResult } = require('./game/match');
 const sqlite3 = require('sqlite3').verbose();
@@ -384,41 +385,31 @@ function resetGameBoard(room) {
   room.gameboard = Array(gridWidth).fill().map(() => Array(gridHeight).fill(0));
 }
 
-// MODIFICADO: updateGameBoard para incluir consumibles
+// Tablero de ocupación: con giro libre las posiciones no caen justo en una celda, así que se
+// ubican por su centro. Solo sirve para elegir celdas libres al hacer aparecer comida y escudos;
+// comer, tomar el escudo y los impactos se resuelven por distancia (game/geometry.js).
 function updateGameBoard(room) {
   resetGameBoard(room);
   const { segmentSize } = room.config;
   const gridWidth = room.gameboard.length;
   const gridHeight = room.gameboard[0].length;
-  
+  const mark = (p, value) => {
+    room.gameboard[cellIndex(p.x, segmentSize, gridWidth)][cellIndex(p.y, segmentSize, gridHeight)] = value;
+  };
+
   room.players.forEach((player) => {
-    if (!player.gameover && player.segments) {
-      player.segments.forEach((segment) => {
-        const x = Math.floor(segment.x / segmentSize);
-        const y = Math.floor(segment.y / segmentSize);
-        if (x >= 0 && x < gridWidth && y >= 0 && y < gridHeight) {
-          room.gameboard[x][y] = 1;
-        }
-      });
-    }
+    if (!player.gameover && player.segments) player.segments.forEach(segment => mark(segment, 1));
   });
-  
-  room.foods.forEach(food => {
-    const foodX = Math.floor(food.x / segmentSize);
-    const foodY = Math.floor(food.y / segmentSize);
-    if (foodX >= 0 && foodX < gridWidth && foodY >= 0 && foodY < gridHeight) {
-      room.gameboard[foodX][foodY] = 2;
-    }
-  });
-  
-  room.consumables.forEach(consumable => {
-    const consX = Math.floor(consumable.x / segmentSize);
-    const consY = Math.floor(consumable.y / segmentSize);
-    if (consX >= 0 && consX < gridWidth && consY >= 0 && consY < gridHeight) {
-      room.gameboard[consX][consY] = 3; // 3 = consumible
-    }
-  });
+  room.foods.forEach(food => mark(food, 2));
+  room.consumables.forEach(consumable => mark(consumable, 3)); // 3 = consumible
 }
+
+// Alcances del contacto, en celdas, entre centros. La cabeza mide 0,46 celdas de radio y la
+// comida de 0,33 a 0,47: comer a 0,85 se siente justo, sin tener que alinearse con una fila.
+const EAT_REACH = 0.85;
+const PICKUP_REACH = 0.9;   // escudo (la campana es un poco más grande que la comida)
+const HIT_REACH = 0.7;      // proyectil contra un segmento: 1,4 celdas de ancho de blanco, más que la fila de la grilla
+const SHOT_SPACING = 1;     // no se puede disparar con un proyectil propio a menos de una celda de donde nacería
 
 function getRandomCoordinate(max, segmentSize) {
   return Math.floor(Math.random() * (max / segmentSize)) * segmentSize;
@@ -441,6 +432,7 @@ function getPlayerSpawnPosition(room, playerIndex) {
 function resetPlayerForRound(room, player, index) {
   const spawn = getPlayerSpawnPosition(room, index);
   player.segmentSize = room.config.segmentSize;
+  if (room.config.turnDegrees) player.turnRate = room.config.turnDegrees * Math.PI / 180;
   player.reset(spawn.x, spawn.y, 1, 0, room.config.startLength);
 }
 
@@ -602,18 +594,13 @@ function spawnConsumable(room, type) {
   console.log(`Spawned ${type} consumable in room ${room.id}`);
 }
 
-// MODIFICADO: Verificar si un jugador consumió un consumible
-function checkConsumableConsumption(room, player) {
-  const { segmentSize } = room.config;
-  const head = player.segments[0];
-  const headX = Math.floor(head.x / segmentSize);
-  const headY = Math.floor(head.y / segmentSize);
-  
-  const consumableIndex = room.consumables.findIndex(consumable => 
-    Math.floor(consumable.x / segmentSize) === headX && 
-    Math.floor(consumable.y / segmentSize) === headY
-  );
-  
+// Verificar si un jugador tomó un consumible: contra todo el tramo que recorrió la cabeza en el
+// paso (`from` antes de moverse, `step` lo que avanzó), por el lado corto de los portales
+function checkConsumableConsumption(room, player, from, step) {
+  const { segmentSize, canvasWidth, canvasHeight } = room.config;
+  const touched = touchedAlong(from, step, room.consumables, segmentSize * PICKUP_REACH, canvasWidth, canvasHeight);
+  const consumableIndex = touched.length ? touched[0] : -1;
+
   if (consumableIndex !== -1) {
     const consumable = room.consumables[consumableIndex];
     
@@ -641,15 +628,15 @@ function createProjectile(room, player) {
   const head = player.segments[0];
   const { segmentSize } = room.config;
   
-  // Calcular la posición donde aparecería el nuevo proyectil
-  const newProjectileX = head.x + (player.direction.x * segmentSize);
-  const newProjectileY = head.y + (player.direction.y * segmentSize);
-  
-  // Cambio 2: Nueva lógica - verificar si hay un proyectil en la posición frontal
-  const frontProjectile = room.projectiles.find(p => 
-    p.playerId === player.id && 
-    p.x === newProjectileX && 
-    p.y === newProjectileY
+  // Calcular la posición donde aparecería el nuevo proyectil (una celda adelante, en el rumbo actual)
+  const newProjectileX = Snake.round1(head.x + (player.direction.x * segmentSize));
+  const newProjectileY = Snake.round1(head.y + (player.direction.y * segmentSize));
+
+  // No dispara si ya tiene un proyectil propio justo enfrente (con ángulos no coinciden exacto)
+  const spacing2 = Math.pow(segmentSize * SHOT_SPACING, 2);
+  const frontProjectile = room.projectiles.find(p =>
+    p.playerId === player.id &&
+    Math.pow(p.x - newProjectileX, 2) + Math.pow(p.y - newProjectileY, 2) < spacing2
   );
   
   if (frontProjectile) {
@@ -693,8 +680,13 @@ function moveProjectiles(room, frameEvents = { hitEvents: [], blockEvents: [], e
   const { segmentSize, canvasWidth, canvasHeight, projectileCells } = room.config;
   const bounds = { cell: segmentSize, width: canvasWidth, height: canvasHeight };
 
+  const hitRadius = segmentSize * HIT_REACH;
+  // Restos: no se apilan sobre una comida que ya está a menos de media celda
+  const nearFood2 = Math.pow(segmentSize / 2, 2);
+  const occupied = (x, y) => room.foods.some(f => Math.pow(f.x - x, 2) + Math.pow(f.y - y, 2) < nearFood2);
+
   room.projectiles = room.projectiles.filter(projectile => {
-    const result = traceProjectile(projectile, projectileCells, bounds, room.players);
+    const result = traceProjectile(projectile, projectileCells, bounds, room.players, hitRadius);
 
     if (result.outcome === 'alive') {
       projectile.x = result.x;
@@ -727,7 +719,7 @@ function moveProjectiles(room, frameEvents = { hitEvents: [], blockEvents: [], e
     const { kept, lost } = cutSnake(player.segments, result.segmentIndex);
     player.segments = kept;
     player.updateTargets();
-    room.foods.push(...dropRemains(lost, Date.now(), (x, y) => room.foods.some(f => f.x === x && f.y === y)));
+    room.foods.push(...dropRemains(lost, Date.now(), occupied));
     frameEvents.hitEvents.push({
       targetId: player.id,
       attackerId: projectile.playerId,
@@ -895,48 +887,31 @@ function gameLogicLoop(room) {
       // Actualizar consumibles expirados
       player.updateConsumables();
       
-      player.processNextMove();
       const prevHead = { ...player.segments[0] };
-      player.moveLogic();
+      player.moveLogic(); // gira hacia el rumbo pedido y avanza una celda
       const head = player.segments[0];
-      
+
       if (!head) {
         return;
       }
-      
-      const gridWidth = Math.floor(canvasWidth / segmentSize);
-      const gridHeight = Math.floor(canvasHeight / segmentSize);
-      
-      let headX = Math.floor(head.x / segmentSize);
-      let headY = Math.floor(head.y / segmentSize);
-      let portalOccurred = false;
+
+      // Lo que avanzó la cabeza en este paso, antes de envolver: el tramo para comer y tomar el escudo
+      const step = { x: head.x - prevHead.x, y: head.y - prevHead.y };
+
+      // Portales: la cabeza pasa al borde opuesto conservando su posición exacta (con giro libre
+      // no cae en una celda; alinearla a la grilla la correría de costado)
       const portalEventsStart = portalEvents.length;
-      
-      // Lógica de portales
-      if (headX < 0) {
-        headX = gridWidth - 1;
-        head.x = headX * segmentSize;
-        portalOccurred = true;
-        portalEvents.push({ playerId: player.id, type: 'horizontal', from: 'left', to: 'right' });
-      } else if (headX >= gridWidth) {
-        headX = 0;
-        head.x = headX * segmentSize;
-        portalOccurred = true;
-        portalEvents.push({ playerId: player.id, type: 'horizontal', from: 'right', to: 'left' });
+      const crossed = wrapPoint(head, segmentSize, canvasWidth, canvasHeight);
+      // Sumar el ancho deja ruido de coma flotante (-6.3 + 600 = 593.6999…) que viajaría en cada frame
+      head.x = Snake.round1(head.x);
+      head.y = Snake.round1(head.y);
+      if (crossed.x) {
+        portalEvents.push({ playerId: player.id, type: 'horizontal', from: crossed.x, to: crossed.x === 'left' ? 'right' : 'left' });
       }
-      
-      if (headY < 0) {
-        headY = gridHeight - 1;
-        head.y = headY * segmentSize;
-        portalOccurred = true;
-        portalEvents.push({ playerId: player.id, type: 'vertical', from: 'top', to: 'bottom' });
-      } else if (headY >= gridHeight) {
-        headY = 0;
-        head.y = headY * segmentSize;
-        portalOccurred = true;
-        portalEvents.push({ playerId: player.id, type: 'vertical', from: 'bottom', to: 'top' });
+      if (crossed.y) {
+        portalEvents.push({ playerId: player.id, type: 'vertical', from: crossed.y, to: crossed.y === 'top' ? 'bottom' : 'top' });
       }
-      
+
       // Coordenadas del portal: cabeza antes de moverse y cabeza ya envuelta
       for (let p = portalEventsStart; p < portalEvents.length; p++) {
         portalEvents[p].fromX = prevHead.x;
@@ -946,7 +921,7 @@ function gameLogicLoop(room) {
       }
 
       // Verificar consumo de consumibles
-      const consumedConsumable = checkConsumableConsumption(room, player);
+      const consumedConsumable = checkConsumableConsumption(room, player, prevHead, step);
       if (consumedConsumable) {
         consumableEvents.push({
           playerId: player.id,
@@ -960,28 +935,23 @@ function gameLogicLoop(room) {
         // restartConsumableTimer(room, consumedConsumable.type);
       }
       
-      // Lógica de comida
-      if (room.gameboard[headX] && room.gameboard[headX][headY] === 2) {
-        const eatenFoodIndex = room.foods.findIndex(food => 
-          Math.floor(food.x / segmentSize) === headX && 
-          Math.floor(food.y / segmentSize) === headY
-        );
-        
-        if (eatenFoodIndex !== -1) {
-          const eatenFood = room.foods[eatenFoodIndex];
-          player.EatFood(eatenFood.score);
-          room.foods.splice(eatenFoodIndex, 1);
-          foodEvents.push({
-            playerId: player.id,
-            x: eatenFood.x,
-            y: eatenFood.y,
-            score: eatenFood.score,
-            color: player.color
-          });
-          
-          // Los restos no reaparecen: solo la comida base mantiene su cantidad
-          if (!eatenFood.remains) respawnFood(room);
-        }
+      // Comida: todo lo que toca el tramo que recorrió la cabeza (puede ser más de una, por
+      // ejemplo al pasar por una fila de restos)
+      const eaten = touchedAlong(prevHead, step, room.foods, segmentSize * EAT_REACH, canvasWidth, canvasHeight)
+        .map(index => room.foods[index]);
+      for (const eatenFood of eaten) {
+        player.EatFood(eatenFood.score);
+        room.foods.splice(room.foods.indexOf(eatenFood), 1);
+        foodEvents.push({
+          playerId: player.id,
+          x: eatenFood.x,
+          y: eatenFood.y,
+          score: eatenFood.score,
+          color: player.color
+        });
+
+        // Los restos no reaparecen: solo la comida base mantiene su cantidad
+        if (!eatenFood.remains) respawnFood(room);
       }
       
       player.score = player.segments.length;
@@ -1045,7 +1015,6 @@ io.on('connection', (socket) => {
       const spawnPos = getPlayerSpawnPosition(room, 0);
       const playerColor = getNextAvailableColor(room);
       const player = new Snake(socket.id, playerProfile.stats.name, segmentSize, canvasWidth, canvasHeight, spawnPos.x, spawnPos.y, 1, 0, playerColor, room.config.gameSpeed);
-      player.moveQueue = []; 
       player.playerId = playerProfile.playerId;
       room.players.push(player);
       resetPlayerForRound(room, player, room.players.length - 1);
@@ -1119,7 +1088,6 @@ io.on('connection', (socket) => {
       const playerColor = getNextAvailableColor(room);
       
       const player = new Snake(socket.id, playerProfile.stats.name, segmentSize, canvasWidth, canvasHeight, spawnPos.x, spawnPos.y, 1, 0, playerColor, room.config.gameSpeed);
-      player.moveQueue = [];
       player.playerId = playerProfile.playerId;
       room.players.push(player);
       resetPlayerForRound(room, player, room.players.length - 1);
@@ -1418,10 +1386,22 @@ io.on('connection', (socket) => {
       40: { x: 0, y: 1 }
     };
     
-    const newDirection = directions[data.key];
+    const newDirection = directions[data && data.key];
     if (newDirection) {
       playerToMove.changeDirection(newDirection);
     }
+  });
+
+  // Giro libre: el cliente pide un rumbo en radianes (mouse o combinaciones de flechas).
+  // La serpiente gira hacia él en los próximos pasos, como mucho turnDegrees por paso.
+  socket.on('steer', (data) => {
+    if (!currentRoom) return;
+    const room = getRoom(currentRoom);
+    if (!room || !room.gameState.playing) return;
+    if (room.spectators && room.spectators.has(socket.id)) return;
+    const player = room.players.find(p => p.id === socket.id);
+    if (!player || player.gameover) return;
+    player.steerTo(data && data.angle);
   });
 
   socket.on('getPlayerStats', async (playerId) => {
