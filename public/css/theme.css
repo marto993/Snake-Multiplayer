@@ -70,13 +70,13 @@
   --bio-mono: "MONO" 1;
   --bio-display-axes: "SOFT" 100, "WONK" 1;
 }
-@media (min-width: 769px)  { :root { --bio-gutter:24px; } }
-@media (min-width: 1280px) { :root { --bio-gutter:32px; } }
+@media (width > 768px)  { :root { --bio-gutter:24px; } }
+@media (width >= 1280px) { :root { --bio-gutter:32px; } }
 
 /* Tamaño de la arena en la sala (spec 4.10): el ancho que entra, limitado por el alto disponible
    multiplicado por la proporción. En partida crece (sección 18). */
 :root { --arena-size: min(calc(100vw - 32px), 720px); }
-@media (min-width: 769px) {
+@media (width > 768px) {
   :root {
     --bio-topbar-h: 64px;
     --bio-arena-top: calc(var(--bio-topbar-h) + 24px);
@@ -84,7 +84,7 @@
     --arena-size: clamp(320px, min(calc(100vw - 48px), calc((100svh - 240px) * var(--arena-aspect))), 960px);
   }
 }
-@media (min-width: 1024px) {
+@media (width >= 1024px) {
   :root {
     --bio-hud-bar-h: 64px;
     --bio-side-w: 260px;
@@ -93,7 +93,7 @@
     --arena-size: clamp(320px, min(calc(100vw - 360px), calc((100svh - 200px) * var(--arena-aspect))), 1200px);
   }
 }
-@media (min-width: 1280px) {
+@media (width >= 1280px) {
   :root {
     --bio-side-w: 300px;
     /* 720 y no 680: 300 + 280 + 2 × 24 de separación + 2 × 32 de margen + scroll */
@@ -2036,7 +2036,7 @@ body[data-scene="final"] #toasts { top: 20px; }
    -------------------------------------------------------------------------- */
 
 /* Desde 1280 px: dock fijo a la derecha, alineado con la columna derecha de la grilla */
-@media (min-width: 1280px) {
+@media (width >= 1280px) {
   #dock {
     --dock-right: max(var(--bio-gutter), calc((100% - var(--arena-size) - 2 * var(--bio-col-gap) - var(--bio-side-w) - var(--bio-dock-w)) / 2));
     margin: 0;
@@ -2073,7 +2073,7 @@ body[data-scene="final"] #toasts { top: 20px; }
 
 /* Hasta 1279 px: el dock es un panel que abre #dockToggle (Popover API: clic afuera y Escape lo cierran).
    Respaldo sin soporte nativo: ESCENAS pone #dock[data-open="true"] y lo anima. */
-@media (max-width: 1279px) {
+@media (width < 1280px) {
   #dock { display: none; }
   #dock:is([data-open="true"], :popover-open) {
     position: fixed;
@@ -2118,7 +2118,7 @@ body[data-scene="final"] #toasts { top: 20px; }
 }
 
 /* 1024 a 1279 px: dos columnas en sala, marcador + arena en partida */
-@media (min-width: 1024px) and (max-width: 1279px) {
+@media (1024px <= width < 1280px) {
   .arena-layout {
     grid-template-columns: var(--bio-side-w) var(--arena-size);
     grid-template-areas: "side stage";
@@ -2128,7 +2128,7 @@ body[data-scene="final"] #toasts { top: 20px; }
 }
 
 /* Hasta 1023 px: una columna; HUD compacto */
-@media (max-width: 1023px) {
+@media (width < 1024px) {
   .hud-bar {
     padding: 0 12px;
     gap: 8px;
@@ -2179,7 +2179,7 @@ body[data-scene="final"] #toasts { top: 20px; }
 }
 
 /* 769 a 1023 px: sala con #gameInterface en dos columnas internas */
-@media (min-width: 769px) and (max-width: 1023px) {
+@media (768px < width < 1024px) {
   .room-panel {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -2188,7 +2188,7 @@ body[data-scene="final"] #toasts { top: 20px; }
 }
 
 /* Hasta 768 px: móvil */
-@media (max-width: 768px) {
+@media (width <= 768px) {
   :root { --bio-col-gap: 16px; }
   .profile-chip { padding-right: 10px; }
   .profile-chip-name { max-width: 11ch; }
@@ -2286,18 +2286,18 @@ body[data-scene="final"] #toasts { top: 20px; }
   .leaderboard-item { padding: 0 10px; font-size: var(--bio-fs-14); }
 }
 
-@media (max-width: 480px) {
+@media (width <= 480px) {
   .login-wordmark { font-size: var(--bio-fs-48); }
   .profile-chip-name { max-width: 8ch; }
   .footer-content { flex-direction: column; gap: 4px; }
 }
 
 /* backdrop-filter solo en modal y final, desde 769 px y con puntero fino (spec 7.1) */
-@media (min-width: 769px) and (pointer: fine) {
+@media (width > 768px) and (pointer: fine) {
   .modal, .final-screen { -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
 }
 /* sin desenfoque (móvil o táctil) el velo del final sube para que la clasificación se lea limpia */
-@media (max-width: 768px), (pointer: coarse) {
+@media (width <= 768px), (pointer: coarse) {
   .final-screen {
     background:
       radial-gradient(70% 50% at 50% 30%, color-mix(in srgb, var(--champion, var(--bio-turquoise)) 10%, transparent), transparent 70%),
@@ -2370,7 +2370,7 @@ body[data-scrolled] #topbar {
 /* Pie: desde 769 px va en el flujo (como en móvil) en las escenas donde se ve. Las escenas descuentan
    su altura, así queda al pie de la ventana si el contenido es corto y debajo del contenido si es largo:
    nunca encima de filas de jugadores o de la tarjeta de salas. */
-@media (min-width: 769px) {
+@media (width > 768px) {
   body:is([data-scene="login"], [data-scene="lobby"], [data-scene="room"]) #gameFooter { position: relative; }
   body:is([data-scene="login"], [data-scene="lobby"], [data-scene="room"]) #scenes,
   body:is([data-scene="login"], [data-scene="lobby"], [data-scene="room"]) #scene-login,
@@ -2395,13 +2395,13 @@ body[data-scrolled] #topbar {
 
 /* Hasta 1023 px la barra del HUD ocupa todo el ancho: los toasts de la partida van debajo de ella
    (antes tapaban el temporizador y el badge de espectador). */
-@media (max-width: 1023px) {
+@media (width < 1024px) {
   body[data-scene="game"] #toasts { top: calc(var(--bio-arena-top) + 8px); }
 }
 
 /* Teléfono en horizontal y ventanas bajas (769 a 1023 px de ancho, hasta 500 px de alto):
    la arena baja de su mínimo de 320 px para entrar entera en la ventana. */
-@media (min-width: 769px) and (max-width: 1023px) and (max-height: 500px) {
+@media (768px < width < 1024px) and (height <= 500px) {
   :root {
     --bio-topbar-h: 56px;
     --bio-arena-top: calc(var(--bio-topbar-h) + 12px);
@@ -2444,7 +2444,7 @@ html { scroll-padding-top: calc(var(--bio-topbar-h) + 12px); }
   padding-bottom: 20px;
 }
 /* Desde 1024 px: marcador a la izquierda y arena con todo el resto; el riel de la sala no se muestra */
-@media (min-width: 1024px) {
+@media (width >= 1024px) {
   #scene-arena[data-mode="game"] {
     --arena-board-row: 0px;
     --arena-size: clamp(320px, min(calc(100vw - var(--bio-side-w) - var(--bio-col-gap) - 2 * var(--bio-gutter) - 16px), calc((100svh - var(--arena-chrome-v)) * var(--arena-aspect))), 2400px);
@@ -2458,7 +2458,7 @@ html { scroll-padding-top: calc(var(--bio-topbar-h) + 12px); }
 /* Pantallas bajas en horizontal (celulares): arena al centro con todo el alto que entre, la barra
    del HUD apilada a la izquierda y el marcador a la derecha; los costados (al menos 96 px) quedan
    para los pulgares, y el joystick y el disparo pueden asomar sobre las esquinas de la arena */
-@media (orientation: landscape) and (max-height: 560px) {
+@media (orientation: landscape) and (height <= 560px) {
   #scene-arena[data-mode="game"] {
     --arena-size: clamp(240px, min(calc((100svh - 16px) * var(--arena-aspect)), calc(100vw - 2 * 96px - 24px - 16px)), 2400px);
     padding-top: 8px;
@@ -2590,7 +2590,7 @@ html:has(> body[data-scene="game"]) { overscroll-behavior: none; }
 /* con menos de 2 segmentos no se puede disparar */
 .touch-fire[data-ready="false"] { opacity: 0.4; }
 /* Pantallas muy bajas (celular chico en horizontal): joystick y disparo más compactos */
-@media (max-height: 400px) {
+@media (height <= 400px) {
   .touch-stick { width: 112px; height: 112px; margin: -56px 0 0 -56px; }
   .touch-stick-knob { width: 50px; height: 50px; margin: -25px 0 0 -25px; }
   .touch-fire { width: 80px; height: 80px; right: max(14px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); }
