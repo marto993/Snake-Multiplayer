@@ -149,3 +149,12 @@ test('activeEffects devuelve una copia', () => {
   copy.bigMouth = 1;
   assert.equal(s.effects.bigMouth, 6000);
 });
+
+test('pausa entre tiros: el siguiente sale recién a los cooldownMs', () => {
+  const s = make();
+  assert.equal(s.tryShot(1000, 200), true);
+  assert.equal(s.tryShot(1199, 200), false);
+  assert.equal(s.tryShot(1200, 200), true);
+  s.reset(60, 120, 1, 0, 3);
+  assert.equal(s.tryShot(0, 200), true);
+});

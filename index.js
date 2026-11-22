@@ -651,6 +651,11 @@ function createProjectile(room, player) {
   if (frontProjectile) {
     return false; // No puede lanzar si hay un proyectil suyo directamente enfrente
   }
+
+  // Pausa entre tiros: va al final, así un pedido rechazado por otra razón no la consume
+  if (!player.tryShot(Date.now(), room.config.shotCooldownMs || 0)) {
+    return false;
+  }
   
   const projectile = {
     id: Math.random().toString(36).substring(2, 9),

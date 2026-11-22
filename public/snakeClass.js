@@ -24,6 +24,7 @@ class Snake {
       // Efectos de los consumibles: un vencimiento por tipo (hora del servidor en ms), por ejemplo
       // { immunity: 1732300000000, fan: 1732300002500 }. Cada uno vence por su cuenta.
       this.effects = {};
+      this.lastShotAt = -Infinity; // hora del servidor del último disparo, para la pausa entre tiros
       
       // Calcular interpolationSpeed basado en gameSpeed
       this.interpolationSpeed = this.calculateInterpolationSpeed(gameSpeed);
@@ -248,6 +249,13 @@ class Snake {
         return true;
     }
     
+    // Pausa entre tiros: si pasaron cooldownMs desde el último, anota este y devuelve true
+    tryShot(now, cooldownMs) {
+      if (now - this.lastShotAt < cooldownMs) return false;
+      this.lastShotAt = now;
+      return true;
+    }
+
     canAttack() {
       return this.segments.length >= 2 && !this.gameover;
     }
@@ -317,6 +325,7 @@ class Snake {
       this.eatFood = false;
       
       this.effects = {};
+      this.lastShotAt = -Infinity;
     }
     
     // Método para obtener el puntaje actual (tamaño de la snake)
