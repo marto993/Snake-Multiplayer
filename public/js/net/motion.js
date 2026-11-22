@@ -45,16 +45,16 @@
 (function (global) {
   'use strict';
 
-  var MAX_FRAMES = 8;        // ~650 ms a 12 pasos por segundo
-  var MAX_AHEAD = 0.5;       // extrapolación máxima, en pasos
-  var OFFSET_RISE = 0.01;    // el reloj sube despacio (deriva, cambio de ruta)...
-  var OFFSET_FALL = 0.25;    // ...y baja rápido, pero sin saltar: un salto adelantaría el render de golpe
-  var JITTER_EASE = 0.1;
-  var TICK_EASE = 0.1;
-  var TIME_EASE = 0.1;       // cuánto se corre la hora suavizada de un frame hacia la real
-  var STALE_MS = 300;        // eventos más viejos que esto se descartan (pestaña en segundo plano)
-  var SNAP_STEPS = 1.5;      // un salto de más de 1,5 celdas no se interpola (reaparición)
-  var SLEW = 0.05;           // el atraso del render se corrige a lo sumo 5 % del tiempo real
+  const MAX_FRAMES = 8;        // ~650 ms a 12 pasos por segundo
+  const MAX_AHEAD = 0.5;       // extrapolación máxima, en pasos
+  const OFFSET_RISE = 0.01;    // el reloj sube despacio (deriva, cambio de ruta)...
+  const OFFSET_FALL = 0.25;    // ...y baja rápido, pero sin saltar: un salto adelantaría el render de golpe
+  const JITTER_EASE = 0.1;
+  const TICK_EASE = 0.1;
+  const TIME_EASE = 0.1;       // cuánto se corre la hora suavizada de un frame hacia la real
+  const STALE_MS = 300;        // eventos más viejos que esto se descartan (pestaña en segundo plano)
+  const SNAP_STEPS = 1.5;      // un salto de más de 1,5 celdas no se interpola (reaparición)
+  const SLEW = 0.05;           // el atraso del render se corrige a lo sumo 5 % del tiempo real
 
   // ---------------------------------------------------------------------------
   // Línea de tiempo
@@ -81,25 +81,25 @@
   };
 
   Timeline.prototype.push = function (frame, recvNow) {
-    var raw = frame.t;
-    var lag = recvNow - raw;
+    const raw = frame.t;
+    const lag = recvNow - raw;
     if (!this.hasOffset) {
       this.offset = lag;
       this.hasOffset = true;
     } else {
       this.offset += (lag - this.offset) * (lag < this.offset ? OFFSET_FALL : OFFSET_RISE);
     }
-    var late = lag - this.offset;
+    const late = lag - this.offset;
     this.jitter += ((late > 0 ? late : 0) - this.jitter) * JITTER_EASE;
 
-    var frames = this.frames;
-    var last = frames.length ? frames[frames.length - 1] : null;
+    const frames = this.frames;
+    const last = frames.length ? frames[frames.length - 1] : null;
     if (last) {
       if (raw <= last.raw) return false; // repetido o fuera de orden
-      var dt = raw - last.raw;
+      const dt = raw - last.raw;
       if (dt < this.tick * 3) {
         this.tick += (dt - this.tick) * TICK_EASE;
-        var expected = last.t + this.tick;
+        const expected = last.t + this.tick;
         frame.t = expected + (raw - expected) * TIME_EASE;
       }
       // Un hueco de más de 3 pasos (pestaña dormida, servidor trabado): queda la hora real
@@ -116,25 +116,25 @@
   };
 
   Timeline.prototype.delay = function () {
-    var margin = 4 + 2 * this.jitter;
+    let margin = 4 + 2 * this.jitter;
     if (margin > 60) margin = 60;
     return this.tick + margin;
   };
 
   Timeline.prototype.sample = function (now, out) {
-    var frames = this.frames, n = frames.length;
+    const frames = this.frames, n = frames.length;
     if (!n || !this.hasOffset) return null;
     // Cada frame que llega mueve offset y delay unos milisegundos. Aplicarlo de golpe da un
     // tirón; se reparte de a poco, sin que el render cambie de velocidad más de un 5 %.
-    var target = this.offset + this.delay();
+    const target = this.offset + this.delay();
     if (this.lag === null) this.lag = target;
     else {
-      var maxStep = (now - this.lastNow) * SLEW;
-      var d = target - this.lag;
+      const maxStep = (now - this.lastNow) * SLEW;
+      const d = target - this.lag;
       this.lag += d > maxStep ? maxStep : d < -maxStep ? -maxStep : d;
     }
     this.lastNow = now;
-    var rt = now - this.lag;
+    let rt = now - this.lag;
     if (rt < this.lastRt) rt = this.lastRt;
     this.lastRt = rt;
     out.rt = rt;
@@ -143,23 +143,23 @@
       out.a = frames[0]; out.b = null; out.f = 0; out.e = 0;
       return out;
     }
-    var i = n - 1;
+    let i = n - 1;
     while (i > 0 && frames[i].t > rt) i--;
-    var a = frames[i];
+    const a = frames[i];
     if (i === n - 1) {
-      var e = (rt - a.t) / this.tick;
+      const e = (rt - a.t) / this.tick;
       out.a = a; out.b = null; out.f = 0; out.e = e > MAX_AHEAD ? MAX_AHEAD : e;
     } else {
-      var b = frames[i + 1];
+      const b = frames[i + 1];
       out.a = a; out.b = b; out.f = (rt - a.t) / (b.t - a.t); out.e = 0;
     }
     return out;
   };
 
   Timeline.prototype.drain = function (fn) {
-    var rt = this.lastRt, frames = this.frames;
-    for (var i = 0; i < frames.length; i++) {
-      var fr = frames[i];
+    const rt = this.lastRt, frames = this.frames;
+    for (let i = 0; i < frames.length; i++) {
+      const fr = frames[i];
       if (fr.t > rt) break;
       if (fr.done) continue;
       fr.done = true;
@@ -170,9 +170,9 @@
   // Salta al último frame (fin de ronda): lo congelado coincide con el estado final y el
   // drain siguiente despacha todo lo pendiente.
   Timeline.prototype.sampleLatest = function (out) {
-    var n = this.frames.length;
+    const n = this.frames.length;
     if (!n) return null;
-    var a = this.frames[n - 1];
+    const a = this.frames[n - 1];
     if (a.t > this.lastRt) this.lastRt = a.t;
     out.a = a; out.b = null; out.f = 0; out.e = 0; out.rt = this.lastRt;
     return out;
@@ -194,7 +194,7 @@
   // Diferencia por el lado corto de la arena (los portales envuelven)
   function wrapDelta(d, period) {
     if (period > 0) {
-      var half = period / 2;
+      const half = period / 2;
       if (d > half) d -= period;
       else if (d < -half) d += period;
     }
@@ -204,7 +204,7 @@
   // El segmento pasa al borde opuesto cuando su centro cruza el borde
   function wrapPos(p, cell, period) {
     if (period > 0) {
-      var c = p + cell / 2;
+      const c = p + cell / 2;
       if (c < 0) p += period;
       else if (c >= period) p -= period;
     }
@@ -212,29 +212,29 @@
   }
 
   function setPoint(out, i, x, y) {
-    var o = out[i];
+    let o = out[i];
     if (!o) o = out[i] = { x: 0, y: 0 };
     o.x = x;
     o.y = y;
   }
 
   // Período de cada eje para la serpiente en curso (lo fija setPeriod al empezar cada llamada)
-  var PX = 0, PY = 0;
+  let PX = 0, PY = 0;
   function setPeriod(period) {
     if (period && typeof period === 'object') { PX = +period.x || 0; PY = +period.y || 0; }
     else { PX = +period || 0; PY = PX; }
   }
 
   function step(out, i, sx, sy, tx, ty, f, cell) {
-    var dx = wrapDelta(tx - sx, PX), dy = wrapDelta(ty - sy, PY);
-    var snap = cell * SNAP_STEPS;
+    const dx = wrapDelta(tx - sx, PX), dy = wrapDelta(ty - sy, PY);
+    const snap = cell * SNAP_STEPS;
     if (dx > snap || dx < -snap || dy > snap || dy < -snap) setPoint(out, i, tx, ty);
     else setPoint(out, i, wrapPos(sx + dx * f, cell, PX), wrapPos(sy + dy * f, cell, PY));
   }
 
   function copyInto(src, out) {
-    var n = src ? src.length : 0;
-    for (var i = 0; i < n; i++) setPoint(out, i, src[i].x, src[i].y);
+    const n = src ? src.length : 0;
+    for (let i = 0; i < n; i++) setPoint(out, i, src[i].x, src[i].y);
     out.length = n;
     return n;
   }
@@ -243,14 +243,14 @@
   // Si b se achicó (disparo o impacto), los segmentos que sobran siguen el cuerpo hasta el
   // instante de b, donde desaparecen junto con el efecto.
   function snakeAt(a, b, f, cell, period, out) {
-    var na = a ? a.length : 0, nb = b ? b.length : 0;
+    const na = a ? a.length : 0, nb = b ? b.length : 0;
     if (!na) return copyInto(b, out);
     if (!nb) return copyInto(a, out);
-    var n = na > nb ? na : nb;
+    const n = na > nb ? na : nb;
     setPeriod(period);
-    for (var i = 0; i < n; i++) {
-      var s = i < na ? a[i] : a[na - 1];
-      var t = i < nb ? b[i] : a[i - 1];
+    for (let i = 0; i < n; i++) {
+      const s = i < na ? a[i] : a[na - 1];
+      const t = i < nb ? b[i] : a[i - 1];
       step(out, i, s.x, s.y, t.x, t.y, f, cell);
     }
     out.length = n;
@@ -258,13 +258,13 @@
   }
 
   function snakeAhead(a, dir, e, cell, period, out) {
-    var n = a ? a.length : 0;
+    const n = a ? a.length : 0;
     if (!n) { out.length = 0; return 0; }
-    var dx = dir ? dir.x : 0, dy = dir ? dir.y : 0;
-    var head = a[0];
+    const dx = dir ? dir.x : 0, dy = dir ? dir.y : 0;
+    const head = a[0];
     setPeriod(period);
     step(out, 0, head.x, head.y, head.x + dx * cell, head.y + dy * cell, e, cell);
-    for (var i = 1; i < n; i++) step(out, i, a[i].x, a[i].y, a[i - 1].x, a[i - 1].y, e, cell);
+    for (let i = 1; i < n; i++) step(out, i, a[i].x, a[i].y, a[i - 1].x, a[i - 1].y, e, cell);
     out.length = n;
     return n;
   }
@@ -272,9 +272,9 @@
   // Proyectil nuevo: arranca donde se creó (una celda antes de su primera posición).
   // Proyectil que ya no está: sigue de largo hasta el instante del impacto o la salida.
   function projectileAt(pa, pb, f, cell, out) {
-    var p = pb || pa;
-    var d = p.direction || { x: 0, y: 0 };
-    var sx, sy, tx, ty;
+    const p = pb || pa;
+    const d = p.direction || { x: 0, y: 0 };
+    let sx, sy, tx, ty;
     if (pa && pb) { sx = pa.x; sy = pa.y; tx = pb.x; ty = pb.y; }
     else if (pb) { tx = pb.x; ty = pb.y; sx = tx - d.x * cell; sy = ty - d.y * cell; }
     else { sx = pa.x; sy = pa.y; tx = sx + d.x * cell; ty = sy + d.y * cell; }
