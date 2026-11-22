@@ -186,7 +186,7 @@ app.use(express.static('public'));
 let rooms = new Map();
 let connectedUsers = new Map(); // socketId -> { name, roomId, playerId }
 
-// MODIFICADO: serializePlayers para incluir consumibles activos
+// Cada jugador viaja con sus efectos vigentes ({ tipo: vencimiento en ms del servidor })
 function serializePlayers(players) {
   return players.map(player => ({
     id: player.id,
@@ -197,7 +197,7 @@ function serializePlayers(players) {
     score: player.score,
     gameover: player.gameover,
     scoreLeftToGrow: player.scoreLeftToGrow,
-    activeConsumable: player.getActiveConsumable()
+    effects: player.activeEffects(Date.now())
   }));
 }
 
@@ -615,11 +615,9 @@ function checkConsumableConsumption(room, player, from, step) {
   if (consumableIndex !== -1) {
     const consumable = room.consumables[consumableIndex];
     
-    // Obtener duración del consumible según configuración
+    // Activa el efecto (o reinicia su tiempo si ya lo tenía); la duración del nivel está en segundos
     const duration = room.config.consumables[consumable.type]?.duration || 5;
-    
-    // El jugador consume el consumible
-    player.consumeConsumable(consumable.type, duration);
+    player.addEffect(consumable.type, duration * 1000, Date.now());
     
     // Remover el consumible del mapa
     room.consumables.splice(consumableIndex, 1);
@@ -895,9 +893,6 @@ function gameLogicLoop(room) {
   
   room.players.forEach((player) => {
     if (!player.gameover) {
-      // Actualizar consumibles expirados
-      player.updateConsumables();
-      
       const prevHead = { ...player.segments[0] };
       player.moveLogic(); // gira hacia el rumbo pedido y avanza una celda
       const head = player.segments[0];
@@ -1274,11 +1269,7 @@ io.on('connection', (socket) => {
               score: Number(player.score) || 0,
               gameover: Boolean(player.gameover),
               scoreLeftToGrow: Number(player.scoreLeftToGrow) || 0,
-              activeConsumable: player.getActiveConsumable ? 
-                (player.getActiveConsumable() ? {
-                  type: String(player.getActiveConsumable().type),
-                  endTime: Number(player.getActiveConsumable().endTime)
-                } : null) : null
+              effects: player.activeEffects(Date.now())
             };
           } catch (err) {
             console.error('Error serializing player:', err);

@@ -581,7 +581,7 @@ document.addEventListener('DOMContentLoaded', function () {
       else if (pb) Motion.snakeAt(null, pb.segments, 0, cell, period, snake.renderSegments);
       else continue;
       snake.direction = (pb || pa).direction;
-      if (pa) snake.activeConsumable = pa.activeConsumable;
+      if (pa) snake.effects = pa.effects || {};
     }
 
     foods = a.foods;
@@ -985,7 +985,7 @@ document.addEventListener('DOMContentLoaded', function () {
     snake.score = serverSnake.score;
     snake.gameover = serverSnake.gameover;
     snake.scoreLeftToGrow = serverSnake.scoreLeftToGrow;
-    snake.activeConsumable = serverSnake.activeConsumable;
+    snake.effects = serverSnake.effects || {};
 
     return snake;
   }
@@ -1088,17 +1088,17 @@ document.addEventListener('DOMContentLoaded', function () {
   // HUD y tensión
   // ===========================================================================
   function hudPlayers() {
-    const now = Date.now();
     return snakes.map(function (s) {
-      const ac = s.activeConsumable;
-      const immune = !!(ac && ac.type === 'immunity' && (!ac.endTime || now < ac.endTime));
+      // El servidor solo manda los efectos vigentes: con el reloj del cliente desfasado, la hora no decide
+      const shieldEnd = s.effects ? s.effects.immunity : 0;
+      const immune = !!shieldEnd;
       return {
         id: s.id,
         name: s.name,
         color: s.color,
         score: s.score,
         immune: immune,
-        immuneUntil: immune && ac.endTime ? ac.endTime : 0,
+        immuneUntil: immune ? shieldEnd : 0,
         isMe: !isSpectating && s.id === socket.id,
         gameover: !!s.gameover
       };
@@ -1293,7 +1293,7 @@ document.addEventListener('DOMContentLoaded', function () {
         existingSnake.gameover = serverPlayer.gameover;
         existingSnake.scoreLeftToGrow = serverPlayer.scoreLeftToGrow;
         existingSnake.color = serverPlayer.color;
-        existingSnake.activeConsumable = serverPlayer.activeConsumable;
+        existingSnake.effects = serverPlayer.effects || {};
         return existingSnake;
       }
       return createLocalSnake(serverPlayer);
@@ -1490,7 +1490,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!timeline) {
           localSnake.renderSegments = copySegments(serverSnake.segments);
           localSnake.direction = { x: serverSnake.direction.x, y: serverSnake.direction.y };
-          localSnake.activeConsumable = serverSnake.activeConsumable;
+          localSnake.effects = serverSnake.effects || {};
         }
         localSnake.score = serverSnake.score;
         localSnake.gameover = serverSnake.gameover;
@@ -1785,7 +1785,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const nextIds = new Set();
     const frag = document.createDocumentFragment();
-    const now = Date.now();
     sortedPlayers.forEach(function (player, index) {
       nextIds.add(player.id);
       const isMe = !isSpectating && player.id === socket.id;
@@ -1809,8 +1808,7 @@ document.addEventListener('DOMContentLoaded', function () {
       listItem.appendChild(score);
 
       const status = el('span', 'player-status');
-      const ac = player.activeConsumable;
-      if (!player.gameover && ac && ac.type === 'immunity' && now < ac.endTime) {
+      if (!player.gameover && player.effects && player.effects.immunity) {
         status.setAttribute('role', 'img');
         status.setAttribute('aria-label', 'Con escudo');
         status.appendChild(iconEl('i-medusa'));

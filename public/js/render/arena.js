@@ -2388,11 +2388,11 @@
       rec.name = sn.name;
       rec.isMe = me !== null && me !== undefined && sn.id === me;
       if (rec.colorKey !== sn.color || !rec.paint) { rec.paint = paintFor(sn.color); rec.colorKey = sn.color; }
-      const ac = sn.activeConsumable;
-      const imm = !!(ac && ac.type === 'immunity');
+      const shieldEnd = sn.effects ? sn.effects.immunity : 0;
+      const imm = !!shieldEnd;
       if (imm && !rec.immune && now - rec.inflateT0 > 1000) rec.inflateT0 = now; // por si el evento no llegó
       rec.immune = imm;
-      rec.immuneEnd = imm ? (ac.endTime || 0) : 0;
+      rec.immuneEnd = imm ? shieldEnd : 0;
       if (sn.gameover) { rec.n = 0; continue; }
       const segs = sn.getRenderSegments ? sn.getRenderSegments() : sn.segments;
       const n = segs ? segs.length : 0;
