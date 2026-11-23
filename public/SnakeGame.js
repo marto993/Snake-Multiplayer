@@ -539,13 +539,19 @@ document.addEventListener('DOMContentLoaded', function () {
     if (timeline) timeline.clear();
   }
 
+  // Aviso al tomar cada consumible (solo a quien lo toma)
+  const PICKUP_TOASTS = {
+    immunity: 'Escudo activo: bloquea un disparo',
+    bigMouth: 'Boca grande: comés desde más lejos',
+    fan: 'Abanico: disparás de a tres'
+  };
+
   function dispatchTimelineFrame(frame) {
     const data = frame.payload;
     dispatchFrameEvents(data);
     callEach(data.consumableEvents, function (event) {
-      if (event.consumableType === 'immunity' && event.playerId === socket.id && !isSpectating) {
-        toast('Escudo activo: bloquea un disparo', 'success', 2500);
-      }
+      const message = PICKUP_TOASTS[event.consumableType];
+      if (message && event.playerId === socket.id && !isSpectating) toast(message, 'success', 2500);
     });
   }
 
@@ -1014,7 +1020,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function applyArenaConfig() {
     if (!Arena) return;
-    ui(function () { Arena.setConfig({ segmentSize: segmentSize, width: arenaW(), height: arenaH() }); });
+    const reach = (roomConfig && +roomConfig.bigMouthReach) || 0;
+    ui(function () { Arena.setConfig({ segmentSize: segmentSize, width: arenaW(), height: arenaH(), bigMouthReach: reach }); });
   }
 
   // Objetos reutilizados por frame (sin allocations en el bucle)

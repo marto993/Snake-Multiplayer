@@ -941,8 +941,9 @@ function gameLogicLoop(room) {
       }
       
       // Comida: todo lo que toca el tramo que recorrió la cabeza (puede ser más de una, por
-      // ejemplo al pasar por una fila de restos)
-      const eaten = touchedAlong(prevHead, step, room.foods, segmentSize * EAT_REACH, canvasWidth, canvasHeight)
+      // ejemplo al pasar por una fila de restos). Con la boca grande, desde bigMouthReach celdas.
+      const eatReach = player.hasEffect('bigMouth', tickNow) ? room.config.bigMouthReach : EAT_REACH;
+      const eaten = touchedAlong(prevHead, step, room.foods, segmentSize * eatReach, canvasWidth, canvasHeight)
         .map(index => room.foods[index]);
       for (const eatenFood of eaten) {
         player.EatFood(eatenFood.score);
@@ -1317,6 +1318,7 @@ io.on('connection', (socket) => {
             roundTime: Number(room.config.roundTime) || 60,
             difficulty: String(room.config.difficulty || 'medium'),
             projectileCells: Number(room.config.projectileCells) || 1,
+            bigMouthReach: Number(room.config.bigMouthReach) || 0,
             consumables: serializedConsumables
           },
           gameState: {
