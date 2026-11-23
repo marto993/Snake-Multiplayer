@@ -1106,6 +1106,7 @@ document.addEventListener('DOMContentLoaded', function () {
         score: s.score,
         immune: immune,
         immuneUntil: immune ? shieldEnd : 0,
+        effects: s.effects || null,
         isMe: !isSpectating && s.id === socket.id,
         gameover: !!s.gameover
       };

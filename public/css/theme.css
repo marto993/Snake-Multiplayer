@@ -1510,16 +1510,18 @@ kbd {
 }
 
 .hud-status { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; justify-self: end; }
+/* Un indicador por efecto activo (escudo, boca grande, abanico): --fx es su color */
 .hud-shield {
+  --fx: var(--bio-shield);
   display: inline-flex;
   align-items: center;
   gap: 8px;
   height: 32px;
   padding: 0 12px 0 10px;
   border-radius: var(--bio-radius-pill);
-  border: 1px solid rgba(159, 244, 255, 0.4);
-  background: rgba(159, 244, 255, 0.07);
-  color: var(--bio-shield);
+  border: 1px solid color-mix(in srgb, var(--fx) 40%, transparent);
+  background: color-mix(in srgb, var(--fx) 7%, transparent);
+  color: var(--fx);
   font-size: var(--bio-fs-14);
   font-weight: 600;
   white-space: nowrap;
@@ -1527,21 +1529,30 @@ kbd {
 .hud-shield svg { width: 18px; height: 18px; animation: bio-shield-pulse 312ms var(--bio-ease-in-out) infinite alternate; }
 @keyframes bio-shield-pulse { from { transform: scale(0.94); } to { transform: scale(1.08); } }
 .hud-shield-time { font-weight: 700; font-variation-settings: var(--bio-mono); color: var(--bio-pearl); }
+.hud-shield[data-effect="bigMouth"] { --fx: #FF8FD0; }
+.hud-shield[data-effect="fan"] { --fx: #FF7A59; }
 .hud-shield-bar {
   position: relative;
   width: 40px; height: 3px;
   border-radius: 2px;
-  background: rgba(159, 244, 255, 0.18);
+  background: color-mix(in srgb, var(--fx) 18%, transparent);
   overflow: hidden;
 }
 .hud-shield-bar::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: var(--bio-shield);
+  background: var(--fx);
   transform-origin: left center;
   transform: scaleX(var(--p, 1));
   transition: transform 120ms linear;
+}
+/* Con dos o más efectos a la vez, cada indicador queda en icono y tiempo, así entran los tres en
+   la columna del estado; la etiqueta sigue para el lector de pantalla */
+.hud-status:has(.hud-shield:not(.hidden) ~ .hud-shield:not(.hidden)) .hud-shield { gap: 6px; padding: 0 10px 0 8px; }
+.hud-status:has(.hud-shield:not(.hidden) ~ .hud-shield:not(.hidden)) .hud-shield-bar { display: none; }
+.hud-status:has(.hud-shield:not(.hidden) ~ .hud-shield:not(.hidden)) .hud-shield-label {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
 }
 .hud-spectator {
   display: inline-flex;
@@ -2507,6 +2518,7 @@ html { scroll-padding-top: calc(var(--bio-topbar-h) + 12px); }
   #scene-arena[data-mode="game"] .hud-row.is-me { top: 0; bottom: 0; }
   /* en estas columnas angostas no entran la palabra "Escudo" ni el nombre de quien tiene escudo:
      quedan para el lector de pantalla y se ven el ícono y el tiempo, o el punto de color y el largo */
+  #scene-arena[data-mode="game"] .hud-status { flex-direction: column; justify-self: center; gap: 6px; }
   #scene-arena[data-mode="game"] .hud-shield { flex-direction: column; height: auto; max-width: 100%; padding: 4px 6px; gap: 2px; border-radius: 14px; }
   #scene-arena[data-mode="game"] :is(.hud-shield-label, .hud-row.is-immune .hud-name) {
     position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
