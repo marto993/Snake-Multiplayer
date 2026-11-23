@@ -5,7 +5,7 @@ const Snake = require('./public/snakeClass.js');
 const { buildRoomConfig, consumableLimit } = require('./game/difficulty');
 const { traceProjectile, fanDirections } = require('./game/projectiles');
 const { touchedAlong, wrapPoint, cellIndex } = require('./game/geometry');
-const { cutSnake, dropRemains } = require('./game/remains');
+const { cutSnake, cutAnchored, dropRemains } = require('./game/remains');
 const { matchResult } = require('./game/match');
 const { createAssets } = require('./lib/assets');
 const { secureIndex, reportHandler, REPORT_PATH, REPORT_TYPES } = require('./lib/security');
@@ -197,7 +197,9 @@ function serializePlayers(players) {
     score: player.score,
     gameover: player.gameover,
     scoreLeftToGrow: player.scoreLeftToGrow,
-    effects: player.activeEffects(Date.now())
+    effects: player.activeEffects(Date.now()),
+    anchoredUntil: player.anchoredUntil,
+    anchorReadyAt: player.anchorReadyAt
   }));
 }
 
@@ -624,11 +626,12 @@ function checkConsumableConsumption(room, player, from, step) {
 
 function createProjectile(room, player) {
   // Cambio 1: Reducir mínimo requerido de 3 a 2 segmentos
-  if (!room.config.attacksEnabled || player.segments.length < 2) {
+  const now = Date.now();
+  // Anclada no dispara
+  if (!room.config.attacksEnabled || player.segments.length < 2 || player.isAnchored(now)) {
     return false;
   }
   
-  const now = Date.now();
   const head = player.segments[0];
   const { segmentSize } = room.config;
   
@@ -730,24 +733,27 @@ function moveProjectiles(room, frameEvents = { hitEvents: [], blockEvents: [], e
       return false;
     }
 
-    // Impacto: en la cabeza quita hasta 3 segmentos; en el cuerpo, corta desde ahí.
-    // Lo que pierde queda en el mapa como restos (comida que vence a los 10 s).
+    // Impacto: en la cabeza quita hasta 3 segmentos; en el cuerpo, corta desde ahí. Anclada, pierde
+    // solo el último. Lo que pierde queda en el mapa como restos (comida que vence a los 10 s).
+    const anchored = player.isAnchored(Date.now());
     const lengthBefore = player.segments.length;
-    const { kept, lost } = cutSnake(player.segments, result.segmentIndex);
+    const { kept, lost } = anchored ? cutAnchored(player.segments) : cutSnake(player.segments, result.segmentIndex);
     player.segments = kept;
     player.updateTargets();
     room.foods.push(...dropRemains(lost, Date.now(), occupied));
-    frameEvents.hitEvents.push({
+    const hit = {
       targetId: player.id,
       attackerId: projectile.playerId,
       projectileId: projectile.id,
       x: result.x,
       y: result.y,
       segmentsLost: lengthBefore - player.segments.length,
-      headshot: result.segmentIndex === 0,
+      headshot: !anchored && result.segmentIndex === 0,
       color: player.color,
       attackerColor: projectile.color
-    });
+    };
+    if (anchored) hit.anchored = true;
+    frameEvents.hitEvents.push(hit);
     return false;
   });
 }
@@ -901,6 +907,12 @@ function gameLogicLoop(room) {
   
   room.players.forEach((player) => {
     if (!player.gameover) {
+      // Anclada: no gira, no avanza, no come ni toma consumibles (el rumbo pedido queda guardado)
+      if (player.isAnchored(tickNow)) {
+        player.score = player.segments.length;
+        return;
+      }
+
       const prevHead = { ...player.segments[0] };
       player.moveLogic(); // gira hacia el rumbo pedido y avanza una celda
       const head = player.segments[0];
@@ -1278,7 +1290,9 @@ io.on('connection', (socket) => {
               score: Number(player.score) || 0,
               gameover: Boolean(player.gameover),
               scoreLeftToGrow: Number(player.scoreLeftToGrow) || 0,
-              effects: player.activeEffects(Date.now())
+              effects: player.activeEffects(Date.now()),
+              anchoredUntil: Number(player.anchoredUntil) || 0,
+              anchorReadyAt: Number(player.anchorReadyAt) || 0
             };
           } catch (err) {
             console.error('Error serializing player:', err);
@@ -1328,6 +1342,7 @@ io.on('connection', (socket) => {
             difficulty: String(room.config.difficulty || 'medium'),
             projectileCells: Number(room.config.projectileCells) || 1,
             bigMouthReach: Number(room.config.bigMouthReach) || 0,
+            anchor: room.config.anchor ? { lastsMs: Number(room.config.anchor.lastsMs), rechargeMs: Number(room.config.anchor.rechargeMs) } : null,
             consumables: serializedConsumables
           },
           gameState: {
@@ -1402,6 +1417,18 @@ io.on('connection', (socket) => {
     if (newDirection) {
       playerToMove.changeDirection(newDirection);
     }
+  });
+
+  // Ancla: la serpiente se detiene y se defiende (ver docs/GAMEPLAY_SPEC.md). El mismo evento la
+  // suelta antes de tiempo; durante la recarga no hace nada.
+  socket.on('anchor', () => {
+    if (!currentRoom) return;
+    const room = getRoom(currentRoom);
+    if (!room || !room.gameState.playing || !room.config.anchor) return;
+    if (room.spectators && room.spectators.has(socket.id)) return;
+    const player = room.players.find(p => p.id === socket.id);
+    if (!player || player.gameover) return;
+    player.toggleAnchor(Date.now(), room.config.anchor);
   });
 
   // Giro libre: el cliente pide un rumbo en radianes (mouse o combinaciones de flechas).
