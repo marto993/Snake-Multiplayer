@@ -22,7 +22,6 @@ test('valores por nivel', () => {
   }
   assert.deepEqual(levels.map(c => c.bigMouthReach), [2.55, 2.55, 2.55]);
   assert.deepEqual(levels.map(c => c.fanDegrees), [12, 12, 12]);
-  assert.deepEqual(levels.map(c => c.anchor), Array(3).fill({ lastsMs: 1500, rechargeMs: 4000 }));
   assert.deepEqual(levels.map(c => c.frenzy), Array(3).fill({ lastSeconds: 20, foodBoost: 0.5 }));
   assert.deepEqual(levels.map(c => c.consumables.immunity), [
     { enabled: true, spawnInterval: 6, duration: 5 },

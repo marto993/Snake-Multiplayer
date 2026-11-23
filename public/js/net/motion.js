@@ -36,7 +36,6 @@
  *     .stats()               { offset, jitter, tick, delay, frames }   (diagnóstico)
  *   Motion.snakeAt(a, b, f, cell, period, out) -> n        segmentos interpolados en out
  *   Motion.snakeAhead(a, dir, e, cell, period, out) -> n   segmentos extrapolados en out
- *   Motion.leadFor(snake, e, serverT) -> e                  cuánto extrapolar esa serpiente (0 si está anclada)
  *   Motion.projectileAt(pa, pb, f, cell, out)              out.x, out.y
  *
  * `out` es un array de { x, y } que se reutiliza entre cuadros. `period` es el tamaño de la
@@ -270,12 +269,6 @@
     return n;
   }
 
-  // La extrapolación supone que la serpiente avanza en cada paso. Anclada (quieta en el servidor hasta
-  // anchoredUntil), no: si un frame llega tarde se adelantaría media celda y volvería atrás.
-  function leadFor(snake, e, serverT) {
-    return snake && snake.anchoredUntil > serverT ? 0 : e;
-  }
-
   // Proyectil nuevo: arranca donde se creó (una celda antes de su primera posición).
   // Proyectil que ya no está: sigue de largo hasta el instante del impacto o la salida.
   function projectileAt(pa, pb, f, cell, out) {
@@ -294,7 +287,6 @@
     createTimeline: function (opts) { return new Timeline(opts); },
     snakeAt: snakeAt,
     snakeAhead: snakeAhead,
-    leadFor: leadFor,
     projectileAt: projectileAt
   };
 })(typeof window !== 'undefined' ? window : this);

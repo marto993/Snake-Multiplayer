@@ -1526,7 +1526,7 @@
     const sp = ss < 12 ? 2 : 1;
     const period = pattern === 0 ? 3 * sp : (pattern === 3 ? 5 * sp : 2 * sp);
     const phase0 = pattern === 3 ? 2 : 1;
-    const av = rec.alphaVis * (rec.anchored ? 0.35 : 1);   // anclada, los fotóforos bajan
+    const av = rec.alphaVis;
     for (let i = phase0; i < n; i += period) {
       const t = i * inv;
       const rr = radAt(t, ss);
@@ -2521,10 +2521,6 @@
       rec.immune = imm;
       rec.immuneEnd = imm ? shieldEnd : 0;
       rec.bigMouth = !!(sn.effects && sn.effects.bigMouth);
-      // Ancla: con la hora del servidor del instante dibujado (state.serverT)
-      const anchoredUntil = +sn.anchoredUntil || 0;
-      rec.anchored = !!state.serverT && anchoredUntil > state.serverT;
-      rec.anchorLeft = rec.anchored ? clamp01((anchoredUntil - state.serverT) / anchorLastsMs) : 0;
       if (sn.gameover) { rec.n = 0; continue; }
       const segs = sn.getRenderSegments ? sn.getRenderSegments() : sn.segments;
       const n = segs ? segs.length : 0;
@@ -2539,7 +2535,7 @@
       computeRuns(rec);
       const d = sn.direction;
       computeDir(rec, d ? d.x : 0, d ? d.y : 0, s);
-      computeShape(rec, s, wave && !rec.anchored);   // anclada no ondula
+      computeShape(rec, s, wave);
       // fin de ronda: los que no ganaron se atenúan y pierden el filamento
       if (fr && freezeWinner !== undefined && freezeWinner !== null) {
         const et = easeInOutSine(clamp01((now - freezeT0) / 600));
@@ -2567,9 +2563,8 @@
     for (i = 0; i < visCount; i++) { rec = visRecs[i]; if (rec.immune) passImmunityMembrane(rec, ssOf(rec), now); }
     // alcance de la boca grande
     for (i = 0; i < visCount; i++) { rec = visRecs[i]; if (rec.bigMouth && rec.n > 0) passBigMouthReach(rec, ssOf(rec)); }
-    // 2. cuerpos (la coraza del ancla va debajo: asoma como contorno)
+    // 2. cuerpos
     c.globalCompositeOperation = 'source-over';
-    for (i = 0; i < visCount; i++) { rec = visRecs[i]; if (rec.anchored && rec.n > 0) passAnchorShell(rec, ssOf(rec)); }
     c.globalAlpha = 1;
     for (i = 0; i < visCount; i++) { rec = visRecs[i]; passBody(rec, ssOf(rec)); }
     // 3. filamentos
@@ -2579,54 +2574,8 @@
     for (i = 0; i < visCount; i++) { rec = visRecs[i]; passPhotophores(rec, ssOf(rec), now); }
     // 5. cabezas
     for (i = 0; i < visCount; i++) { rec = visRecs[i]; passHead(rec, ssOf(rec), now); }
-    // 6. ancla: placas sobre el cuerpo y el aro que se vacía sobre la cabeza
-    for (i = 0; i < visCount; i++) { rec = visRecs[i]; if (rec.anchored && rec.n > 0) passAnchorPlates(rec, ssOf(rec)); }
     c.globalAlpha = 1;
     c.globalCompositeOperation = 'source-over';
-  }
-
-  // Ancla (5.7): la criatura se cierra. Coraza perla debajo del cuerpo (asoma como contorno), placas
-  // a lo largo del cuerpo y un aro sobre la cabeza que se vacía en lo que dura.
-  let anchorLastsMs = 1500;
-  function passAnchorShell(rec, ss) {
-    const c = ctx;
-    c.strokeStyle = '#E8FBFF';
-    c.globalAlpha = 0.85 * rec.alphaVis;
-    c.lineWidth = 2 * radAt(0, ss) + 2.4;
-    c.lineCap = 'round';
-    for (let r = 0; r < rec.runCount; r++) {
-      const a = rec.runs[r * 2], b = rec.runs[r * 2 + 1];
-      c.beginPath();
-      pathRange(c, rec.x, rec.y, a, b, 0, b - a);
-      c.stroke();
-      strokeCutEnds(rec, r, a, b);
-    }
-  }
-  function passAnchorPlates(rec, ss) {
-    const c = ctx, n = rec.n, X = rec.x, Y = rec.y, NX = rec.nx, NY = rec.ny;
-    const inv = 1 / Math.max(n - 1, 1);
-    c.globalCompositeOperation = 'source-over';
-    c.strokeStyle = '#E8FBFF';
-    c.globalAlpha = 0.5 * rec.alphaVis;
-    c.lineWidth = 1;
-    c.beginPath();
-    for (let i = 1; i < n; i += 2) {
-      const rr = radAt(i * inv, ss) * 0.8;
-      c.moveTo(X[i] - NX[i] * rr, Y[i] - NY[i] * rr);
-      c.lineTo(X[i] + NX[i] * rr, Y[i] + NY[i] * rr);
-    }
-    c.stroke();
-    const hx = X[0], hy = Y[0], ar = 1.15 * ss;
-    c.globalCompositeOperation = 'lighter';
-    c.lineWidth = 2;
-    c.globalAlpha = 0.2 * rec.alphaVis;
-    c.beginPath();
-    c.arc(hx, hy, ar, 0, TAU);
-    c.stroke();
-    c.globalAlpha = 0.9 * rec.alphaVis;
-    c.beginPath();
-    c.arc(hx, hy, ar, -Math.PI / 2, -Math.PI / 2 + TAU * rec.anchorLeft);
-    c.stroke();
   }
 
   // Boca grande: un anillo punteado y tenue, del color de la anémona, marca hasta dónde come
@@ -2958,8 +2907,6 @@
       rec.name = cr.name;
       rec.isMe = cr.isMe;
       rec.immune = false;
-      rec.bigMouth = false;
-      rec.anchored = false;
       rec.alphaVis = cr.anon ? 0.5 : 1;
       rec.filament = 1;
       rec.labelScale = 1;
@@ -3124,7 +3071,6 @@
     const cx = cellCenterX(e.x), cy = cellCenterY(e.y);
     const vp = paintFor(e.color || snakeColorById(e.targetId) || '#00ff41');
     const ap = paintFor(e.attackerColor || snakeColorById(e.attackerId) || '#4FD8FF');
-    if (e.anchored) { onAnchoredHit(e, cx, cy, ap); return; }
     // segmentsLost llega en 0 cuando el disparo da en la cabeza de una serpiente de 1 segmento
     // (index.js, moveProjectiles): hay impacto pero no daño, así que no se muestra "−1"
     const lost = e.segmentsLost === undefined ? 1 : Math.max(0, e.segmentsLost | 0);
@@ -3164,20 +3110,6 @@
     } else if (isMe(e.attackerId)) {
       if (head) shake(4, 160); else shake(2.5, 120);
     }
-  }
-
-  // Impacto contra una serpiente anclada: rebota en la coraza. Chispas perla rápidas y cortas, un
-  // anillo seco y "−1" (pierde un segmento, sin cola desprendida ni tinta).
-  function onAnchoredHit(e, cx, cy, ap) {
-    const lost = Math.max(0, e.segmentsLost | 0);
-    setBurst(scaleCount(14), '#E8FBFF', 120, 260, 200, 380, 1, 2, 'spark', 0, 0.86);
-    burstNow(cx, cy);
-    setBurst(scaleCount(6), ap.body, 80, 180, 200, 350, 1, 2, 'spark', 0, 0.86);
-    burstNow(cx, cy);
-    fxRing(cx, cy, 0.3 * s, 1.4 * s, 200, '#E8FBFF', 0.9, 2, 0);
-    fxText(cx, cy - 0.7 * s, lost ? '−' + lost : 'Sin daño', '#E8FBFF', labelPx() * 1.1, 18, 800);
-    if (isMe(e.targetId)) shake(3, 120);
-    else if (isMe(e.attackerId)) shake(1.5, 80);
   }
 
   function onBlock(e) {
@@ -3406,7 +3338,6 @@
       if (canvas) applySize(true);
     }
     if (+cfg.bigMouthReach > 0) bigMouthReach = +cfg.bigMouthReach;
-    if (+cfg.anchorLastsMs > 0) anchorLastsMs = +cfg.anchorLastsMs;
     const ns = +cfg.segmentSize || s;
     if (ns !== s) {
       s = ns;

@@ -25,9 +25,6 @@ class Snake {
       // { immunity: 1732300000000, fan: 1732300002500 }. Cada uno vence por su cuenta.
       this.effects = {};
       this.lastShotAt = -Infinity; // hora del servidor del último disparo, para la pausa entre tiros
-      // Ancla (horas del servidor en ms): anclada hasta anchoredUntil; se puede volver a anclar desde anchorReadyAt
-      this.anchoredUntil = 0;
-      this.anchorReadyAt = 0;
       
       // Calcular interpolationSpeed basado en gameSpeed
       this.interpolationSpeed = this.calculateInterpolationSpeed(gameSpeed);
@@ -259,24 +256,6 @@ class Snake {
       return true;
     }
 
-    // Ancla: si está anclada, la suelta y la recarga cuenta desde ahora; si está lista, la ancla por
-    // lastsMs y la recarga cuenta desde que termina. Durante la recarga no hace nada (null).
-    toggleAnchor(now, { lastsMs, rechargeMs }) {
-      if (this.isAnchored(now)) {
-        this.anchoredUntil = 0;
-        this.anchorReadyAt = now + rechargeMs;
-        return 'released';
-      }
-      if (now < this.anchorReadyAt) return null;
-      this.anchoredUntil = now + lastsMs;
-      this.anchorReadyAt = this.anchoredUntil + rechargeMs;
-      return 'anchored';
-    }
-
-    isAnchored(now) {
-      return now < this.anchoredUntil;
-    }
-
     canAttack() {
       return this.segments.length >= 2 && !this.gameover;
     }
@@ -347,8 +326,6 @@ class Snake {
       
       this.effects = {};
       this.lastShotAt = -Infinity;
-      this.anchoredUntil = 0;
-      this.anchorReadyAt = 0;
     }
     
     // Método para obtener el puntaje actual (tamaño de la snake)

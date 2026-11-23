@@ -223,7 +223,7 @@
   // =========================================================================================
   // Iconos (SVG en línea, retícula de 20 px, trazo 1,75, extremos redondeados, currentColor)
   // =========================================================================================
-  const SPRITE_ID = { jelly: 'i-medusa', eye: 'i-eye', anemone: 'i-anemona', star: 'i-estrella', anchor: 'i-ancla' };
+  const SPRITE_ID = { jelly: 'i-medusa', eye: 'i-eye', anemone: 'i-anemona', star: 'i-estrella' };
   function icon(kind, cls, size) {
     const sid = SPRITE_ID[kind];
     if (sid && doc.getElementById(sid)) {
@@ -594,11 +594,9 @@
     let built = false, shown = false, want = false;
     let root, bar, side, board, caption;
     let timerWrap, ringProg, ringCilia, timerVal, statusWrap,
-        specEl, selfEl, selfDot, selfScore, anchorEl;
+        specEl, selfEl, selfDot, selfScore;
     let hideTimer = 0;
-    const L = { time: -1, rt: -1, phase: '', playing: null, spec: null, self: '', selfC: '', final3: false, anchor: '', anchorP: '' };
-    // Ancla para teclado y mouse (en táctil la muestra su botón)
-    const ANCHOR_LABEL = { ready: 'Ancla lista: tecla E o clic derecho', anchored: 'Anclada', recharging: 'Ancla recargando' };
+    const L = { time: -1, rt: -1, phase: '', playing: null, spec: null, self: '', selfC: '', final3: false };
     // Efectos propios: un indicador por tipo, en orden fijo, cada uno con su tiempo restante
     const EFFECT_CHIPS = [
       { type: 'immunity', label: 'Escudo ', icon: 'jelly' },
@@ -677,12 +675,6 @@
       selfScore = mk('b', 'hud-mine-score', '');
       selfEl.appendChild(selfDot); selfEl.appendChild(selfScore);
       chips.forEach(function (ch) { statusWrap.appendChild(ch.el); });
-      anchorEl = mk('span', 'hud-anchor hidden');
-      anchorEl.setAttribute('role', 'img');
-      anchorEl.title = 'Ancla: tecla E o clic derecho';
-      anchorEl.appendChild(icon('anchor', 'hud-anchor-icon', 18));
-      anchorEl.appendChild(mk('kbd', 'hud-anchor-key', 'E'));
-      statusWrap.appendChild(anchorEl);
       statusWrap.appendChild(specEl); statusWrap.appendChild(selfEl);
 
       bar.appendChild(rw); bar.appendChild(timerWrap); bar.appendChild(statusWrap);
@@ -751,17 +743,6 @@
           // renovado: el tiempo vuelve a empezar
           ch.until = until; ch.total = Math.max(ch.total, until - Date.now()); ch.txt = '';
         }
-      }
-      const an = (!spectating && playing && !d.touch && d.anchor) || null;
-      const anState = an ? an.state : '';
-      if (anState !== L.anchor) {
-        anchorEl.classList.toggle('hidden', !an);
-        if (an) { anchorEl.setAttribute('data-state', anState); anchorEl.setAttribute('aria-label', ANCHOR_LABEL[anState] || 'Ancla'); }
-        L.anchor = anState;
-      }
-      if (an) {
-        const ap = (+an.progress || 0).toFixed(2);
-        if (ap !== L.anchorP) { anchorEl.style.setProperty('--p', ap); L.anchorP = ap; }
       }
       if (spectating !== L.spec) { specEl.classList.toggle('hidden', !spectating); L.spec = spectating; }
       const selfTxt = (me && !spectating) ? String(me.score | 0) : '';
@@ -1019,8 +1000,6 @@
       if (gapLi && gapLi.parentNode) gapLi.parentNode.removeChild(gapLi);
       L.time = -1; L.phase = ''; L.playing = null;
       chips.forEach(function (ch) { if (ch.active) setChip(ch, false, 0); });
-      if (anchorEl) anchorEl.classList.add('hidden');
-      L.anchor = ''; L.anchorP = '';
     }
 
     return {
