@@ -139,6 +139,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // Estado propio de la presentación
   let roundLive = false;        // partida en curso: entre gameStart (o spectatingStarted) y gameEnd
   let freezeUntil = 0;          // performance.now() hasta el que la arena muestra el último estado congelado
+  let renderServerT = 0;        // hora del servidor del instante dibujado (la recarga del ancla se mide con esta)
   let countdownActive = false;  // cuenta regresiva 3, 2, 1 en pantalla
   let startRequested = false;   // el anfitrión pidió iniciar y el servidor todavía no arrancó
   let matchFinished = false;    // llegó gameEnd: la escena final está por entrar o a la vista
@@ -587,9 +588,14 @@ document.addEventListener('DOMContentLoaded', function () {
       else if (pb) Motion.snakeAt(null, pb.segments, 0, cell, period, snake.renderSegments);
       else continue;
       snake.direction = (pb || pa).direction;
-      if (pa) snake.effects = pa.effects || {};
+      if (pa) {
+        snake.effects = pa.effects || {};
+        snake.anchoredUntil = pa.anchoredUntil || 0;
+        snake.anchorReadyAt = pa.anchorReadyAt || 0;
+      }
     }
 
+    renderServerT = s.rt;
     foods = a.foods;
     consumables = a.consumables;
     // Restos de un corte: se desvanecen en sus últimos 2 s (hora del servidor del instante dibujado)
@@ -686,6 +692,10 @@ document.addEventListener('DOMContentLoaded', function () {
     } else if (key === 32) {
       event.preventDefault();
       socket.emit('attack');
+    } else if (key === 69) {
+      // E: ancla (la misma tecla la suelta); mantenerla apretada no la repite
+      event.preventDefault();
+      if (!event.repeat) socket.emit('anchor');
     }
   }
 
@@ -769,9 +779,16 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  // Clic en la arena: dispara (y el mouse toma el control del rumbo)
+  // Clic en la arena: dispara (y el mouse toma el control del rumbo). Clic derecho: ancla.
   function handlePointerDown(event) {
-    if (event.button !== 0 || (event.pointerType && event.pointerType !== 'mouse' && event.pointerType !== 'pen')) return;
+    if (event.pointerType && event.pointerType !== 'mouse' && event.pointerType !== 'pen') return;
+    if (event.button === 2) {
+      if (!canSteer()) return;
+      event.preventDefault();
+      socket.emit('anchor');
+      return;
+    }
+    if (event.button !== 0) return;
     if (!canSteer()) return;
     event.preventDefault();
     handlePointerMove(event);
@@ -827,6 +844,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const stickBase = touchControls ? touchControls.querySelector('.touch-stick') : null;
   const stickKnob = touchControls ? touchControls.querySelector('.touch-stick-knob') : null;
   const fireButton = touchControls ? touchControls.querySelector('.touch-fire') : null;
+  const anchorButton = touchControls ? touchControls.querySelector('.touch-anchor') : null;
   const STICK_RADIUS = 46;          // recorrido del pulgar hasta el tope (px)
   const STICK_DEADZONE = 10;        // por debajo, el toque no cambia el rumbo
   const STICK_REST_MARGIN = 28;     // en reposo, separado de la esquina inferior izquierda
@@ -834,6 +852,27 @@ document.addEventListener('DOMContentLoaded', function () {
   let touchSeen = false;            // hubo toques en esta pestaña (o el puntero principal es táctil)
   let touchShown = false;
   let fireReady = null;
+  let anchorShownState = '', anchorShownP = '';
+
+  // Estado del ancla propia, medido con la hora del servidor del instante dibujado y no con
+  // Date.now(): el reloj del cliente puede estar desfasado. progress: lo que queda anclada, o lo que
+  // lleva la recarga.
+  const anchorView = { state: 'ready', progress: 1 };
+  function anchorState(me) {
+    const cfg = roomConfig && roomConfig.anchor;
+    const rt = renderServerT;
+    anchorView.state = 'ready';
+    anchorView.progress = 1;
+    if (!me || !cfg || !rt) return anchorView;
+    if (rt < (me.anchoredUntil || 0)) {
+      anchorView.state = 'anchored';
+      anchorView.progress = Math.max(0, Math.min(1, (me.anchoredUntil - rt) / cfg.lastsMs));
+    } else if (rt < (me.anchorReadyAt || 0)) {
+      anchorView.state = 'recharging';
+      anchorView.progress = Math.max(0, Math.min(1, 1 - (me.anchorReadyAt - rt) / cfg.rechargeMs));
+    }
+    return anchorView;
+  }
 
   function setStickBase(x, y) {
     stick.x = x;
@@ -871,6 +910,12 @@ document.addEventListener('DOMContentLoaded', function () {
     if (ready !== fireReady) {
       fireReady = ready;
       fireButton.setAttribute('data-ready', ready ? 'true' : 'false');
+    }
+    if (anchorButton) {
+      const an = anchorState(me);
+      if (an.state !== anchorShownState) { anchorShownState = an.state; anchorButton.setAttribute('data-state', an.state); }
+      const p = an.progress.toFixed(2);
+      if (p !== anchorShownP) { anchorShownP = p; anchorButton.style.setProperty('--p', p); }
     }
   }
 
@@ -931,6 +976,17 @@ document.addEventListener('DOMContentLoaded', function () {
   }
   function onFireUp() { fireButton.classList.remove('is-pressed'); }
 
+  function onAnchorDown(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.pointerType !== 'mouse') touchSeen = true;
+    if (!canSteer()) return;
+    anchorButton.classList.add('is-pressed');
+    socket.emit('anchor');
+    if (navigator.vibrate) { try { navigator.vibrate(20); } catch (e) { /* nada */ } }
+  }
+  function onAnchorUp() { anchorButton.classList.remove('is-pressed'); }
+
   if (touchControls && stickZone && stickBase && stickKnob && fireButton) {
     stickZone.addEventListener('pointerdown', onStickDown);
     stickZone.addEventListener('pointermove', onStickMove);
@@ -941,6 +997,12 @@ document.addEventListener('DOMContentLoaded', function () {
     fireButton.addEventListener('pointerup', onFireUp);
     fireButton.addEventListener('pointercancel', onFireUp);
     fireButton.addEventListener('pointerleave', onFireUp);
+    if (anchorButton) {
+      anchorButton.addEventListener('pointerdown', onAnchorDown);
+      anchorButton.addEventListener('pointerup', onAnchorUp);
+      anchorButton.addEventListener('pointercancel', onAnchorUp);
+      anchorButton.addEventListener('pointerleave', onAnchorUp);
+    }
     touchControls.addEventListener('contextmenu', function (event) { event.preventDefault(); });
     window.addEventListener('resize', function () { if (touchShown && stick.id === null) stickToRest(); });
   }
@@ -964,7 +1026,11 @@ document.addEventListener('DOMContentLoaded', function () {
   document.addEventListener('keyup', handleKeyUp);
   window.addEventListener('blur', function () { heldArrows.clear(); clearTimeout(keyReleaseTimer); });
   window.addEventListener('pointermove', handlePointerMove, { passive: true });
-  if (arenaStage) arenaStage.addEventListener('pointerdown', handlePointerDown);
+  if (arenaStage) {
+    arenaStage.addEventListener('pointerdown', handlePointerDown);
+    // En partida, el clic derecho sobre la arena es el ancla: sin menú contextual
+    arenaStage.addEventListener('contextmenu', function (event) { if (canSteer()) event.preventDefault(); });
+  }
 
   // ===========================================================================
   // Serpientes locales
@@ -992,6 +1058,8 @@ document.addEventListener('DOMContentLoaded', function () {
     snake.gameover = serverSnake.gameover;
     snake.scoreLeftToGrow = serverSnake.scoreLeftToGrow;
     snake.effects = serverSnake.effects || {};
+    snake.anchoredUntil = serverSnake.anchoredUntil || 0;
+    snake.anchorReadyAt = serverSnake.anchorReadyAt || 0;
 
     return snake;
   }
@@ -1115,13 +1183,17 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function updateHUD() {
     if (!currentRoomId) return;
+    let me = null;
+    if (!isSpectating) for (let i = 0; i < snakes.length; i++) if (snakes[i].id === socket.id) { me = snakes[i]; break; }
     ui(function () {
       HUD.update({
         timeLeft: roundTimeLeft,
         roundTime: roundTime(),
         players: hudPlayers(),
         playing: roundLive,
-        spectating: isSpectating
+        spectating: isSpectating,
+        anchor: me && roomConfig && roomConfig.anchor ? anchorState(me) : null,
+        touch: touchShown
       });
     });
   }

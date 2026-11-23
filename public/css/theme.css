@@ -1547,6 +1547,43 @@ kbd {
   transform: scaleX(var(--p, 1));
   transition: transform 120ms linear;
 }
+/* Ancla (teclado y mouse): lista con la tecla E; recargando, se llena de izquierda a derecha;
+   anclada, en perla */
+.hud-anchor {
+  --p: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: var(--bio-radius-pill);
+  border: 1px solid rgba(232, 251, 255, 0.35);
+  background: linear-gradient(90deg, rgba(232, 251, 255, 0.12) calc(var(--p) * 100%), transparent 0);
+  color: var(--bio-pearl);
+  white-space: nowrap;
+  transition: box-shadow var(--bio-dur-quick) var(--bio-ease-standard);
+}
+.hud-anchor svg { width: 18px; height: 18px; }
+.hud-anchor-key {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: 1px solid rgba(232, 251, 255, 0.4);
+  font: inherit;
+  font-size: var(--bio-fs-12);
+  font-weight: 700;
+  font-variation-settings: var(--bio-mono);
+}
+.hud-anchor[data-state="recharging"] {
+  color: var(--bio-ink-3);
+  border-color: rgba(115, 151, 165, 0.35);
+  background: linear-gradient(90deg, rgba(115, 151, 165, 0.22) calc(var(--p) * 100%), transparent 0);
+}
+.hud-anchor[data-state="anchored"] { background: rgba(232, 251, 255, 0.16); box-shadow: 0 0 0 1px rgba(232, 251, 255, 0.5), 0 0 18px var(--bio-glow-pearl); }
+.hud-anchor[data-state="anchored"] .hud-anchor-key { display: none; }
+
 /* Con dos o más efectos a la vez, cada indicador queda en icono y tiempo, así entran los tres en
    la columna del estado; la etiqueta sigue para el lector de pantalla */
 .hud-status:has(.hud-shield:not(.hidden) ~ .hud-shield:not(.hidden)) .hud-shield { gap: 6px; padding: 0 10px 0 8px; }
@@ -2509,7 +2546,7 @@ html { scroll-padding-top: calc(var(--bio-topbar-h) + 12px); }
     flex-direction: column;
     overflow-x: visible;
     overflow-y: auto;
-    max-height: calc(100svh - 140px); /* no llega al botón de disparo */
+    max-height: calc(100svh - 224px); /* no llega a los botones del ancla y de disparo */
     scroll-snap-type: y proximity;
   }
   #scene-arena[data-mode="game"] .hud-row { max-width: 100%; padding: 0 8px 0 7px; gap: 5px; }
@@ -2616,11 +2653,53 @@ html:has(> body[data-scene="game"]) { overscroll-behavior: none; }
 .touch-fire.is-pressed { transform: scale(0.9); }
 /* con menos de 2 segmentos no se puede disparar */
 .touch-fire[data-ready="false"] { opacity: 0.4; }
+/* Ancla: encima del disparo. Recargando, un aro se llena alrededor; anclada, se enciende en perla */
+.touch-anchor {
+  --p: 1;
+  position: absolute;
+  right: calc(max(20px, env(safe-area-inset-right)) + 12px);
+  bottom: calc(max(20px, env(safe-area-inset-bottom)) + 104px);
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(232, 251, 255, 0.45);
+  background: radial-gradient(circle at 40% 35%, rgba(232, 251, 255, 0.18), rgba(2, 10, 18, 0.6) 75%);
+  box-shadow: 0 0 20px var(--bio-glow-pearl);
+  color: var(--bio-pearl);
+  pointer-events: auto;
+  touch-action: none;
+  transition: transform var(--bio-dur-press) var(--bio-ease-standard), box-shadow var(--bio-dur-quick) var(--bio-ease-standard);
+}
+.touch-anchor svg { width: 28px; height: 28px; transition: opacity var(--bio-dur-quick) var(--bio-ease-standard); }
+.touch-anchor::before { content: ""; position: absolute; inset: -12px; border-radius: 50%; }
+.touch-anchor::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  background: conic-gradient(var(--bio-pearl) calc(var(--p) * 1turn), rgba(232, 251, 255, 0.12) 0);
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+  opacity: 0;
+  transition: opacity var(--bio-dur-quick) var(--bio-ease-standard);
+}
+.touch-anchor[data-state="recharging"] { border-color: rgba(115, 151, 165, 0.4); box-shadow: none; }
+.touch-anchor[data-state="recharging"] svg { opacity: 0.4; }
+.touch-anchor[data-state="recharging"]::after { opacity: 0.9; }
+.touch-anchor[data-state="anchored"] {
+  background: radial-gradient(circle, rgba(232, 251, 255, 0.45), rgba(232, 251, 255, 0.12) 70%);
+  box-shadow: 0 0 0 2px var(--bio-pearl), 0 0 28px var(--bio-glow-pearl);
+}
+.touch-anchor.is-pressed { transform: scale(0.9); }
 /* Pantallas muy bajas (celular chico en horizontal): joystick y disparo más compactos */
 @media (height <= 400px) {
   .touch-stick { width: 112px; height: 112px; margin: -56px 0 0 -56px; }
   .touch-stick-knob { width: 50px; height: 50px; margin: -25px 0 0 -25px; }
   .touch-fire { width: 80px; height: 80px; right: max(14px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); }
+  .touch-anchor { width: 56px; height: 56px; right: calc(max(14px, env(safe-area-inset-right)) + 12px); bottom: calc(max(14px, env(safe-area-inset-bottom)) + 92px); }
+  .touch-anchor svg { width: 24px; height: 24px; }
 }
 
 /* --------------------------------------------------------------------------
