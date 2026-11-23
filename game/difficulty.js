@@ -21,11 +21,36 @@ const DEFAULT_DIFFICULTY = 'medium';
 // shieldEvery / shieldLasts: cada cuántos segundos aparece el escudo y cuánto dura (s)
 // turnDegrees: cuánto puede girar la serpiente por paso. Como avanza una celda por paso, fija
 // el radio de giro: 40° da unos 17 px (1,4 cuerpos) y una vuelta en U de 5 pasos.
+// shotCooldownMs: pausa mínima entre dos disparos del mismo jugador (docs/GAMEPLAY_SPEC.md)
 const LEVELS = {
-  easy:   { crossSeconds: 3.5, projectileCells: 3, foodExtra: 24, shieldEvery: 6,  shieldLasts: 5, turnDegrees: 40 },
-  medium: { crossSeconds: 3.3, projectileCells: 3, foodExtra: 20, shieldEvery: 8, shieldLasts: 4, turnDegrees: 40 },
-  hard:   { crossSeconds: 3.0, projectileCells: 3, foodExtra: 18,  shieldEvery: 10, shieldLasts: 3, turnDegrees: 40 }
+  easy:   { crossSeconds: 3.5, projectileCells: 3, foodExtra: 24, shieldEvery: 6,  shieldLasts: 5, turnDegrees: 40, shotCooldownMs: 200 },
+  medium: { crossSeconds: 3.3, projectileCells: 3, foodExtra: 20, shieldEvery: 8, shieldLasts: 4, turnDegrees: 40, shotCooldownMs: 200 },
+  hard:   { crossSeconds: 3.0, projectileCells: 3, foodExtra: 18,  shieldEvery: 10, shieldLasts: 3, turnDegrees: 40, shotCooldownMs: 200 }
 };
+
+// Poderes (docs/GAMEPLAY_SPEC.md): por ahora iguales en los tres niveles. Para ajustar uno por
+// nivel, pasarlo a LEVELS.
+// bigMouth / fan: aparecen cada spawnInterval s y duran duration s una vez tomados
+// bigMouthReach: alcance para comer con la boca grande, en celdas (el normal es 0,85)
+// fanDegrees: apertura de cada disparo lateral del abanico
+// frenzy: en los últimos lastSeconds de la partida la comida base sube foodBoost (0,5 = 50 %)
+const POWERS = {
+  bigMouth: { spawnInterval: 12, duration: 6 },
+  fan: { spawnInterval: 12, duration: 6 },
+  bigMouthReach: 2.55,
+  fanDegrees: 12,
+  frenzy: { lastSeconds: 20, foodBoost: 0.5 }
+};
+
+// Cuántos consumibles de un tipo puede haber a la vez en el mapa
+function consumableLimit(type, playerCount) {
+  switch (type) {
+    case 'immunity': return Math.max(3, playerCount + 1);
+    case 'bigMouth':
+    case 'fan': return playerCount >= 5 ? 2 : 1;
+    default: return 0;
+  }
+}
 
 function buildRoomConfig(difficulty, opts) {
   const key = typeof difficulty === 'string' && Object.prototype.hasOwnProperty.call(LEVELS, difficulty)
@@ -46,10 +71,16 @@ function buildRoomConfig(difficulty, opts) {
     projectileCells: level.projectileCells,
     foodExtra: level.foodExtra,
     turnDegrees: level.turnDegrees,
+    shotCooldownMs: level.shotCooldownMs,
+    bigMouthReach: POWERS.bigMouthReach,
+    fanDegrees: POWERS.fanDegrees,
+    frenzy: { ...POWERS.frenzy },
     consumables: {
-      immunity: { enabled: true, spawnInterval: level.shieldEvery, duration: level.shieldLasts }
+      immunity: { enabled: true, spawnInterval: level.shieldEvery, duration: level.shieldLasts },
+      bigMouth: { enabled: true, ...POWERS.bigMouth },
+      fan: { enabled: true, ...POWERS.fan }
     }
   };
 }
 
-module.exports = { buildRoomConfig, DEFAULT_DIFFICULTY };
+module.exports = { buildRoomConfig, consumableLimit, DEFAULT_DIFFICULTY };

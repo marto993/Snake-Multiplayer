@@ -223,7 +223,7 @@
   // =========================================================================================
   // Iconos (SVG en línea, retícula de 20 px, trazo 1,75, extremos redondeados, currentColor)
   // =========================================================================================
-  const SPRITE_ID = { jelly: 'i-medusa', eye: 'i-eye' };
+  const SPRITE_ID = { jelly: 'i-medusa', eye: 'i-eye', anemone: 'i-anemona', star: 'i-estrella' };
   function icon(kind, cls, size) {
     const sid = SPRITE_ID[kind];
     if (sid && doc.getElementById(sid)) {
@@ -594,15 +594,26 @@
     let built = false, shown = false, want = false;
     let root, bar, side, board, caption;
     let timerWrap, ringProg, ringCilia, timerVal, statusWrap,
-        shieldEl, shieldTime, shieldBar, specEl, selfEl, selfDot, selfScore;
-    let shieldBeat = null, hideTimer = 0;
-    const L = { time: -1, rt: -1, phase: '', playing: null, spec: null, shield: false, self: '', selfC: '', final3: false };
+        specEl, selfEl, selfDot, selfScore;
+    let hideTimer = 0;
+    const L = { time: -1, rt: -1, phase: '', playing: null, spec: null, self: '', selfC: '', final3: false };
+    // Efectos propios: un indicador por tipo, en orden fijo, cada uno con su tiempo restante
+    const EFFECT_CHIPS = [
+      { type: 'immunity', label: 'Escudo ', icon: 'jelly' },
+      { type: 'bigMouth', label: 'Boca grande ', icon: 'anemone' },
+      { type: 'fan', label: 'Abanico ', icon: 'star' }
+    ];
+    const chips = [];   // { type, el, time, bar, active, until, total, txt }
+    let chipRaf = 0;
+    // Los vencimientos son horas del servidor: se comparan con la hora del servidor (la del instante
+    // dibujado, que llega en serverNow), no con el reloj del cliente, que puede estar desfasado
+    let clockOffset = 0;
+    function serverNow() { return Date.now() + clockOffset; }
     const rows = new Map();
     let order = [];          // ids visibles en orden
     let gapLi = null;
     const ents = [];           // buffer reutilizado para ordenar
     let sortTotal = false;
-    let shieldUntil = 0, shieldTotal = 0, shieldRaf = 0, shieldTxt = '', shieldActive = false;
 
     function arenaEl() { return $('scene-arena'); }
 
@@ -647,15 +658,19 @@
       timerWrap.appendChild(ring); timerWrap.appendChild(timerVal);
       // Estado
       statusWrap = mk('div', 'hud-status');
-      shieldEl = mk('span', 'hud-shield hidden');
-      shieldEl.setAttribute('data-reveal', '');
-      shieldEl.appendChild(icon('jelly', 'hud-shield-icon', 18));
-      shieldEl.appendChild(mk('span', 'hud-shield-label', 'Escudo '));   // en la columna angosta del celular horizontal se oculta a la vista
-      shieldTime = mk('b', 'hud-shield-time', '');
-      shieldBar = mk('i', 'hud-shield-bar');
-      shieldBar.setAttribute('aria-hidden', 'true');
-      shieldBar.style.setProperty('--p', '1');
-      shieldEl.appendChild(shieldTime); shieldEl.appendChild(shieldBar);
+      EFFECT_CHIPS.forEach(function (def) {
+        const el = mk('span', 'hud-shield hidden');
+        el.setAttribute('data-effect', def.type);
+        el.setAttribute('data-reveal', '');
+        el.appendChild(icon(def.icon, 'hud-shield-icon', 18));
+        el.appendChild(mk('span', 'hud-shield-label', def.label));   // en la columna angosta del celular horizontal se oculta a la vista
+        const time = mk('b', 'hud-shield-time', '');
+        const meter = mk('i', 'hud-shield-bar');
+        meter.setAttribute('aria-hidden', 'true');
+        meter.style.setProperty('--p', '1');
+        el.appendChild(time); el.appendChild(meter);
+        chips.push({ type: def.type, el: el, time: time, bar: meter, active: false, until: 0, total: 0, txt: '' });
+      });
       specEl = mk('span', 'hud-spectator hidden');
       specEl.appendChild(icon('eye', 'hud-spectator-icon', 18));
       specEl.appendChild(doc.createTextNode('Espectador'));
@@ -663,7 +678,8 @@
       selfDot = mk('i', 'hud-dot'); selfDot.setAttribute('aria-hidden', 'true');
       selfScore = mk('b', 'hud-mine-score', '');
       selfEl.appendChild(selfDot); selfEl.appendChild(selfScore);
-      statusWrap.appendChild(shieldEl); statusWrap.appendChild(specEl); statusWrap.appendChild(selfEl);
+      chips.forEach(function (ch) { statusWrap.appendChild(ch.el); });
+      statusWrap.appendChild(specEl); statusWrap.appendChild(selfEl);
 
       bar.appendChild(rw); bar.appendChild(timerWrap); bar.appendChild(statusWrap);
       bar.classList.add('hidden'); side.classList.add('hidden');
@@ -722,10 +738,16 @@
       // Estado propio
       let me = null;
       for (let i = 0; i < players.length; i++) if (players[i] && players[i].isMe) { me = players[i]; break; }
-      const shieldOn = !!(me && me.immune && !spectating && playing);
-      if (shieldOn !== L.shield) { setShield(shieldOn, me); L.shield = shieldOn; }
-      else if (shieldOn && me.immuneUntil && Math.abs(me.immuneUntil - shieldUntil) > 250 && Math.abs(me.immuneUntil - Date.now()) <= 30000) {
-        shieldUntil = +me.immuneUntil; shieldTotal = Math.max(shieldTotal, shieldUntil - Date.now()); shieldTxt = '';
+      if (+d.serverNow > 0) clockOffset = +d.serverNow - Date.now();
+      const fx = (me && !spectating && playing && me.effects) || null;
+      for (let i = 0; i < chips.length; i++) {
+        const ch = chips[i];
+        const until = fx ? +fx[ch.type] || 0 : 0;
+        if ((until > 0) !== ch.active) setChip(ch, until > 0, until);
+        else if (ch.active && Math.abs(until - ch.until) > 250 && Math.abs(until - serverNow()) <= 30000) {
+          // renovado: el tiempo vuelve a empezar
+          ch.until = until; ch.total = Math.max(ch.total, until - serverNow()); ch.txt = '';
+        }
       }
       if (spectating !== L.spec) { specEl.classList.toggle('hidden', !spectating); L.spec = spectating; }
       const selfTxt = (me && !spectating) ? String(me.score | 0) : '';
@@ -738,41 +760,44 @@
       updateBoard(players, playing);
     }
 
-    // ---------- escudo
+    // ---------- efectos propios (escudo, boca grande, abanico)
     function fmtSec(ms) { return (Math.max(0, ms) / 1000).toFixed(1).replace('.', ',') + ' s'; }
-    function setShield(on, me) {
-      cancelAnim(shieldBeat); shieldBeat = null;
-      shieldActive = on;
+    function setChip(ch, on, until) {
+      ch.active = on;
       if (on) {
-        shieldUntil = me && me.immuneUntil ? +me.immuneUntil : 0;
-        if (shieldUntil && Math.abs(shieldUntil - Date.now()) > 30000) shieldUntil = 0; // reloj desfasado
-        shieldTotal = shieldUntil ? Math.max(500, shieldUntil - Date.now()) : 0;
-        shieldTxt = '';
-        cancelMine(shieldEl);
-        shieldEl.classList.remove('hidden');   // la entrada (bio-reveal) y el latido del icono son CSS
-        tickShield();
+        ch.until = until;
+        if (ch.until && Math.abs(ch.until - serverNow()) > 30000) ch.until = 0; // sin hora confiable: sin tiempo
+        ch.total = ch.until ? Math.max(500, ch.until - serverNow()) : 0;
+        ch.txt = '';
+        cancelMine(ch.el);
+        ch.el.classList.remove('hidden');   // la entrada (bio-reveal) y el latido del icono son CSS
+        if (!chipRaf) tickChips();
       } else {
-        if (shieldRaf) { global.cancelAnimationFrame(shieldRaf); shieldRaf = 0; }
-        if (shieldEl.classList.contains('hidden')) return;
-        const a = reduced ? null : anim(shieldEl, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(0.9)' }], { duration: M.quick, easing: M.in, fill: 'forwards' });
-        done(a).then(function () { if (!shieldActive) { shieldEl.classList.add('hidden'); cancelAnim(a); } });
+        if (ch.el.classList.contains('hidden')) return;
+        const a = reduced ? null : anim(ch.el, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(0.9)' }], { duration: M.quick, easing: M.in, fill: 'forwards' });
+        done(a).then(function () { if (!ch.active) { ch.el.classList.add('hidden'); cancelAnim(a); } });
       }
     }
-    function tickShield() {
-      shieldRaf = 0;
-      if (!shieldActive) return;
-      if (shieldUntil) {
-        const rem = shieldUntil - Date.now();
-        const txt = fmtSec(rem);
-        if (txt !== shieldTxt) {
-          shieldTime.textContent = txt; shieldTxt = txt;
-          shieldBar.style.setProperty('--p', shieldTotal > 0 ? clamp(rem / shieldTotal, 0, 1).toFixed(3) : '1');
+    function tickChips() {
+      chipRaf = 0;
+      let any = false;
+      for (let i = 0; i < chips.length; i++) {
+        const ch = chips[i];
+        if (!ch.active) continue;
+        any = true;
+        if (ch.until) {
+          const rem = ch.until - serverNow();
+          const txt = fmtSec(rem);
+          if (txt !== ch.txt) {
+            ch.time.textContent = txt; ch.txt = txt;
+            ch.bar.style.setProperty('--p', ch.total > 0 ? clamp(rem / ch.total, 0, 1).toFixed(3) : '1');
+          }
+        } else if (ch.txt === '') {
+          ch.time.textContent = ''; ch.txt = ' ';
+          ch.bar.style.setProperty('--p', '1');
         }
-      } else if (shieldTxt === '') {
-        shieldTime.textContent = ''; shieldTxt = ' ';
-        shieldBar.style.setProperty('--p', '1');
       }
-      shieldRaf = global.requestAnimationFrame(tickShield);
+      if (any) chipRaf = global.requestAnimationFrame(tickChips);
     }
 
     // ---------- marcador
@@ -979,7 +1004,7 @@
       rows.clear(); order = [];
       if (gapLi && gapLi.parentNode) gapLi.parentNode.removeChild(gapLi);
       L.time = -1; L.phase = ''; L.playing = null;
-      if (L.shield) { setShield(false); L.shield = false; }
+      chips.forEach(function (ch) { if (ch.active) setChip(ch, false, 0); });
     }
 
     return {

@@ -696,7 +696,7 @@ En partida y con `pointer: coarse` la página no debe hacer scroll al tocar la a
 
 **Tamaño en partida.** La tabla de 4.10 vale para la sala. En partida la arena crece hasta ocupar el espacio disponible (`theme.css`, sección 18): el ancho que entra, limitado por el alto por 16:9. El cambio se hace al empezar la cuenta regresiva, no al largar, y Scenes lo anima con un FLIP de 520 ms sobre `.arena-stage` mientras ARENA rehace el canvas al tamaño nuevo. Desde 1024 px: marcador a la izquierda y arena con el resto (el riel de la sala no se muestra). Hasta 1023 px: arena arriba y chips del marcador debajo. En horizontal con hasta 560 px de alto (celulares): arena al centro, aro del tiempo y largo propio a la izquierda, marcador a la derecha, con costados de al menos 96 px para los pulgares. El backing store del canvas tiene un tope de 2200 px de ancho.
 
-**Controles táctiles.** `#touchControls`, fijo sobre la escena, visible para quien juega (no para quien mira) en pantallas táctiles desde la cuenta regresiva: joystick flotante que aparece donde se apoya el pulgar, en cualquier parte de la pantalla fuera del botón de disparo, sigue al dedo y en reposo queda tenue abajo a la izquierda; pide un rumbo absoluto. Botón de disparo de 88 px abajo a la derecha, con un área táctil 20 px más grande que el círculo, atenuado con menos de 2 segmentos. Respetan `env(safe-area-inset-*)`.
+**Controles táctiles.** `#touchControls`, fijo sobre la escena, visible para quien juega (no para quien mira) en pantallas táctiles desde la cuenta regresiva: joystick flotante que aparece donde se apoya el pulgar, en cualquier parte de la pantalla fuera del botón de disparo, sigue al dedo y en reposo queda tenue abajo a la izquierda; pide un rumbo absoluto. Botón de disparo de 88 px abajo a la derecha, con un área táctil 20 px más grande que el círculo, atenuado con menos de 2 segmentos. Mantenerlo apretado dispara en continuo, un pedido cada `shotCooldownMs` (5 por segundo), como la barra espaciadora. Respetan `env(safe-area-inset-*)`.
 
 **Horizontal obligatorio en el celular.** Con `pointer: coarse` en vertical y la partida en pantalla, `#rotateHint` tapa todo con un teléfono que gira y "Gira el teléfono"; los controles táctiles no se muestran. Donde el navegador lo permite (Android), un botón pone pantalla completa y fija la orientación en horizontal.
 
@@ -717,6 +717,8 @@ Responsable: ESCENAS (`Overlays.roundStart()`) y ARENA (`Arena.onRoundStart()`),
 `#overlay-round` muestra "¡Ya!" en Fraunces itálica 400, `--bio-lime`, tamaño `calc(var(--arena-size) * 0.28)` (mínimo 72 px), y encima "Gana la serpiente más larga" en Recursive 600 18 px. El velo de la cuenta regresiva se va en 400 ms. "¡Ya!" entra con escala 0,8 a 1 con `--bio-ease-jelly` en 420 ms, se sostiene 380 ms y sale con opacidad a 0, escala 1,15 y `blur(10px)` en 380 ms. Total: 1180 ms. En la arena, la ola de inicio (5.12). `Backdrop.pulse('#C8FF3C', 0.35)`.
 
 ### 4.15 Últimos 10 segundos
+
+Antes, a los 20 segundos, empieza el frenesí (`gameState.frenzy`, `docs/GAMEPLAY_SPEC.md`): la comida base sube un 50 % y aparece con la animación de 5.11, de a una por paso. INTEGRADOR muestra una vez el toast "Frenesí: más comida hasta el final" (info, 3 s) y llama a `Backdrop.pulse('#C8FF3C', 0.25)`; el temporizador ya está en la fase `warn`.
 
 Disparador: `roundTimeLeft` llega a 10. Lo pinta cada responsable en lo suyo:
 
@@ -962,6 +964,7 @@ Cuando una serpiente cruza un borde, dos puntos consecutivos quedan a más de me
 - **Etiqueta "Tú"** en `--bio-lime` sobre la cabeza propia durante los primeros 2500 ms de la partida; después, la propia no lleva etiqueta.
 - **Etiquetas de otros**: el nombre sobre la cabeza, centrado en `P_0.y - (0,9·s + 8)`; si queda a menos de 16 px del borde superior, va debajo. Alpha 0,8. Tamaño lógico `max(11, 10 / escala)` para que nunca baje de 10 px CSS. Recursive 600.
 - **Espectador** (`state.spectating`): no hay serpiente propia; ninguna lleva "Tú" ni sonar.
+- **Corona**: la serpiente de `state.leaderId` (la más larga, decidida por el servidor: `gameState.leaderId`, `docs/GAMEPLAY_SPEC.md`) lleva una corona de luz justo encima de la cabeza, siempre derecha en la pantalla y debajo de la etiqueta: base de `1,4·s` de ancho a `0,75·s` sobre el centro de la cabeza, tres puntas (las de los lados a `0,42·s`, la del medio a `0,62·s`), relleno `rgba(255, 224, 138, 0.28)` y trazo `#FFE08A` de 1,4 px, una perla de radio `0,22·s` en cada punta y un glow dorado de radio `1,3·s`. Sube y baja ±0,6 px. Se dibuja con la partida en curso y durante el congelado final; en el modo atracción, no.
 
 ### 5.7 Inmunidad
 
@@ -990,12 +993,18 @@ La comida es plancton: un orbe que late, de tamaño y brillo según su valor (1 
 - Dígito: si `1,15·r × escala ≥ 7` px CSS, el valor en Recursive MONO 700 de tamaño `1,15·r`, color `#02131C` sobre el centro del orbe.
 - **Restos** (comida con `remains`, ver `docs/MOTION_SPEC.md`): se dibujan igual que la comida de su valor y aparecen con el mismo crecimiento de 450 ms. En sus últimos 2 s se desvanecen: `fade = (expiresAt - rt) / 2000`, con `rt` la hora del servidor del instante dibujado, que `SnakeGame.js` calcula al aplicar cada muestra de la línea de tiempo.
 
-### 5.9 Consumible de inmunidad
+### 5.9 Consumibles
 
-Una medusa que flota en su celda, de tamaño fijo en px de la arena y violeta, para que no se confunda con la comida ni con la nieve. Campana de 15 px de ancho y 9 px de alto con degradado de `#D9CCFF` a `#9C82FF` (alpha 0,75) y borde `#F3EEFF` al 90 %; tres tentáculos `#D6CCFF` de 1,2 px como curvas cuadráticas de 8 px que se mecen con `sin(now × 0,004 + k)`; núcleo perla de radio 4 px. Glow `#B9A6FF` de radio 20 px con alpha 0,5 que late a 0,7 Hz, y un glow `#9FF4FF` de radio 12 px con alpha 0,35. La campana late a 1,4 Hz y la medusa sube y baja ±1,2 px.
+Hay tres consumibles: escudo, boca grande y abanico (`docs/GAMEPLAY_SPEC.md`). Cada uno tiene su silueta y su color, de tamaño fijo en px de la arena, y los tres comparten el anillo de sonar en su color: es la seña de que algo se puede tomar. Los colores (`CONS_LOOK` en `arena.js`) son violeta `#B9A6FF` para el escudo, rosa `#FF8FD0` para la boca grande y coral `#FF7A59` para el abanico. Ninguno es redondo como la comida.
 
-- **Sonar**: cada 2000 ms (con fase propia), un anillo `#B9A6FF` de 1,5 px se abre de radio 9 a 26 px con `easeOutCubic` mientras su alpha baja de 0,6 a 0 (al cuadrado). Es lo que la hace visible de lejos. Se distingue del sonar de la cabeza propia por el color violeta y porque la medusa no se mueve.
+**Escudo.** Una medusa que flota en su celda, de tamaño fijo en px de la arena y violeta, para que no se confunda con la comida ni con la nieve. Campana de 15 px de ancho y 9 px de alto con degradado de `#D9CCFF` a `#9C82FF` (alpha 0,75) y borde `#F3EEFF` al 90 %; tres tentáculos `#D6CCFF` de 1,2 px como curvas cuadráticas de 8 px que se mecen con `sin(now × 0,004 + k)`; núcleo perla de radio 4 px. Glow `#B9A6FF` de radio 20 px con alpha 0,5 que late a 0,7 Hz, y un glow `#9FF4FF` de radio 12 px con alpha 0,35. La campana late a 1,4 Hz y la medusa sube y baja ±1,2 px.
+
+- **Sonar**: cada 2000 ms (con fase propia), un anillo de 1,5 px en el color del consumible se abre de radio 9 a 26 px con `easeOutCubic` mientras su alpha baja de 0,6 a 0 (al cuadrado). Es lo que lo hace visible de lejos. Se distingue del sonar de la cabeza propia por el color y porque el consumible no se mueve.
 - Puesta, la inmunidad sigue siendo la campana celeste de 5.7 sobre la cabeza.
+
+**Boca grande.** Una anémona rosa: ocho tentáculos `#FF8FD0` de 1,4 px con punta redondeada, curvas cuadráticas que van del radio 3 al 8,5 px y se mecen ±0,14 rad (±0,22 en la punta, así no se cruzan), con una perla `#FFD6EC` de radio 1,1 px en cada punta. En el centro, una boca de radio 2,6 px (`rgba(58, 8, 40, 0.9)` con borde `#FFD6EC` de 1,2 px) que se abre y se cierra ±12 % con el latido de 1,4 Hz. Glow rosa de radio 18 px con alpha 0,5. Mientras está activa, un anillo punteado `#FF8FD0` (3 px de trazo y 4 de hueco, que gira despacio) marca el alcance alrededor de la cabeza: radio `bigMouthReach × s`, alpha 0,34 ± 0,08, en `'lighter'`.
+
+**Abanico.** Una estrella de mar coral de cinco brazos (radio exterior 8,5 px, interior 3,6 px) que gira a 0,4 rad/s: relleno `#FF7A59` al 90 %, borde `#FFD2C4` de 1,2 px con uniones redondeadas, dos poros `#FFE3D9` de radio 0,8 px por brazo y un núcleo perla de radio 3 px. Glow coral de radio 18 px con alpha 0,5.
 
 ### 5.10 Proyectiles
 
@@ -1015,14 +1024,14 @@ INTEGRADOR llama al hook correspondiente por cada elemento de los arrays de `gam
 
 Valores de partículas: `count` es la cantidad; `speed` en px/s; `life` en ms; `size` en px de radio para `s` igual a 20 (Arena lo multiplica por `s / 20` antes de llamar a `burst`); `gravity` en px/s² (negativa = sube, como flotación); `drag` es la fracción de velocidad que se conserva cada 1/60 s. "Si soy yo" significa `e.targetId`, `e.playerId` o `e.attackerId === state.myId`, según el caso. Las cantidades bajan al 50 % con movimiento reducido.
 
-- **Comer** (`onFoodEaten`, `foodEvents`). Centro de la celda. Ráfaga: `count` = 6 + 4 × valor, color de la comida (tabla 5.8), `speed` [30, 70 + 20 × valor], `life` [380, 700], `size` [1,2, 2,4], forma `dot`, `gravity` -10, `drag` 0,9. Anillo del mismo color de `0,4·s` a `1,8·s` en 320 ms con alpha 0,7. **Peristalsis**: un bulto luminoso (radio + 25 %, color `core`) recorre el cuerpo del que comió de la cabeza a la cola a 22 segmentos por segundo (máximo 3 a la vez por serpiente). Si soy yo: texto flotante "+{valor}" en el color de la comida, Recursive MONO 700, que sube 18 px y se desvanece en 700 ms.
+- **Comer** (`onFoodEaten`, `foodEvents`). Centro de la celda. Ráfaga: `count` = 6 + 4 × valor, color de la comida (tabla 5.8), `speed` [30, 70 + 20 × valor], `life` [380, 700], `size` [1,2, 2,4], forma `dot`, `gravity` -10, `drag` 0,9. Anillo del mismo color de `0,4·s` a `1,8·s` en 320 ms con alpha 0,7. **Peristalsis**: un bulto luminoso (radio + 25 %, color `core`) recorre el cuerpo del que comió de la cabeza a la cola a 22 segmentos por segundo (máximo 3 a la vez por serpiente). Si soy yo: texto flotante "+{valor}" en el color de la comida, Recursive MONO 700, que sube 18 px y se desvanece en 700 ms. **Con la boca grande**, si la comida estaba a más de `1,2·s` de la cabeza (y a menos de `4·s`, para no cruzar un portal), una estela la lleva hasta la boca en 170 ms: un trazo del color de la comida de 2 px a 1 px y una perla de radio `0,9·s` que acelera (`t²`) hacia la cabeza, que sigue moviéndose.
 - **Impacto en el cuerpo** (`onHit`, `headshot` falso). En la celda del impacto. Fragmentos: `count` = min(48, 10 + 5 × `segmentsLost`), repartidos 60 % forma `spark` y 40 % `dot`, color `body` de la víctima, `speed` [60, 200], `life` [500, 1000], `size` [1,5, 3,2], `gravity` -20, `drag` 0,9. Chispa del atacante: 6 `spark` del color `body` del atacante, `speed` [80, 160], `life` [250, 400]. Destello: sprite `#E8FBFF` de radio `2,5·s` con alpha de 0,5 a 0 en 160 ms. **Cola desprendida**: los últimos `segmentsLost` puntos de render de la víctima (copiados en el hook, antes de que lleguen las posiciones nuevas) siguen dibujándose como cuerpo atenuado que deriva al azar (±10 px/s), se hunde a 8 px/s y se apaga en 900 ms. Texto flotante "-{segmentsLost}" (con signo menos tipográfico U+2212) en el color `text` de la víctima, siempre. Sacudida: si soy la víctima, 7 px durante 280 ms y `Backdrop.pulse('#FF4D6D', 0.25)`; si soy el atacante, 2,5 px durante 120 ms.
 - **Impacto en la cabeza** (`onHit`, `headshot` verdadero). Todo lo anterior con 12 fragmentos más, destello con alpha 0,7 y dos anillos (el segundo 90 ms después). **Nube de tinta**: 10 partículas de forma `ink`, color `deep` de la víctima, `size` [6, 14], `speed` [10, 40], `life` [1200, 1800], `drag` 0,95, `gravity` 0, alpha máximo 0,45, en `'source-over'`. Sobre el número flotante, la palabra "cabeza" en 11 px lógicos (con el mínimo de 10 px CSS). Sacudida: víctima 10 px durante 360 ms; atacante 4 px durante 160 ms.
 - **Bloqueo** (`onBlock`). En la celda del bloqueo. Burbujas: 14 de forma `bubble`, `#9FF4FF`, `speed` [40, 120], `life` [500, 900], `size` [1,5, 3,5], `gravity` -40, `drag` 0,9. Dos anillos `#9FF4FF` (el segundo 80 ms después). La campana del jugador estalla (5.7). Si soy el jugador o el atacante: texto flotante "Bloqueado" en `#9FF4FF`. Si soy el jugador: sacudida de 3 px durante 140 ms y `Backdrop.pulse('#9FF4FF', 0.15)`.
 - **Portal** (`onPortal`, con `fromX`, `fromY`, `toX`, `toY`). En los dos puntos de cruce sobre el borde: onda en media elipse aplastada contra el borde (radio `1,6·s` a lo largo del borde y `0,5·s` hacia adentro) del color `body`, alpha 0,6, 420 ms; 6 partículas `dot` por lado que se alejan del borde hacia adentro; la membrana del borde se enciende (5.2). Sin sacudida.
-- **Disparo** (`onProjectileFired`). En el punto de salida: 6 `spark` en cono (dirección del disparo, apertura 0,9 rad), color `body` del tirador, `speed` [80, 180], `life` [180, 320]. **Costo visible**: en la punta de la cola del tirador (último punto de render), una gota de luz de radio `0,35·s` se desprende, se hunde y se apaga en 500 ms, con 4 partículas chicas. La cabeza del tirador retrocede `0,15·s` durante 90 ms (solo visual). Si soy el tirador: sacudida de 1,5 px durante 80 ms.
+- **Disparo** (`onProjectileFired`). En el punto de salida: 6 `spark` en cono (dirección del disparo, apertura 0,9 rad), color `body` del tirador, `speed` [80, 180], `life` [180, 320]. **Costo visible**: en la punta de la cola del tirador (último punto de render), una gota de luz de radio `0,35·s` se desprende, se hunde y se apaga en 500 ms, con 4 partículas chicas. La cabeza del tirador retrocede `0,15·s` durante 90 ms (solo visual). Si soy el tirador: sacudida de 1,5 px durante 80 ms. **Abanico**: los dos disparos laterales llegan con `spread: true` y solo hacen el cono de chispas de salida; la gota de la cola, el retroceso y la sacudida salen una vez, con el disparo central, porque la ráfaga cuesta un solo segmento.
 - **Proyectil expirado** (`onProjectileExpired`, **extensión**, `expiredProjectiles`). En la última celda dentro de la arena: 7 `dot` del color del proyectil (la arena recuerda el color por id; si no lo encuentra, `#4FD8FF`), `speed` [20, 60], `life` [300, 500]; anillo de `0,3·s` a `1·s` en 240 ms; la membrana del borde parpadea en ese punto.
-- **Consumible recogido** (`onConsumablePicked`, con `x`, `y`). Anillo `#9FF4FF` de `0,5·s` a `2,4·s` en 420 ms; 18 `dot` alternando `#C9F8FF` y `#B9A6FF`, `speed` [40, 120], `life` [500, 900], `gravity` -30; la campana del jugador se infla (5.7). Si soy yo: `Backdrop.pulse('#9FF4FF', 0.2)` (el toast lo pone INTEGRADOR).
+- **Consumible recogido** (`onConsumablePicked`, con `x`, `y`, `consumableType`). Anillo de `0,5·s` a `2,4·s` en 420 ms; 18 `dot` mitad en el color claro y mitad en el del sonar, `speed` [40, 120], `life` [500, 900], `gravity` -30. Colores por tipo: escudo `#9FF4FF` (anillo), `#C9F8FF` y `#B9A6FF`; boca grande `#FF8FD0`, `#FFD6EC` y `#FF8FD0`; abanico `#FF7A59`, `#FFE3D9` y `#FF7A59`. Solo el escudo infla la campana del jugador (5.7). Si soy yo: `Backdrop.pulse` con el color del anillo y alpha 0,2 (el toast lo pone INTEGRADOR, con un texto por tipo).
 - **Inicio de la partida** (`onRoundStart`; el nombre viene de cuando había rondas). Ola: un anillo desde el centro que crece de radio 0 a 450 en 800 ms con `easeOutExpo`, `lineWidth` de 40 a 2, turquesa con alpha 0,25 en `'lighter'`. Los halos de todas las serpientes se multiplican por 1,6 y vuelven a 1 en 600 ms. Serpiente propia: tres anillos de sonar seguidos (0, 200 y 400 ms), de `0,5·s` a `4·s` en 700 ms cada uno, y la etiqueta "Tú" (5.6). Se descartan las colas desprendidas y estelas de la partida anterior.
 - **Fin de la partida** (`onRoundEnd({ winnerId })`). Ver 5.14.
 
@@ -1099,7 +1108,7 @@ Membrana de 64 px de alto (48 en móvil) del ancho de la arena, en tres zonas.
 
 - **Meta** (izquierda): "Gana la más larga" en Recursive 600 14 px `--bio-ink-2` (12 px en móvil), truncado con elipsis si no entra. Reemplaza a la ronda y sus pips: la partida es una sola.
 - **Temporizador** (centro): SVG de 64 × 64 a 56 px CSS. Pista de radio 26 y trazo de 4 px en `rgba(255,255,255,0.08)`; progreso de radio 26 y 4 px con extremos redondeados, `stroke-dasharray` de 163,4 (2π × 26) y `stroke-dashoffset = 163,4 × (1 - timeLeft / roundTime)`, con transición lineal de 1000 ms (así el anillo baja continuo entre los ticks de segundo). Un tercer círculo de radio 29 y trazo de 1 px con `stroke-dasharray: 2 6` gira una vuelta cada 40 segundos: son los cilios. La cifra va en el centro en Recursive MONO 700 24 px, como minutos y segundos ("1:42") desde un minuto y solo segundos por debajo; su `aria-label` lo dice en palabras ("1 minuto y 42 segundos").
-- **Estado** (derecha): indicador de escudo propio o badge de espectador.
+- **Estado** (derecha): un indicador por efecto propio activo o el badge de espectador.
 
 Fases del temporizador (`data-phase`, también reflejado en `#scene-arena[data-phase]`). Con `playing` falso (fin de la partida, o espectador antes de que empiece) la fase vuelve a `calm`.
 
@@ -1109,7 +1118,7 @@ Fases del temporizador (`data-phase`, también reflejado en `#scene-arena[data-p
 | `warn` | 20 a 11 | `#FFB547` | Cambio de color en 300 ms |
 | `tension` | 10 a 0 | `#FF4D6D` | Latido por segundo (escala 1 a 1,12 a 1 en 220 ms con `--bio-ease-jelly`), glow `drop-shadow` en el SVG; desde 3, la cifra queda en `scale(1.16)` |
 
-**Escudo propio**: si el jugador propio tiene `immune`, `.hud-shield` aparece con el revelado de 4.20: icono de medusa de 18 px en `#9FF4FF`, la palabra "Escudo", el tiempo restante con coma decimal ("3,2 s", calculado con `immuneUntil`) y una barra de 40 × 3 px que se vacía. Late en sincronía con la campana de la arena (1,6 Hz). Al perderlo, sale con opacidad y escala 0,9 en 240 ms.
+**Efectos propios**: un `.hud-shield` por tipo (`data-effect`), en orden fijo: escudo, boca grande y abanico. Cada uno aparece con el revelado de 4.20 cuando el efecto está en `effects` del jugador propio: icono de 18 px (medusa, anémona o estrella), la palabra ("Escudo", "Boca grande", "Abanico"), el tiempo restante con coma decimal ("3,2 s", calculado con la hora del servidor del instante dibujado, que llega en `serverNow`: el reloj del cliente puede estar desfasado) y una barra de 40 × 3 px que se vacía. El color sale de `--fx`: `#9FF4FF` para el escudo, `#FF8FD0` para la boca grande y `#FF7A59` para el abanico; borde y fondo son ese color al 40 % y al 7 %. El icono late a 1,6 Hz. Al vencer, sale con opacidad y escala 0,9 en 240 ms. Con dos o más a la vez, cada uno queda en icono y tiempo: la palabra pasa a ser solo para el lector de pantalla y la barra se oculta, así los tres entran en la columna sin pisar el temporizador.
 
 **Espectador**: `.hud-spectator`, píldora con borde violeta, icono de ojo y "Espectador".
 
@@ -1228,9 +1237,9 @@ Responsables: LAYOUT (textos estáticos del HTML), INTEGRADOR (textos generados)
 | Leyenda de `#difficultyPicker` | Nivel |
 | Opciones de nivel (nombre y pista) | Fácil: Más lenta y con más comida / Medio: Equilibrado / Difícil: Más rápida, con disparos veloces |
 | `.config-info` | El escudo de inmunidad bloquea un disparo y se gasta. |
-| `.controls-hint` `player` | Flechas o WASD para moverte. Espacio para disparar: cada disparo cuesta un segmento. |
+| `.controls-hint` `player` | Muévete con Flechas / WASD (dos a la vez, en diagonal) o con un mando. Espacio, Clic o A del mando para disparar: cada disparo cuesta un segmento. |
 | `.controls-hint` `spectator` | Estás viendo la partida en vivo. |
-| `.controls-hint` `touch` | Para jugar necesitas un teclado. Desde el móvil puedes mirar partidas en curso. |
+| `.controls-hint` `touch` | La partida se juega con el teléfono en horizontal. Apoya el pulgar en cualquier parte de la pantalla y arrástralo hacia donde quieras ir; el botón de la derecha dispara: cada disparo cuesta un segmento. |
 | `#spectatorBanner` | Modo espectador |
 
 ### 8.4 Partida, overlays y ranking
@@ -1282,7 +1291,10 @@ Reemplazo de cada `addCanvasNotification` actual. "Sin toast" significa que el c
 | `gameStart`, `countdown`, `roundEnd`, `gameEnd` | Sin toast (overlays) | |
 | `spectatingStarted` | Mirando la sala {código} | info |
 | `spectatorJoined` | {nombre} está mirando la partida | info |
-| `consumableEvents` (soy yo) | Escudo activo: bloquea un disparo | success, 2500 ms |
+| `consumableEvents` (soy yo) | Escudo activo: bloquea un disparo / Boca grande: comés desde más lejos / Abanico: disparás de a tres | success, 2500 ms |
+| `gameState.frenzy` (empieza) | Frenesí: más comida hasta el final | info, 3000 ms |
+| `gamepadconnected` | Mando conectado: stick o cruceta para moverte, A o gatillo derecho para disparar | info, 3500 ms |
+| `gamepaddisconnected` | Mando desconectado | info, 2500 ms |
 | `consumableEvents` (otro) | Sin toast | |
 | `profileLoaded` | Sin toast (lo dice la intro o la escena) | |
 | `backToMenuSuccess` | Sin toast | |

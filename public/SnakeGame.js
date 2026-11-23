@@ -6,6 +6,7 @@
  *   - window.Arena     (js/render/arena.js)  dibuja canvas#game
  *   - window.Backdrop  (js/ui/backdrop.js)   fondo vivo
  *   - window.Scenes / Overlays / Toasts / HUD (js/ui/scenes.js)
+ *   - window.PadInput  (js/input/pad.js)    lectura del mando
  *
  * Reglas de esta capa (docs/VISUAL_SPEC.md, sección 10):
  *   - Un único requestAnimationFrame siempre vivo. Con partida en curso: Arena.render;
@@ -28,6 +29,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const Backdrop = window.Backdrop || { setMood: noop, pulse: noop };
   const Arena = window.Arena || null;
   const Motion = window.Motion || null; // sin Motion, las posiciones se aplican al llegar (sin interpolar)
+  const PadInput = window.PadInput || null; // sin PadInput, no hay mando
 
   const reportedErrors = new Set();
   function reportOnce(err) {
@@ -139,11 +141,14 @@ document.addEventListener('DOMContentLoaded', function () {
   // Estado propio de la presentación
   let roundLive = false;        // partida en curso: entre gameStart (o spectatingStarted) y gameEnd
   let freezeUntil = 0;          // performance.now() hasta el que la arena muestra el último estado congelado
+  let renderServerT = 0;        // hora del servidor del instante dibujado
+  let crownId = null;           // quién lleva la corona en el frame que alcanzó el render
   let countdownActive = false;  // cuenta regresiva 3, 2, 1 en pantalla
   let startRequested = false;   // el anfitrión pidió iniciar y el servidor todavía no arrancó
   let matchFinished = false;    // llegó gameEnd: la escena final está por entrar o a la vista
   let finalTimer = 0;           // espera entre gameEnd y la pantalla final
   let tensionOn = false;        // últimos 10 segundos
+  let frenzyOn = false;         // ya se avisó el frenesí de esta partida
   let lastPulseSecond = -1;
   let keyboardSeen = false;
   let previewList = [];         // criaturas de la sala para Arena.renderIdle
@@ -527,6 +532,10 @@ document.addEventListener('DOMContentLoaded', function () {
   // Partida nueva (gameStart o spectatingStarted): el primer frame interpola desde este estado
   function restartTimeline(data) {
     resetTimeline();
+    // Partida nueva: hasta el primer frame no hay corona ni hora del servidor (la anterior quedaría
+    // sobre el ganador de la partida pasada)
+    crownId = null;
+    renderServerT = 0;
     if (!timeline) return;
     if (roomConfig && roomConfig.gameSpeed) timeline.setTick(roomConfig.gameSpeed);
     timeline.seed(timelineFrame(data, null));
@@ -539,13 +548,22 @@ document.addEventListener('DOMContentLoaded', function () {
     if (timeline) timeline.clear();
   }
 
+  // Aviso al tomar cada consumible (solo a quien lo toma)
+  const PICKUP_TOASTS = {
+    immunity: 'Escudo activo: bloquea un disparo',
+    bigMouth: 'Boca grande: comés desde más lejos',
+    fan: 'Abanico: disparás de a tres'
+  };
+
   function dispatchTimelineFrame(frame) {
     const data = frame.payload;
     dispatchFrameEvents(data);
+    callEach(data.hitEvents, function (event) {
+      if (event.targetId === socket.id && !isSpectating) rumble(!!event.headshot);
+    });
     callEach(data.consumableEvents, function (event) {
-      if (event.consumableType === 'immunity' && event.playerId === socket.id && !isSpectating) {
-        toast('Escudo activo: bloquea un disparo', 'success', 2500);
-      }
+      const message = PICKUP_TOASTS[event.consumableType];
+      if (message && event.playerId === socket.id && !isSpectating) toast(message, 'success', 2500);
     });
   }
 
@@ -581,9 +599,11 @@ document.addEventListener('DOMContentLoaded', function () {
       else if (pb) Motion.snakeAt(null, pb.segments, 0, cell, period, snake.renderSegments);
       else continue;
       snake.direction = (pb || pa).direction;
-      if (pa) snake.activeConsumable = pa.activeConsumable;
+      if (pa) snake.effects = pa.effects || {};
     }
 
+    renderServerT = s.rt;
+    crownId = (a.payload && a.payload.gameState && a.payload.gameState.leaderId) || null;
     foods = a.foods;
     consumables = a.consumables;
     // Restos de un corte: se desvanecen en sus últimos 2 s (hora del servidor del instante dibujado)
@@ -674,6 +694,7 @@ document.addEventListener('DOMContentLoaded', function () {
       heldArrows.add(arrow);
       clearTimeout(keyReleaseTimer);
       steerMode = 'keys';
+      padActive = false;
       pointer.travel = 0;
       const angle = keysAngle();
       if (angle !== null) emitSteer(angle, perfNow());
@@ -685,21 +706,21 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // ===========================================================================
   // Giro libre: el servidor gira la serpiente hacia el rumbo pedido, como mucho
-  // turnDegrees por paso. Teclado: 8 rumbos. Mouse: el rumbo de la cabeza al puntero.
+  // turnDegrees por paso. Teclado: 8 rumbos. Joystick táctil y mando: cualquier rumbo.
+  // El mouse no apunta (apuntar señalando al rival era mucho más fácil que con el
+  // teclado); el clic sobre la arena dispara.
   // ===========================================================================
   const heldArrows = new Set();            // códigos de flecha apretados (37 izq, 38 arriba, 39 der, 40 abajo)
   const KEY_RELEASE_GRACE_MS = 70;         // soltar las dos teclas de una diagonal casi a la vez no la pierde
-  const MOUSE_TAKEOVER_PX = 12;            // lo que hay que mover el mouse (px de pantalla) para que tome el control
-  const MOUSE_DEADZONE_CELLS = 1.5;        // con el puntero encima de la cabeza no se cambia el rumbo (mínimo)
+  const MOUSE_TAKEOVER_PX = 12;            // en un equipo híbrido, lo que hay que mover el mouse para esconder los controles táctiles
   const STEER_MIN_DELTA = 2 * Math.PI / 180;
   const STEER_MIN_INTERVAL_MS = 40;        // como mucho 25 mensajes por segundo (el servidor da un paso cada 60-70 ms)
-  const STEER_REFRESH_MS = 250;            // con el mouse quieto igual se repite, por si el servidor reinició el rumbo
+  const STEER_REFRESH_MS = 250;            // con el stick quieto igual se repite, por si el servidor reinició el rumbo
   let keyReleaseTimer = 0;
-  let steerMode = 'keys';                  // 'keys' | 'mouse'
+  let steerMode = 'keys';                  // 'keys' | 'touch' | 'pad': quién manda el rumbo
   let lastSteerAngle = null;
   let lastSteerT = 0;
-  const pointer = { cx: 0, cy: 0, has: false, travel: 0 };   // última posición del mouse en pantalla
-  let aimingCursor = false;
+  const pointer = { cx: 0, cy: 0, has: false, travel: 0 };   // última posición del mouse en pantalla (solo para equipos híbridos)
   const arenaStage = canvas ? canvas.closest('.arena-stage') : null;
 
   function canSteer() {
@@ -747,29 +768,26 @@ document.addEventListener('DOMContentLoaded', function () {
     pointer.travel = 0;
   }
 
-  // Guarda la posición en pantalla; se pasa a coordenadas de la arena en cada cuadro, porque la
-  // arena cambia de tamaño y de lugar debajo de un mouse quieto (al empezar la partida, al redimensionar)
+  // Equipo híbrido: si se tocó la pantalla pero ahora se usa el mouse, el joystick táctil sobra.
+  // El mouse no cambia el rumbo.
   function handlePointerMove(event) {
-    if (event.pointerType && event.pointerType !== 'mouse' && event.pointerType !== 'pen') return;
+    if (event.pointerType !== 'mouse') return;
     if (stick.id !== null) return; // arrastrando el joystick (en la emulación táctil llega como mouse)
     if (pointer.has) pointer.travel += Math.abs(event.clientX - pointer.cx) + Math.abs(event.clientY - pointer.cy);
     pointer.cx = event.clientX;
     pointer.cy = event.clientY;
     pointer.has = true;
-    if (steerMode !== 'mouse' && pointer.travel > MOUSE_TAKEOVER_PX && canSteer()) {
-      steerMode = 'mouse';
-      // Equipo híbrido: si se tocó la pantalla pero ahora se usa el mouse, el joystick sobra
-      if (event.pointerType === 'mouse' && !(coarseQuery && coarseQuery.matches)) touchSeen = false;
+    if (touchSeen && pointer.travel > MOUSE_TAKEOVER_PX && canSteer() && !(coarseQuery && coarseQuery.matches)) {
+      touchSeen = false;
+      if (steerMode === 'touch') steerMode = 'keys';
     }
   }
 
-  // Clic en la arena: dispara (y el mouse toma el control del rumbo)
+  // Clic en la arena: dispara
   function handlePointerDown(event) {
     if (event.button !== 0 || (event.pointerType && event.pointerType !== 'mouse' && event.pointerType !== 'pen')) return;
     if (!canSteer()) return;
     event.preventDefault();
-    handlePointerMove(event);
-    steerMode = 'mouse';
     socket.emit('attack');
   }
 
@@ -780,36 +798,77 @@ document.addEventListener('DOMContentLoaded', function () {
     emitSteer(angle, now);
   }
 
-  // Cada cuadro: mira del mouse, controles táctiles y el rumbo del mouse o del joystick
+  // Cada cuadro: controles táctiles, el rumbo del joystick táctil y el mando
   function updateSteering(now) {
-    const aiming = canSteer();
-    if (aiming !== aimingCursor && arenaStage) {
-      aimingCursor = aiming;
-      arenaStage.classList.toggle('is-aiming', aiming);
-    }
+    const playing = canSteer();
     let me = null;
-    if (aiming) for (let i = 0; i < snakes.length; i++) if (snakes[i].id === socket.id) { me = snakes[i]; break; }
+    if (playing) for (let i = 0; i < snakes.length; i++) if (snakes[i].id === socket.id) { me = snakes[i]; break; }
     updateTouchControls(me);
-    if (!aiming) return;
-    if (steerMode === 'touch') {
-      if (stick.id !== null && stick.angle !== null) steerThrottled(stick.angle, now);
-      return;
-    }
-    if (steerMode !== 'mouse' || !pointer.has || !canvas) return;
-    const head = me && me.renderSegments && me.renderSegments[0];
-    if (!head) return;
-    const r = canvas.getBoundingClientRect();
-    if (!r.width || !r.height) return;
-    const half = segmentSize / 2;
-    const dx = (pointer.cx - r.left) / r.width * arenaW() - (head.x + half);
-    const dy = (pointer.cy - r.top) / r.height * arenaH() - (head.y + half);
-    // La zona muerta es al menos el radio de giro: si no, con el puntero sobre una comida la serpiente
-    // orbitaría alrededor sin alcanzarla (a ese radio, girar al máximo la mantiene en el círculo)
-    const turnRad = ((roomConfig && +roomConfig.turnDegrees) || 40) * Math.PI / 180;
-    const dead = Math.max(segmentSize * MOUSE_DEADZONE_CELLS, segmentSize / turnRad + 2);
-    if (dx * dx + dy * dy < dead * dead) return;
-    steerThrottled(Math.atan2(dy, dx), now);
+    if (!playing) return;
+    if (steerMode === 'touch' && stick.id !== null && stick.angle !== null) steerThrottled(stick.angle, now);
+    updatePad(now);
   }
+
+  // ---------------------------------------------------------------------------
+  // Mando (Gamepad API, js/input/pad.js): stick o cruceta para el rumbo, A o gatillo derecho para
+  // disparar. Se lee en cada cuadro; el navegador lo muestra recién cuando se aprieta un botón.
+  // ---------------------------------------------------------------------------
+  // Stick del mando y joystick táctil: 0 da cualquier ángulo; 8 los redondea a ocho rumbos, como el teclado
+  const STICK_SNAP = 0;
+  const padState = { angle: null, fire: false, pad: null };
+  let padActive = false;           // el último control usado fue el mando (para vibrar al recibir un impacto)
+  let padLastShot = -Infinity;
+  let padRumble = null;            // el mando que dio la última entrada (el que vibra)
+
+  function snapStick(angle) {
+    return PadInput ? PadInput.snapAngle(angle, STICK_SNAP) : angle;
+  }
+
+  // Con el stick en reposo no manda nada: la serpiente sigue con el último rumbo y las flechas mandan.
+  // Mantener el disparo apretado dispara cada shotCooldownMs, como la barra espaciadora. Se leen todos
+  // los mandos conectados (PadInput.readAll): manda el que tiene entrada.
+  function updatePad(now) {
+    if (!PadInput || !navigator.getGamepads) return;
+    PadInput.readAll(navigator.getGamepads(), padState);
+    if (padState.pad) padRumble = padState.pad;
+    if (padState.angle !== null) {
+      padActive = true;
+      steerMode = 'pad';
+      steerThrottled(snapStick(padState.angle), now);
+    }
+    if (padState.fire) {
+      padActive = true;
+      const every = (roomConfig && +roomConfig.shotCooldownMs) || 200;
+      if (now - padLastShot >= every) {
+        padLastShot = now;
+        socket.emit('attack');
+      }
+    }
+  }
+
+  // Vibración al recibir un impacto, si el navegador la ofrece (Chrome y Edge) y se juega con el mando
+  function rumble(strong) {
+    if (!padActive || !padRumble || !padRumble.connected) return;
+    const act = padRumble.vibrationActuator;
+    if (!act || typeof act.playEffect !== 'function') return;
+    try {
+      const p = act.playEffect('dual-rumble', strong
+        ? { duration: 260, strongMagnitude: 0.9, weakMagnitude: 0.6 }
+        : { duration: 160, strongMagnitude: 0.5, weakMagnitude: 0.4 });
+      if (p && p.catch) p.catch(function () { /* nada */ });
+    } catch (e) { /* nada */ }
+  }
+
+  window.addEventListener('gamepadconnected', function () {
+    if (!PadInput) return;
+    toast('Mando conectado: stick o cruceta para moverte, A o gatillo derecho para disparar', 'info', 3500);
+  });
+  window.addEventListener('gamepaddisconnected', function () {
+    if (!PadInput) return;
+    padActive = false;
+    padRumble = null;
+    toast('Mando desconectado', 'info', 2500);
+  });
 
   // ---------------------------------------------------------------------------
   // Táctil: joystick flotante en la mitad izquierda y botón de disparo a la derecha.
@@ -828,6 +887,7 @@ document.addEventListener('DOMContentLoaded', function () {
   let touchSeen = false;            // hubo toques en esta pestaña (o el puntero principal es táctil)
   let touchShown = false;
   let fireReady = null;
+  let fireTimer = 0;               // disparo continuo mientras el botón sigue apretado
 
   function setStickBase(x, y) {
     stick.x = x;
@@ -859,6 +919,7 @@ document.addEventListener('DOMContentLoaded', function () {
       stick.id = null;
       touchControls.hidden = !show;
       if (show) stickToRest();
+      else onFireUp();
     }
     if (!show) return;
     const ready = !!(me && me.renderSegments && me.renderSegments.length >= 2);
@@ -902,7 +963,7 @@ document.addEventListener('DOMContentLoaded', function () {
     setKnob(dx, dy);
     if (dist > STICK_DEADZONE) {
       const first = stick.angle === null;
-      stick.angle = Math.atan2(dy, dx);
+      stick.angle = snapStick(Math.atan2(dy, dx));
       if (first) emitSteer(stick.angle, perfNow()); // el primer rumbo sale enseguida
     }
   }
@@ -914,6 +975,8 @@ document.addEventListener('DOMContentLoaded', function () {
     stickToRest();
   }
 
+  // Mantener apretado dispara en continuo, como la barra espaciadora: un pedido por cada pausa entre
+  // tiros (el servidor igual la hace cumplir)
   function onFireDown(event) {
     event.preventDefault();
     event.stopPropagation();
@@ -922,8 +985,18 @@ document.addEventListener('DOMContentLoaded', function () {
     fireButton.classList.add('is-pressed');
     socket.emit('attack');
     if (navigator.vibrate) { try { navigator.vibrate(12); } catch (e) { /* nada */ } }
+    clearInterval(fireTimer);
+    const every = (roomConfig && +roomConfig.shotCooldownMs) || 200;
+    fireTimer = setInterval(function () {
+      if (!canSteer() || !touchShown) { onFireUp(); return; }
+      socket.emit('attack');
+    }, every);
   }
-  function onFireUp() { fireButton.classList.remove('is-pressed'); }
+  function onFireUp() {
+    clearInterval(fireTimer);
+    fireTimer = 0;
+    fireButton.classList.remove('is-pressed');
+  }
 
   if (touchControls && stickZone && stickBase && stickKnob && fireButton) {
     stickZone.addEventListener('pointerdown', onStickDown);
@@ -985,7 +1058,7 @@ document.addEventListener('DOMContentLoaded', function () {
     snake.score = serverSnake.score;
     snake.gameover = serverSnake.gameover;
     snake.scoreLeftToGrow = serverSnake.scoreLeftToGrow;
-    snake.activeConsumable = serverSnake.activeConsumable;
+    snake.effects = serverSnake.effects || {};
 
     return snake;
   }
@@ -1014,13 +1087,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function applyArenaConfig() {
     if (!Arena) return;
-    ui(function () { Arena.setConfig({ segmentSize: segmentSize, width: arenaW(), height: arenaH() }); });
+    const reach = (roomConfig && +roomConfig.bigMouthReach) || 0;
+    ui(function () { Arena.setConfig({ segmentSize: segmentSize, width: arenaW(), height: arenaH(), bigMouthReach: reach }); });
   }
 
   // Objetos reutilizados por frame (sin allocations en el bucle)
   const arenaState = {
     snakes: snakes, foods: foods, consumables: consumables, projectiles: clientProjectiles,
-    myId: null, roundTimeLeft: 0, playing: false, spectating: false
+    myId: null, roundTimeLeft: 0, playing: false, spectating: false, leaderId: null
   };
   const idleOptions = { snakesPreview: previewList, caption: '' };
 
@@ -1033,6 +1107,7 @@ document.addEventListener('DOMContentLoaded', function () {
     arenaState.roundTimeLeft = roundTimeLeft;
     arenaState.playing = !!gameState.playing;
     arenaState.spectating = isSpectating;
+    arenaState.leaderId = crownId;
   }
 
   function renderFrame(now) {
@@ -1056,7 +1131,7 @@ document.addEventListener('DOMContentLoaded', function () {
         idleOptions.caption = scene === 'room' && !countdownActive ? idleCaption : '';
         Arena.renderIdle(now, idleOptions);
       }
-      // Rumbo del mouse (desde la cabeza recién dibujada) o del joystick; mira y controles táctiles
+      // Controles táctiles y rumbo del joystick táctil o del mando
       updateSteering(perfNow());
     } catch (err) {
       reportOnce(err);
@@ -1088,17 +1163,18 @@ document.addEventListener('DOMContentLoaded', function () {
   // HUD y tensión
   // ===========================================================================
   function hudPlayers() {
-    const now = Date.now();
     return snakes.map(function (s) {
-      const ac = s.activeConsumable;
-      const immune = !!(ac && ac.type === 'immunity' && (!ac.endTime || now < ac.endTime));
+      // El servidor solo manda los efectos vigentes: con el reloj del cliente desfasado, la hora no decide
+      const shieldEnd = s.effects ? s.effects.immunity : 0;
+      const immune = !!shieldEnd;
       return {
         id: s.id,
         name: s.name,
         color: s.color,
         score: s.score,
         immune: immune,
-        immuneUntil: immune && ac.endTime ? ac.endTime : 0,
+        immuneUntil: immune ? shieldEnd : 0,
+        effects: s.effects || null,
         isMe: !isSpectating && s.id === socket.id,
         gameover: !!s.gameover
       };
@@ -1113,7 +1189,8 @@ document.addEventListener('DOMContentLoaded', function () {
         roundTime: roundTime(),
         players: hudPlayers(),
         playing: roundLive,
-        spectating: isSpectating
+        spectating: isSpectating,
+        serverNow: renderServerT
       });
     });
   }
@@ -1135,6 +1212,15 @@ document.addEventListener('DOMContentLoaded', function () {
   function resetTension() {
     tensionOn = false;
     lastPulseSecond = -1;
+    frenzyOn = false;
+  }
+
+  // Frenesí (últimos 20 s): un aviso y un pulso lima del fondo cuando empieza
+  function checkFrenzy() {
+    if (!roundLive || frenzyOn || !gameState || !gameState.frenzy) return;
+    frenzyOn = true;
+    toast('Frenesí: más comida hasta el final', 'info', 3000);
+    ui(function () { Backdrop.pulse('#C8FF3C', 0.25); });
   }
 
   // ===========================================================================
@@ -1293,7 +1379,7 @@ document.addEventListener('DOMContentLoaded', function () {
         existingSnake.gameover = serverPlayer.gameover;
         existingSnake.scoreLeftToGrow = serverPlayer.scoreLeftToGrow;
         existingSnake.color = serverPlayer.color;
-        existingSnake.activeConsumable = serverPlayer.activeConsumable;
+        existingSnake.effects = serverPlayer.effects || {};
         return existingSnake;
       }
       return createLocalSnake(serverPlayer);
@@ -1490,7 +1576,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!timeline) {
           localSnake.renderSegments = copySegments(serverSnake.segments);
           localSnake.direction = { x: serverSnake.direction.x, y: serverSnake.direction.y };
-          localSnake.activeConsumable = serverSnake.activeConsumable;
+          localSnake.effects = serverSnake.effects || {};
         }
         localSnake.score = serverSnake.score;
         localSnake.gameover = serverSnake.gameover;
@@ -1508,6 +1594,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // 3. HUD y tensión
     updateHUD();
     checkTension();
+    checkFrenzy();
   });
 
   // Fin de la partida: la arena se congela sobre el ganador y después entra la pantalla final.
@@ -1785,7 +1872,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const nextIds = new Set();
     const frag = document.createDocumentFragment();
-    const now = Date.now();
     sortedPlayers.forEach(function (player, index) {
       nextIds.add(player.id);
       const isMe = !isSpectating && player.id === socket.id;
@@ -1809,8 +1895,7 @@ document.addEventListener('DOMContentLoaded', function () {
       listItem.appendChild(score);
 
       const status = el('span', 'player-status');
-      const ac = player.activeConsumable;
-      if (!player.gameover && ac && ac.type === 'immunity' && now < ac.endTime) {
+      if (!player.gameover && player.effects && player.effects.immunity) {
         status.setAttribute('role', 'img');
         status.setAttribute('aria-label', 'Con escudo');
         status.appendChild(iconEl('i-medusa'));

@@ -279,6 +279,8 @@
   const causticOff = new Float32Array(4); // ax, ay, bx, by
   let snowSprite = null;
   let pearlSprite = null, shieldSprite = null, violetSprite = null, pearlBig = null;
+  let anemoneSprite = null, coralSprite = null;   // glows de la boca grande y del abanico
+  let goldSprite = null;                          // glow de la corona
   let turquoiseSprite = null;
 
   function buildBackground() {
@@ -407,6 +409,9 @@
     pearlBig = Particles.glowSprite('#E8FBFF', true);
     shieldSprite = Particles.glowSprite('#9FF4FF', false);
     violetSprite = Particles.glowSprite('#B9A6FF', true);
+    anemoneSprite = Particles.glowSprite('#FF8FD0', true);
+    coralSprite = Particles.glowSprite('#FF7A59', true);
+    goldSprite = Particles.glowSprite('#FFE08A', false);
     turquoiseSprite = Particles.glowSprite('#1FF2D2', true);
   }
 
@@ -873,7 +878,7 @@
   // Pool de efectos de la arena
   // ---------------------------------------------------------------------------
   const FX_RING = 1, FX_FLASH = 2, FX_WAVE = 3, FX_COLUMN = 4, FX_FOUNTAIN = 5,
-      FX_EDGE = 6, FX_PWAVE = 7, FX_DROP = 8, FX_TEXT = 9;
+      FX_EDGE = 6, FX_PWAVE = 7, FX_DROP = 8, FX_TEXT = 9, FX_STREAK = 10;
   const FX_MAX = 112;
   const fxPool = [];
   for (let fi = 0; fi < FX_MAX; fi++) {
@@ -1032,6 +1037,24 @@
             c.globalAlpha = 0.6 * (1 - t);
             c.drawImage(f.paint.glowBody, f.x - dr * 4, dy - dr * 4, dr * 8, dr * 8);
           }
+        } else if (type === FX_STREAK) {
+          // Comida tomada con la boca grande: viaja hasta la cabeza (que sigue moviéndose), acelerando
+          const rec = snakeRecs.get(f.id);
+          if (!rec || rec.n === 0) continue;
+          const hx = rec.x[0], hy = rec.y[0];
+          const p = t * t, q = Math.max(0, p - 0.35);
+          const px = f.x + (hx - f.x) * p, py = f.y + (hy - f.y) * p;
+          c.globalCompositeOperation = 'lighter';
+          c.globalAlpha = 0.75;
+          c.strokeStyle = f.color;
+          c.lineWidth = 2 * (1 - 0.5 * t);
+          c.beginPath();
+          c.moveTo(f.x + (hx - f.x) * q, f.y + (hy - f.y) * q);
+          c.lineTo(px, py);
+          c.stroke();
+          c.globalAlpha = 0.9;
+          const sr = 0.9 * f.s;
+          c.drawImage(pearlSprite, px - sr, py - sr, sr * 2, sr * 2);
         }
       } else if (layer === 2) {
         if (type !== FX_TEXT || !f.sprite) continue;
@@ -2004,8 +2027,14 @@
     c.globalCompositeOperation = 'source-over';
   }
 
-  // Escudo en el mapa (5.9): medusa violeta de tamaño fijo con un anillo que se expande cada 2 s,
-  // para que se distinga de la comida y de la nieve a cualquier escala. Medidas en px de la arena.
+  // Consumibles en el mapa (5.9): cada tipo con su silueta y su color, de tamaño fijo en px de la
+  // arena. Todos comparten el anillo de sonar (en su color), que es la seña de "esto se toma".
+  // sonar: anillo y partículas; ring: anillo al tomarlo y pulso del fondo; light: partículas claras
+  const CONS_LOOK = {
+    immunity: { sonar: '#B9A6FF', ring: '#9FF4FF', light: '#C9F8FF' },
+    bigMouth: { sonar: '#FF8FD0', ring: '#FF8FD0', light: '#FFD6EC' },
+    fan: { sonar: '#FF7A59', ring: '#FF7A59', light: '#FFE3D9' }
+  };
   const CONS_BELL_W = 7.5, CONS_BELL_H = 9;   // semiancho y alto de la campana
   const CONS_SONAR_MS = 2000;
   function drawConsumables(cons, now) {
@@ -2016,52 +2045,150 @@
       const id = it.id !== undefined ? it.id : (it.x * 1000 + it.y);
       const sc = consSpawnScale(id, now);
       if (sc <= 0.01) continue;
+      const look = CONS_LOOK[it.type] || CONS_LOOK.immunity;
       const ph = foodPhase(it.x, it.y);
       const cx = it.x + half;
       const cy = it.y + half + 1.2 * Math.sin(animT * 0.0012 * TAU / 1.2 + ph) - 2;
       const beat = Math.sin(animT * 0.001 * 1.4 * TAU + ph);
-      // sonar: un anillo que nace en la campana y se abre hasta 26 px mientras se apaga
+      // sonar: un anillo que nace en el centro y se abre hasta 26 px mientras se apaga
       const st = ((animT + ph * 318) % CONS_SONAR_MS) / CONS_SONAR_MS;
       c.globalCompositeOperation = 'lighter';
       c.globalAlpha = 0.6 * (1 - st) * (1 - st) * sc;
-      c.strokeStyle = '#B9A6FF';
+      c.strokeStyle = look.sonar;
       c.lineWidth = 1.5;
       c.beginPath();
       c.arc(cx, cy + 2, 9 + 17 * easeOutCubic(st), 0, TAU);
       c.stroke();
-      // glows: violeta amplio y celeste cerca del núcleo
-      const g2 = 20 * sc * (1 + 0.08 * Math.sin(animT * 0.001 * 0.7 * TAU + ph));
-      c.globalAlpha = 0.5 + 0.1 * Math.sin(animT * 0.001 * 0.7 * TAU + ph);
-      c.drawImage(violetSprite, cx - g2, cy - g2, g2 * 2, g2 * 2);
-      const g1 = 12 * sc;
-      c.globalAlpha = 0.35;
-      c.drawImage(shieldSprite, cx - g1, cy - g1, g1 * 2, g1 * 2);
-      // tentáculos
-      c.globalCompositeOperation = 'source-over';
-      const bw = CONS_BELL_W * sc * (1 + 0.06 * beat), bh = CONS_BELL_H * sc * (1 - 0.06 * beat);
-      c.globalAlpha = 0.85;
-      c.strokeStyle = '#D6CCFF';
-      c.lineWidth = 1.2;
-      c.beginPath();
-      for (let k = 0; k < 3; k++) {
-        const tx = cx + (k - 1) * bw * 0.55;
-        const sway = Math.sin(animT * 0.004 + k) * 1.8 * sc;
-        c.moveTo(tx, cy);
-        c.quadraticCurveTo(tx + sway, cy + 4 * sc, tx - sway * 0.6, cy + 8 * sc);
-      }
-      c.stroke();
-      // campana (sprite horneado con su degradado y su borde)
-      const bell = ensureConsSprite();
-      c.globalAlpha = 1;
-      c.drawImage(bell, cx - bw * bell._sx, cy - bh * bell._sy, bw * 2 * bell._sx, bh * bell._sy * bell._hy);
-      // núcleo
-      c.globalCompositeOperation = 'lighter';
-      c.globalAlpha = 0.9;
-      const nr = 4 * sc;
-      c.drawImage(pearlSprite, cx - nr, cy - bh * 0.45 - nr, nr * 2, nr * 2);
+      if (look === CONS_LOOK.bigMouth) drawAnemone(c, cx, cy + 2, sc, ph, beat);
+      else if (look === CONS_LOOK.fan) drawStarfish(c, cx, cy + 2, sc, ph);
+      else drawJelly(c, cx, cy, sc, ph, beat);
     }
     c.globalAlpha = 1;
     c.globalCompositeOperation = 'source-over';
+  }
+
+  // Escudo: medusa violeta
+  function drawJelly(c, cx, cy, sc, ph, beat) {
+    // glows: violeta amplio y celeste cerca del núcleo
+    const g2 = 20 * sc * (1 + 0.08 * Math.sin(animT * 0.001 * 0.7 * TAU + ph));
+    c.globalCompositeOperation = 'lighter';
+    c.globalAlpha = 0.5 + 0.1 * Math.sin(animT * 0.001 * 0.7 * TAU + ph);
+    c.drawImage(violetSprite, cx - g2, cy - g2, g2 * 2, g2 * 2);
+    const g1 = 12 * sc;
+    c.globalAlpha = 0.35;
+    c.drawImage(shieldSprite, cx - g1, cy - g1, g1 * 2, g1 * 2);
+    // tentáculos
+    c.globalCompositeOperation = 'source-over';
+    const bw = CONS_BELL_W * sc * (1 + 0.06 * beat), bh = CONS_BELL_H * sc * (1 - 0.06 * beat);
+    c.globalAlpha = 0.85;
+    c.strokeStyle = '#D6CCFF';
+    c.lineWidth = 1.2;
+    c.beginPath();
+    for (let k = 0; k < 3; k++) {
+      const tx = cx + (k - 1) * bw * 0.55;
+      const sway = Math.sin(animT * 0.004 + k) * 1.8 * sc;
+      c.moveTo(tx, cy);
+      c.quadraticCurveTo(tx + sway, cy + 4 * sc, tx - sway * 0.6, cy + 8 * sc);
+    }
+    c.stroke();
+    // campana (sprite horneado con su degradado y su borde)
+    const bell = ensureConsSprite();
+    c.globalAlpha = 1;
+    c.drawImage(bell, cx - bw * bell._sx, cy - bh * bell._sy, bw * 2 * bell._sx, bh * bell._sy * bell._hy);
+    // núcleo
+    c.globalCompositeOperation = 'lighter';
+    c.globalAlpha = 0.9;
+    const nr = 4 * sc;
+    c.drawImage(pearlSprite, cx - nr, cy - bh * 0.45 - nr, nr * 2, nr * 2);
+  }
+
+  // Boca grande: anémona rosa. Ocho tentáculos que se mecen alrededor de una boca que se abre y
+  // se cierra con el latido.
+  const ANEMONE_ARMS = 8, ANEMONE_SWAY = 0.14;   // vaivén en radianes: 8 brazos a 45° no llegan a cruzarse
+  function anemoneSway(k, ph) { return ANEMONE_SWAY * Math.sin(animT * 0.003 + k * 1.3 + ph); }
+  function drawAnemone(c, cx, cy, sc, ph, beat) {
+    const g = 18 * sc * (1 + 0.08 * Math.sin(animT * 0.001 * 0.7 * TAU + ph));
+    c.globalCompositeOperation = 'lighter';
+    c.globalAlpha = 0.5;
+    c.drawImage(anemoneSprite, cx - g, cy - g, g * 2, g * 2);
+    c.globalCompositeOperation = 'source-over';
+    const open = 1 + 0.12 * beat;
+    const r0 = 3 * sc * open, r1 = 8.5 * sc;
+    c.globalAlpha = 0.9;
+    c.strokeStyle = '#FF8FD0';
+    c.lineWidth = 1.4;
+    c.lineCap = 'round';
+    c.beginPath();
+    for (let k = 0; k < ANEMONE_ARMS; k++) {
+      const a = k * TAU / ANEMONE_ARMS + ph;
+      const sway = anemoneSway(k, ph);
+      c.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
+      c.quadraticCurveTo(cx + Math.cos(a + sway) * (r0 + r1) * 0.55, cy + Math.sin(a + sway) * (r0 + r1) * 0.55,
+        cx + Math.cos(a + sway * 1.6) * r1, cy + Math.sin(a + sway * 1.6) * r1);
+    }
+    c.stroke();
+    c.lineCap = 'butt';
+    // puntas
+    c.fillStyle = '#FFD6EC';
+    c.beginPath();
+    for (let k = 0; k < ANEMONE_ARMS; k++) {
+      const a = k * TAU / ANEMONE_ARMS + ph + anemoneSway(k, ph) * 1.6;
+      const tx = cx + Math.cos(a) * r1, ty = cy + Math.sin(a) * r1;
+      c.moveTo(tx + 1.1 * sc, ty);
+      c.arc(tx, ty, 1.1 * sc, 0, TAU);
+    }
+    c.fill();
+    // boca: centro oscuro con borde claro
+    c.fillStyle = 'rgba(58, 8, 40, 0.9)';
+    c.beginPath();
+    c.arc(cx, cy, 2.6 * sc * open, 0, TAU);
+    c.fill();
+    c.strokeStyle = '#FFD6EC';
+    c.lineWidth = 1.2;
+    c.stroke();
+  }
+
+  // Abanico: estrella de mar coral de cinco brazos que gira despacio
+  function drawStarfish(c, cx, cy, sc, ph) {
+    const g = 18 * sc * (1 + 0.08 * Math.sin(animT * 0.001 * 0.7 * TAU + ph));
+    c.globalCompositeOperation = 'lighter';
+    c.globalAlpha = 0.5;
+    c.drawImage(coralSprite, cx - g, cy - g, g * 2, g * 2);
+    c.globalCompositeOperation = 'source-over';
+    const rot = animT * 0.0004 + ph - Math.PI / 2;
+    const ro = 8.5 * sc, ri = 3.6 * sc;
+    c.beginPath();
+    for (let k = 0; k < 10; k++) {
+      const a = rot + k * Math.PI / 5;
+      const r = k % 2 ? ri : ro;
+      if (k === 0) c.moveTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+      else c.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+    }
+    c.closePath();
+    c.globalAlpha = 0.9;
+    c.fillStyle = '#FF7A59';
+    c.fill();
+    c.strokeStyle = '#FFD2C4';
+    c.lineWidth = 1.2;
+    c.lineJoin = 'round';
+    c.stroke();
+    c.lineJoin = 'miter';
+    // poros a lo largo de cada brazo
+    c.fillStyle = '#FFE3D9';
+    c.beginPath();
+    for (let k = 0; k < 5; k++) {
+      const a = rot + k * TAU / 5;
+      for (let j = 1; j <= 2; j++) {
+        const px = cx + Math.cos(a) * ro * j * 0.32, py = cy + Math.sin(a) * ro * j * 0.32;
+        c.moveTo(px + 0.8 * sc, py);
+        c.arc(px, py, 0.8 * sc, 0, TAU);
+      }
+    }
+    c.fill();
+    c.globalCompositeOperation = 'lighter';
+    c.globalAlpha = 0.8;
+    const nr = 3 * sc;
+    c.drawImage(pearlSprite, cx - nr, cy - nr, nr * 2, nr * 2);
   }
 
   // Campana del escudo: media elipse con degradado violeta (#D9CCFF -> #9C82FF, alpha 0,75) y
@@ -2388,11 +2515,12 @@
       rec.name = sn.name;
       rec.isMe = me !== null && me !== undefined && sn.id === me;
       if (rec.colorKey !== sn.color || !rec.paint) { rec.paint = paintFor(sn.color); rec.colorKey = sn.color; }
-      const ac = sn.activeConsumable;
-      const imm = !!(ac && ac.type === 'immunity');
+      const shieldEnd = sn.effects ? sn.effects.immunity : 0;
+      const imm = !!shieldEnd;
       if (imm && !rec.immune && now - rec.inflateT0 > 1000) rec.inflateT0 = now; // por si el evento no llegó
       rec.immune = imm;
-      rec.immuneEnd = imm ? (ac.endTime || 0) : 0;
+      rec.immuneEnd = imm ? shieldEnd : 0;
+      rec.bigMouth = !!(sn.effects && sn.effects.bigMouth);
       if (sn.gameover) { rec.n = 0; continue; }
       const segs = sn.getRenderSegments ? sn.getRenderSegments() : sn.segments;
       const n = segs ? segs.length : 0;
@@ -2433,6 +2561,8 @@
     for (i = 0; i < visCount; i++) { rec = visRecs[i]; passHalo(rec, ssOf(rec), now); }
     // membrana de inmunidad
     for (i = 0; i < visCount; i++) { rec = visRecs[i]; if (rec.immune) passImmunityMembrane(rec, ssOf(rec), now); }
+    // alcance de la boca grande
+    for (i = 0; i < visCount; i++) { rec = visRecs[i]; if (rec.bigMouth && rec.n > 0) passBigMouthReach(rec, ssOf(rec)); }
     // 2. cuerpos
     c.globalCompositeOperation = 'source-over';
     c.globalAlpha = 1;
@@ -2444,6 +2574,69 @@
     for (i = 0; i < visCount; i++) { rec = visRecs[i]; passPhotophores(rec, ssOf(rec), now); }
     // 5. cabezas
     for (i = 0; i < visCount; i++) { rec = visRecs[i]; passHead(rec, ssOf(rec), now); }
+    c.globalAlpha = 1;
+    c.globalCompositeOperation = 'source-over';
+  }
+
+  // Boca grande: un anillo punteado y tenue, del color de la anémona, marca hasta dónde come
+  let bigMouthReach = 2.55;
+  function passBigMouthReach(rec, ss) {
+    const c = ctx;
+    c.globalCompositeOperation = 'lighter';
+    c.globalAlpha = (0.34 + 0.08 * Math.sin(animT * 0.004)) * rec.alphaVis;
+    c.strokeStyle = '#FF8FD0';
+    c.lineWidth = 1.2;
+    c.setLineDash(DASH_REACH);
+    c.lineDashOffset = -animT * 0.01;
+    c.beginPath();
+    c.arc(rec.x[0], rec.y[0], bigMouthReach * ss, 0, TAU);
+    c.stroke();
+    c.setLineDash(NO_DASH);
+    c.lineDashOffset = 0;
+  }
+  const DASH_REACH = [3, 4], NO_DASH = [];
+
+  // Corona (5.6): tres puntas de luz dorada justo encima de la cabeza de la serpiente más larga,
+  // siempre derecha en la pantalla, debajo de la etiqueta de nombre
+  function drawCrown(id, now) {
+    if (id === null || id === undefined) return;
+    const rec = snakeRecs.get(id);
+    if (!rec || rec.n === 0 || rec.lastSeenT !== now) return;
+    const c = ctx, ss = s;
+    const hx = rec.x[0], hy = rec.y[0] - 0.75 * ss + 0.6 * Math.sin(animT * 0.003);
+    const w = 0.7 * ss, hSide = 0.42 * ss, hMid = 0.62 * ss;
+    const a = rec.alphaVis;
+    // glow detrás
+    c.globalCompositeOperation = 'lighter';
+    c.globalAlpha = 0.55 * a;
+    const g = 1.3 * ss;
+    c.drawImage(goldSprite, hx - g, hy - hMid * 0.5 - g, g * 2, g * 2);
+    // contorno: base y tres puntas
+    c.globalCompositeOperation = 'source-over';
+    c.globalAlpha = 0.95 * a;
+    c.strokeStyle = '#FFE08A';
+    c.lineWidth = 1.4;
+    c.lineJoin = 'round';
+    c.beginPath();
+    c.moveTo(hx - w, hy);
+    c.lineTo(hx - w, hy - hSide);
+    c.lineTo(hx - w * 0.45, hy - hSide * 0.45);
+    c.lineTo(hx, hy - hMid);
+    c.lineTo(hx + w * 0.45, hy - hSide * 0.45);
+    c.lineTo(hx + w, hy - hSide);
+    c.lineTo(hx + w, hy);
+    c.closePath();
+    c.fillStyle = 'rgba(255, 224, 138, 0.28)';
+    c.fill();
+    c.stroke();
+    c.lineJoin = 'miter';
+    // perlas en las puntas
+    c.globalCompositeOperation = 'lighter';
+    c.globalAlpha = a;
+    const pr = 0.22 * ss;
+    c.drawImage(pearlSprite, hx - w - pr, hy - hSide - pr, pr * 2, pr * 2);
+    c.drawImage(pearlSprite, hx - pr, hy - hMid - pr, pr * 2, pr * 2);
+    c.drawImage(pearlSprite, hx + w - pr, hy - hSide - pr, pr * 2, pr * 2);
     c.globalAlpha = 1;
     c.globalCompositeOperation = 'source-over';
   }
@@ -2513,6 +2706,7 @@
     drawProjectiles(state.projectiles, now); // 9
     drawTails(now);                //   colas desprendidas
     drawCreatures(now, ssGame);    // 10
+    if (state.playing || fr) drawCrown(state.leaderId, now); //   corona sobre la más larga
     particles.draw(ctx);           // 11
     drawFxLayer(1, now);           //   anillos, destellos, ola
     drawGameLabels(now);           // 12
@@ -2859,6 +3053,15 @@
     fxRing(cx, cy, 0.4 * s, 1.8 * s, 320, col, 0.7, 1.5, 0);
     const rec = snakeRecs.get(e.playerId);
     if (rec && rec.bulgeN < 3) rec.bulge[rec.bulgeN++] = nowMs();
+    // Comida tomada de lejos (boca grande): una estela la lleva hasta la boca. Del otro lado de un
+    // portal, no: cruzaría toda la arena.
+    if (rec && rec.n > 0) {
+      const dist = Math.hypot(rec.x[0] - cx, rec.y[0] - cy);
+      if (dist > 1.2 * s && dist < 4 * s) {
+        const f = fxSpawn(FX_STREAK, nowMs(), 170);
+        f.x = cx; f.y = cy; f.id = e.playerId; f.color = col;
+      }
+    }
     if (isMe(e.playerId)) fxText(cx, cy - 0.6 * s, '+' + v, col, labelPx() * 1.15, 18, 700);
   }
 
@@ -2975,7 +3178,8 @@
     BO.angle = Math.atan2(dy, dx);
     BO.spread = 0.9;
     burstNow(cx - dx * s * 0.4, cy - dy * s * 0.4);
-    const rec = snakeRecs.get(e.playerId);
+    // Los laterales del abanico (spread) no repiten el costo: la ráfaga cuesta un solo segmento
+    const rec = e.spread ? null : snakeRecs.get(e.playerId);
     if (rec && rec.n > 0) {
       rec.recoilT0 = now;
       const ti = rec.n - 1;
@@ -2990,7 +3194,7 @@
       if (!tr) { tr = newTrail(); tr.seen = frameNo; trails.set(e.id, tr); }
       tr.paint = paint; tr.color = e.color;
     }
-    if (isMe(e.playerId)) shake(1.5, 80);
+    if (isMe(e.playerId) && !e.spread) shake(1.5, 80);
   }
 
   function onProjectileExpired(e) {
@@ -3015,14 +3219,15 @@
     if (e.x !== undefined && e.y !== undefined) { cx = cellCenterX(e.x); cy = cellCenterY(e.y); }
     else if (rec && rec.n > 0) { cx = rec.x[0]; cy = rec.y[0]; }
     else return;
-    fxRing(cx, cy, 0.5 * s, 2.4 * s, 420, '#9FF4FF', 0.8, 1.8, 0);
+    const look = CONS_LOOK[e.consumableType] || CONS_LOOK.immunity;
+    fxRing(cx, cy, 0.5 * s, 2.4 * s, 420, look.ring, 0.8, 1.8, 0);
     const half = scaleCount(18) >> 1;
-    setBurst(half, '#C9F8FF', 40, 120, 500, 900, 1.2, 2.6, 'dot', -30, 0.92);
+    setBurst(half, look.light, 40, 120, 500, 900, 1.2, 2.6, 'dot', -30, 0.92);
     burstNow(cx, cy);
-    setBurst(half, '#B9A6FF', 40, 120, 500, 900, 1.2, 2.6, 'dot', -30, 0.92);
+    setBurst(half, look.sonar, 40, 120, 500, 900, 1.2, 2.6, 'dot', -30, 0.92);
     burstNow(cx, cy);
-    if (rec) { rec.inflateT0 = now; rec.immune = true; }
-    if (isMe(e.playerId)) backdropPulse('#9FF4FF', 0.2);
+    if (rec && look === CONS_LOOK.immunity) { rec.inflateT0 = now; rec.immune = true; }
+    if (isMe(e.playerId)) backdropPulse(look.ring, 0.2);
   }
 
   function onRoundStart() {
@@ -3132,6 +3337,7 @@
       for (let i = 0; i < SNOW_MAX; i++) { snowX[i] = Math.random() * W; snowY[i] = Math.random() * H; }
       if (canvas) applySize(true);
     }
+    if (+cfg.bigMouthReach > 0) bigMouthReach = +cfg.bigMouthReach;
     const ns = +cfg.segmentSize || s;
     if (ns !== s) {
       s = ns;

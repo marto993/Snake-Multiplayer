@@ -2,11 +2,11 @@ const http = require('http');
 const express = require('express');
 const socketIO = require('socket.io');
 const Snake = require('./public/snakeClass.js');
-const { buildRoomConfig } = require('./game/difficulty');
-const { traceProjectile } = require('./game/projectiles');
+const { buildRoomConfig, consumableLimit } = require('./game/difficulty');
+const { traceProjectile, fanDirections } = require('./game/projectiles');
 const { touchedAlong, wrapPoint, cellIndex } = require('./game/geometry');
 const { cutSnake, dropRemains } = require('./game/remains');
-const { matchResult } = require('./game/match');
+const { matchResult, frenzyFoodTarget, crownHolder } = require('./game/match');
 const { createAssets } = require('./lib/assets');
 const { secureIndex, reportHandler, REPORT_PATH, REPORT_TYPES } = require('./lib/security');
 const sqlite3 = require('sqlite3').verbose();
@@ -186,7 +186,7 @@ app.use(express.static('public'));
 let rooms = new Map();
 let connectedUsers = new Map(); // socketId -> { name, roomId, playerId }
 
-// MODIFICADO: serializePlayers para incluir consumibles activos
+// Cada jugador viaja con sus efectos vigentes ({ tipo: vencimiento en ms del servidor })
 function serializePlayers(players) {
   return players.map(player => ({
     id: player.id,
@@ -197,7 +197,7 @@ function serializePlayers(players) {
     score: player.score,
     gameover: player.gameover,
     scoreLeftToGrow: player.scoreLeftToGrow,
-    activeConsumable: player.getActiveConsumable()
+    effects: player.activeEffects(Date.now())
   }));
 }
 
@@ -366,6 +366,8 @@ function resetRoomToWaiting(room) {
   room.gameState.round = 1;
   room.gameState.downCounter = 3;
   room.gameState.roundTimeLeft = room.config.roundTime;
+  room.gameState.frenzy = false;
+  room.gameState.leaderId = null;
   room.projectiles = [];
   room.pendingProjectileEvents = [];
   room.consumables = [];
@@ -503,10 +505,10 @@ function initializeConsumableSystem(room) {
   });
   room.consumableTimers = {};
   
-  // Inicializar consumibles de inmunidad si están habilitados
-  if (room.config.consumables.immunity.enabled) {
-    startConsumableTimer(room, 'immunity');
-  }
+  // Un temporizador por tipo habilitado (escudo, boca grande, abanico)
+  Object.keys(room.config.consumables).forEach(type => {
+    if (room.config.consumables[type].enabled) startConsumableTimer(room, type);
+  });
 }
 
 function startConsumableTimer(room, consumableType) {
@@ -567,13 +569,7 @@ function restartConsumableTimer(room, consumableType) {
 
 function getMaxConsumablesForType(room, consumableType) {
   const playerCount = room.players.filter(p => !p.gameover).length;
-  
-  switch(consumableType) {
-    case 'immunity':
-      return Math.max(3, playerCount+1);
-    default:
-      return 1;
-  }
+  return consumableLimit(consumableType, playerCount);
 }
 
 function spawnConsumable(room, type) {
@@ -615,11 +611,9 @@ function checkConsumableConsumption(room, player, from, step) {
   if (consumableIndex !== -1) {
     const consumable = room.consumables[consumableIndex];
     
-    // Obtener duración del consumible según configuración
+    // Activa el efecto (o reinicia su tiempo si ya lo tenía); la duración del nivel está en segundos
     const duration = room.config.consumables[consumable.type]?.duration || 5;
-    
-    // El jugador consume el consumible
-    player.consumeConsumable(consumable.type, duration);
+    player.addEffect(consumable.type, duration * 1000, Date.now());
     
     // Remover el consumible del mapa
     room.consumables.splice(consumableIndex, 1);
@@ -636,6 +630,7 @@ function createProjectile(room, player) {
     return false;
   }
   
+  const now = Date.now();
   const head = player.segments[0];
   const { segmentSize } = room.config;
   
@@ -653,34 +648,47 @@ function createProjectile(room, player) {
   if (frontProjectile) {
     return false; // No puede lanzar si hay un proyectil suyo directamente enfrente
   }
-  
-  const projectile = {
-    id: Math.random().toString(36).substring(2, 9),
-    playerId: player.id,
-    x: newProjectileX,
-    y: newProjectileY,
-    direction: { ...player.direction },
-    color: player.color
-  };
-  
-  // Cambio 3: Reducir pérdida de segmentos de 2 a 1
+
+  // Pausa entre tiros: va al final, así un pedido rechazado por otra razón no la consume
+  if (!player.tryShot(now, room.config.shotCooldownMs || 0)) {
+    return false;
+  }
+
+  // Disparar cuesta un segmento, también la ráfaga del abanico
   if (player.segments.length > 1) {
     player.segments.pop();
   }
-  
   player.updateTargets();
-  
-  room.projectiles.push(projectile);
 
-  // Evento visual: el disparo ocurre entre ticks, se envía en el próximo gameLogicFrame
+  // Con el abanico salen tres: el central y dos abiertos fanDegrees a los lados, cada uno una celda
+  // delante de la cabeza en su propio rumbo
+  const directions = player.hasEffect('fan', now)
+    ? fanDirections(player.direction, room.config.fanDegrees)
+    : [player.direction];
   if (!room.pendingProjectileEvents) room.pendingProjectileEvents = [];
-  room.pendingProjectileEvents.push({
-    id: projectile.id,
-    playerId: projectile.playerId,
-    x: projectile.x,
-    y: projectile.y,
-    direction: { ...projectile.direction },
-    color: projectile.color
+  directions.forEach((direction, index) => {
+    const projectile = {
+      id: Math.random().toString(36).substring(2, 9),
+      playerId: player.id,
+      x: index === 0 ? newProjectileX : Snake.round1(head.x + direction.x * segmentSize),
+      y: index === 0 ? newProjectileY : Snake.round1(head.y + direction.y * segmentSize),
+      direction: { ...direction },
+      color: player.color
+    };
+    room.projectiles.push(projectile);
+
+    // Evento visual: el disparo ocurre entre ticks, se envía en el próximo gameLogicFrame. Los
+    // laterales van con spread: la arena no repite el costo (la gota de la cola) por ellos.
+    const event = {
+      id: projectile.id,
+      playerId: projectile.playerId,
+      x: projectile.x,
+      y: projectile.y,
+      direction: { ...projectile.direction },
+      color: projectile.color
+    };
+    if (index > 0) event.spread = true;
+    room.pendingProjectileEvents.push(event);
   });
   return true;
 }
@@ -756,6 +764,11 @@ function startRoundTimer(room) {
       return;
     }
     room.gameState.roundTimeLeft--;
+    // Frenesí: en los últimos segundos sube la comida base (gameLogicLoop la va sumando de a una)
+    const frenzy = room.config.frenzy;
+    if (frenzy && !room.gameState.frenzy && room.gameState.roundTimeLeft <= frenzy.lastSeconds) {
+      room.gameState.frenzy = true;
+    }
     
     io.to(room.id).emit('roundTimeUpdate', room.gameState.roundTimeLeft);
     
@@ -809,6 +822,8 @@ function startGame(room) {
     }
     
     room.gameState.playing = true;
+    room.gameState.frenzy = false;
+    room.gameState.leaderId = null;
     room.pendingProjectileEvents = []; // Arranca la ronda sin eventos de disparo viejos
     
     console.log(`Starting match in room ${room.id}`);
@@ -888,6 +903,12 @@ function gameLogicLoop(room) {
   // Los restos de los cortes vencen; la comida base no tiene expiresAt
   const tickNow = Date.now();
   room.foods = room.foods.filter(food => !food.expiresAt || food.expiresAt > tickNow);
+
+  // Frenesí: una comida base nueva por paso hasta llegar a la cantidad aumentada
+  if (room.gameState.frenzy && room.config.frenzy) {
+    const target = frenzyFoodTarget(room.players.length, room.config.foodExtra, room.config.frenzy.foodBoost);
+    if (room.foods.filter(food => !food.remains).length < target) respawnFood(room);
+  }
   
   if (room.config.attacksEnabled) {
     moveProjectiles(room, frameEvents);
@@ -895,9 +916,6 @@ function gameLogicLoop(room) {
   
   room.players.forEach((player) => {
     if (!player.gameover) {
-      // Actualizar consumibles expirados
-      player.updateConsumables();
-      
       const prevHead = { ...player.segments[0] };
       player.moveLogic(); // gira hacia el rumbo pedido y avanza una celda
       const head = player.segments[0];
@@ -947,8 +965,9 @@ function gameLogicLoop(room) {
       }
       
       // Comida: todo lo que toca el tramo que recorrió la cabeza (puede ser más de una, por
-      // ejemplo al pasar por una fila de restos)
-      const eaten = touchedAlong(prevHead, step, room.foods, segmentSize * EAT_REACH, canvasWidth, canvasHeight)
+      // ejemplo al pasar por una fila de restos). Con la boca grande, desde bigMouthReach celdas.
+      const eatReach = player.hasEffect('bigMouth', tickNow) ? room.config.bigMouthReach : EAT_REACH;
+      const eaten = touchedAlong(prevHead, step, room.foods, segmentSize * eatReach, canvasWidth, canvasHeight)
         .map(index => room.foods[index]);
       for (const eatenFood of eaten) {
         player.EatFood(eatenFood.score);
@@ -970,6 +989,7 @@ function gameLogicLoop(room) {
   });
   
   updateGameBoard(room);
+  room.gameState.leaderId = crownHolder(room.players, room.gameState.leaderId || null);
   
   io.to(room.id).emit('gameLogicFrame', {
     players: serializePlayers(room.players),
@@ -986,7 +1006,9 @@ function gameLogicLoop(room) {
     gameState: {
       playing: room.gameState.playing,
       round: room.gameState.round,
-      roundTimeLeft: room.gameState.roundTimeLeft
+      roundTimeLeft: room.gameState.roundTimeLeft,
+      frenzy: !!room.gameState.frenzy,
+      leaderId: room.gameState.leaderId || null
     },
     timestamp: Date.now()
   });
@@ -1274,11 +1296,7 @@ io.on('connection', (socket) => {
               score: Number(player.score) || 0,
               gameover: Boolean(player.gameover),
               scoreLeftToGrow: Number(player.scoreLeftToGrow) || 0,
-              activeConsumable: player.getActiveConsumable ? 
-                (player.getActiveConsumable() ? {
-                  type: String(player.getActiveConsumable().type),
-                  endTime: Number(player.getActiveConsumable().endTime)
-                } : null) : null
+              effects: player.activeEffects(Date.now())
             };
           } catch (err) {
             console.error('Error serializing player:', err);
@@ -1327,12 +1345,15 @@ io.on('connection', (socket) => {
             roundTime: Number(room.config.roundTime) || 60,
             difficulty: String(room.config.difficulty || 'medium'),
             projectileCells: Number(room.config.projectileCells) || 1,
+            bigMouthReach: Number(room.config.bigMouthReach) || 0,
             consumables: serializedConsumables
           },
           gameState: {
             playing: Boolean(room.gameState.playing),
             round: Number(room.gameState.round) || 1,
-            roundTimeLeft: Number(room.gameState.roundTimeLeft) || 60
+            roundTimeLeft: Number(room.gameState.roundTimeLeft) || 60,
+            frenzy: !!room.gameState.frenzy,
+            leaderId: room.gameState.leaderId ? String(room.gameState.leaderId) : null
           },
           roundTimeLeft: Number(room.gameState.roundTimeLeft) || 60
         });
@@ -1403,7 +1424,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Giro libre: el cliente pide un rumbo en radianes (mouse o combinaciones de flechas).
+  // Giro libre: el cliente pide un rumbo en radianes (flechas, joystick táctil o mando).
   // La serpiente gira hacia él en los próximos pasos, como mucho turnDegrees por paso.
   socket.on('steer', (data) => {
     if (!currentRoom) return;
