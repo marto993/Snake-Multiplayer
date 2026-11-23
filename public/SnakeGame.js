@@ -1089,13 +1089,14 @@ document.addEventListener('DOMContentLoaded', function () {
   function applyArenaConfig() {
     if (!Arena) return;
     const reach = (roomConfig && +roomConfig.bigMouthReach) || 0;
-    ui(function () { Arena.setConfig({ segmentSize: segmentSize, width: arenaW(), height: arenaH(), bigMouthReach: reach }); });
+    const anchorMs = (roomConfig && roomConfig.anchor && +roomConfig.anchor.lastsMs) || 0;
+    ui(function () { Arena.setConfig({ segmentSize: segmentSize, width: arenaW(), height: arenaH(), bigMouthReach: reach, anchorLastsMs: anchorMs }); });
   }
 
   // Objetos reutilizados por frame (sin allocations en el bucle)
   const arenaState = {
     snakes: snakes, foods: foods, consumables: consumables, projectiles: clientProjectiles,
-    myId: null, roundTimeLeft: 0, playing: false, spectating: false
+    myId: null, roundTimeLeft: 0, playing: false, spectating: false, serverT: 0
   };
   const idleOptions = { snakesPreview: previewList, caption: '' };
 
@@ -1108,6 +1109,7 @@ document.addEventListener('DOMContentLoaded', function () {
     arenaState.roundTimeLeft = roundTimeLeft;
     arenaState.playing = !!gameState.playing;
     arenaState.spectating = isSpectating;
+    arenaState.serverT = renderServerT;
   }
 
   function renderFrame(now) {
