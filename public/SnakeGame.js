@@ -696,21 +696,21 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // ===========================================================================
   // Giro libre: el servidor gira la serpiente hacia el rumbo pedido, como mucho
-  // turnDegrees por paso. Teclado: 8 rumbos. Mouse: el rumbo de la cabeza al puntero.
+  // turnDegrees por paso. Teclado: 8 rumbos. Joystick táctil y mando: cualquier rumbo.
+  // El mouse no apunta (apuntar señalando al rival era mucho más fácil que con el
+  // teclado); el clic sobre la arena dispara.
   // ===========================================================================
   const heldArrows = new Set();            // códigos de flecha apretados (37 izq, 38 arriba, 39 der, 40 abajo)
   const KEY_RELEASE_GRACE_MS = 70;         // soltar las dos teclas de una diagonal casi a la vez no la pierde
-  const MOUSE_TAKEOVER_PX = 12;            // lo que hay que mover el mouse (px de pantalla) para que tome el control
-  const MOUSE_DEADZONE_CELLS = 1.5;        // con el puntero encima de la cabeza no se cambia el rumbo (mínimo)
+  const MOUSE_TAKEOVER_PX = 12;            // en un equipo híbrido, lo que hay que mover el mouse para esconder los controles táctiles
   const STEER_MIN_DELTA = 2 * Math.PI / 180;
   const STEER_MIN_INTERVAL_MS = 40;        // como mucho 25 mensajes por segundo (el servidor da un paso cada 60-70 ms)
-  const STEER_REFRESH_MS = 250;            // con el mouse quieto igual se repite, por si el servidor reinició el rumbo
+  const STEER_REFRESH_MS = 250;            // con el stick quieto igual se repite, por si el servidor reinició el rumbo
   let keyReleaseTimer = 0;
-  let steerMode = 'keys';                  // 'keys' | 'mouse'
+  let steerMode = 'keys';                  // 'keys' | 'touch' | 'pad': quién manda el rumbo
   let lastSteerAngle = null;
   let lastSteerT = 0;
-  const pointer = { cx: 0, cy: 0, has: false, travel: 0 };   // última posición del mouse en pantalla
-  let aimingCursor = false;
+  const pointer = { cx: 0, cy: 0, has: false, travel: 0 };   // última posición del mouse en pantalla (solo para equipos híbridos)
   const arenaStage = canvas ? canvas.closest('.arena-stage') : null;
 
   function canSteer() {
@@ -758,29 +758,26 @@ document.addEventListener('DOMContentLoaded', function () {
     pointer.travel = 0;
   }
 
-  // Guarda la posición en pantalla; se pasa a coordenadas de la arena en cada cuadro, porque la
-  // arena cambia de tamaño y de lugar debajo de un mouse quieto (al empezar la partida, al redimensionar)
+  // Equipo híbrido: si se tocó la pantalla pero ahora se usa el mouse, el joystick táctil sobra.
+  // El mouse no cambia el rumbo.
   function handlePointerMove(event) {
-    if (event.pointerType && event.pointerType !== 'mouse' && event.pointerType !== 'pen') return;
+    if (event.pointerType !== 'mouse') return;
     if (stick.id !== null) return; // arrastrando el joystick (en la emulación táctil llega como mouse)
     if (pointer.has) pointer.travel += Math.abs(event.clientX - pointer.cx) + Math.abs(event.clientY - pointer.cy);
     pointer.cx = event.clientX;
     pointer.cy = event.clientY;
     pointer.has = true;
-    if (steerMode !== 'mouse' && pointer.travel > MOUSE_TAKEOVER_PX && canSteer()) {
-      steerMode = 'mouse';
-      // Equipo híbrido: si se tocó la pantalla pero ahora se usa el mouse, el joystick sobra
-      if (event.pointerType === 'mouse' && !(coarseQuery && coarseQuery.matches)) touchSeen = false;
+    if (touchSeen && pointer.travel > MOUSE_TAKEOVER_PX && canSteer() && !(coarseQuery && coarseQuery.matches)) {
+      touchSeen = false;
+      if (steerMode === 'touch') steerMode = 'keys';
     }
   }
 
-  // Clic en la arena: dispara (y el mouse toma el control del rumbo)
+  // Clic en la arena: dispara
   function handlePointerDown(event) {
     if (event.button !== 0 || (event.pointerType && event.pointerType !== 'mouse' && event.pointerType !== 'pen')) return;
     if (!canSteer()) return;
     event.preventDefault();
-    handlePointerMove(event);
-    steerMode = 'mouse';
     socket.emit('attack');
   }
 
@@ -791,35 +788,14 @@ document.addEventListener('DOMContentLoaded', function () {
     emitSteer(angle, now);
   }
 
-  // Cada cuadro: mira del mouse, controles táctiles y el rumbo del mouse o del joystick
+  // Cada cuadro: controles táctiles y el rumbo del joystick táctil
   function updateSteering(now) {
-    const aiming = canSteer();
-    if (aiming !== aimingCursor && arenaStage) {
-      aimingCursor = aiming;
-      arenaStage.classList.toggle('is-aiming', aiming);
-    }
+    const playing = canSteer();
     let me = null;
-    if (aiming) for (let i = 0; i < snakes.length; i++) if (snakes[i].id === socket.id) { me = snakes[i]; break; }
+    if (playing) for (let i = 0; i < snakes.length; i++) if (snakes[i].id === socket.id) { me = snakes[i]; break; }
     updateTouchControls(me);
-    if (!aiming) return;
-    if (steerMode === 'touch') {
-      if (stick.id !== null && stick.angle !== null) steerThrottled(stick.angle, now);
-      return;
-    }
-    if (steerMode !== 'mouse' || !pointer.has || !canvas) return;
-    const head = me && me.renderSegments && me.renderSegments[0];
-    if (!head) return;
-    const r = canvas.getBoundingClientRect();
-    if (!r.width || !r.height) return;
-    const half = segmentSize / 2;
-    const dx = (pointer.cx - r.left) / r.width * arenaW() - (head.x + half);
-    const dy = (pointer.cy - r.top) / r.height * arenaH() - (head.y + half);
-    // La zona muerta es al menos el radio de giro: si no, con el puntero sobre una comida la serpiente
-    // orbitaría alrededor sin alcanzarla (a ese radio, girar al máximo la mantiene en el círculo)
-    const turnRad = ((roomConfig && +roomConfig.turnDegrees) || 40) * Math.PI / 180;
-    const dead = Math.max(segmentSize * MOUSE_DEADZONE_CELLS, segmentSize / turnRad + 2);
-    if (dx * dx + dy * dy < dead * dead) return;
-    steerThrottled(Math.atan2(dy, dx), now);
+    if (!playing) return;
+    if (steerMode === 'touch' && stick.id !== null && stick.angle !== null) steerThrottled(stick.angle, now);
   }
 
   // ---------------------------------------------------------------------------

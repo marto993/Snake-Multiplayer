@@ -1091,9 +1091,6 @@ kbd {
   isolation: isolate;
   justify-self: center;
 }
-/* Partida en curso: el mouse apunta el rumbo y el clic dispara */
-.arena-stage.is-aiming,
-.arena-stage.is-aiming * { cursor: crosshair; }
 .arena-stage::before,
 .arena-stage::after {
   content: "";
