@@ -158,3 +158,34 @@ test('pausa entre tiros: el siguiente sale recién a los cooldownMs', () => {
   s.reset(60, 120, 1, 0, 3);
   assert.equal(s.tryShot(0, 200), true);
 });
+
+// Ancla: 1,5 s quieta, recarga de 4 s desde que termina
+const ANCHOR = { lastsMs: 1500, rechargeMs: 4000 };
+
+test('ancla: dura 1,5 s y se recarga 4 s desde que termina', () => {
+  const s = make();
+  assert.equal(s.toggleAnchor(1000, ANCHOR), 'anchored');
+  assert.equal(s.isAnchored(2499), true);
+  assert.equal(s.isAnchored(2500), false);
+  assert.equal(s.toggleAnchor(6499, ANCHOR), null);
+  assert.equal(s.toggleAnchor(6500, ANCHOR), 'anchored');
+});
+
+test('ancla: apretar de nuevo la suelta y la recarga cuenta desde ahí', () => {
+  const s = make();
+  s.toggleAnchor(0, ANCHOR);
+  assert.equal(s.toggleAnchor(500, ANCHOR), 'released');
+  assert.equal(s.isAnchored(500), false);
+  assert.equal(s.toggleAnchor(4499, ANCHOR), null);
+  assert.equal(s.toggleAnchor(4500, ANCHOR), 'anchored');
+});
+
+test('reset suelta el ancla y borra la recarga', () => {
+  const s = make();
+  s.toggleAnchor(1000, ANCHOR);
+  s.reset(60, 120, 1, 0, 3);
+  assert.equal(s.isAnchored(1001), false);
+  assert.equal(s.anchoredUntil, 0);
+  assert.equal(s.anchorReadyAt, 0);
+  assert.equal(s.toggleAnchor(1001, ANCHOR), 'anchored');
+});

@@ -21,6 +21,12 @@ function cutSnake(segments, segmentIndex) {
   return { kept: segments.slice(0, segmentIndex), lost: segments.slice(segmentIndex) };
 }
 
+// Daño de un impacto contra una serpiente anclada: pierde solo el último segmento (con uno solo, nada)
+function cutAnchored(segments) {
+  if (segments.length <= 1) return { kept: segments.slice(), lost: [] };
+  return { kept: segments.slice(0, -1), lost: segments.slice(-1) };
+}
+
 // Comidas para los segmentos perdidos. Una por celda (dos segmentos en la misma celda suman),
 // salteando las celdas que ya tienen comida. `occupied(x, y)` dice si una celda tiene comida.
 function dropRemains(lost, now, occupied) {
@@ -49,4 +55,4 @@ function dropRemains(lost, now, occupied) {
   return foods;
 }
 
-module.exports = { cutSnake, dropRemains, REMAINS_TTL_MS };
+module.exports = { cutSnake, cutAnchored, dropRemains, REMAINS_TTL_MS };

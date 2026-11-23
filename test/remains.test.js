@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { cutSnake, dropRemains, REMAINS_TTL_MS } = require('../game/remains');
+const { cutSnake, cutAnchored, dropRemains, REMAINS_TTL_MS } = require('../game/remains');
 
 const line = n => Array.from({ length: n }, (_, i) => ({ x: 120 - i * 12, y: 60 }));
 const none = () => false;
@@ -63,4 +63,16 @@ test('el valor de cada resto no pasa de 5', () => {
   const foods = dropRemains(lost, 0, none);
   assert.equal(foods.length, 30);
   assert.ok(foods.every(f => f.score === 5));
+});
+
+test('anclada: un impacto le quita solo el último segmento', () => {
+  const { kept, lost } = cutAnchored(line(5));
+  assert.deepEqual(kept, line(4));
+  assert.deepEqual(lost, [{ x: 72, y: 60 }]);
+});
+
+test('anclada con un solo segmento: no pierde nada', () => {
+  const { kept, lost } = cutAnchored(line(1));
+  assert.deepEqual(kept, line(1));
+  assert.deepEqual(lost, []);
 });
