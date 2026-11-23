@@ -24,7 +24,7 @@ fly deploy     # deploy to Fly.io
 | `game/match.js` | ~45 | `matchResult()`: ranking by length and winners (ties all win) at the end of the match; `frenzyFoodTarget()` and `crownHolder()` (longest snake, ties keep the previous holder) |
 | `lib/assets.js` | ~190 | Serves the text files in `public/` precompressed (brotli 11 / gzip 9, in memory) and versions `index.html`'s local scripts and styles by content hash |
 | `lib/security.js` | ~110 | Strict CSP (report-only for now): per-request nonce on every `<script>` of `index.html`, Trusted Types, and the `/csp-report` endpoint |
-| `public/SnakeGame.js` | ~2300 | Client glue: socket handlers, game/UI state, controls (keys, touch, gamepad, click to fire), wiring events into the modules below. No drawing code. |
+| `public/SnakeGame.js` | ~2350 | Client glue: socket handlers, game/UI state, controls (keys, touch, gamepad, click to fire), wiring events into the modules below. No drawing code. |
 | `public/snakeClass.js` | ~380 | Snake entity — runs on **both** client and server. Effects (`effects`) and shot cooldown (`tryShot`) take the server time as `now` |
 | `public/index.html` | ~340 | Scene markup only (no inline CSS) |
 | `public/css/theme.css` | ~2750 | Bioluminescent theme, `--bio-*` design tokens |

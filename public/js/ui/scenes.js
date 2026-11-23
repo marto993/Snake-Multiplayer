@@ -605,6 +605,10 @@
     ];
     const chips = [];   // { type, el, time, bar, active, until, total, txt }
     let chipRaf = 0;
+    // Los vencimientos son horas del servidor: se comparan con la hora del servidor (la del instante
+    // dibujado, que llega en serverNow), no con el reloj del cliente, que puede estar desfasado
+    let clockOffset = 0;
+    function serverNow() { return Date.now() + clockOffset; }
     const rows = new Map();
     let order = [];          // ids visibles en orden
     let gapLi = null;
@@ -734,14 +738,15 @@
       // Estado propio
       let me = null;
       for (let i = 0; i < players.length; i++) if (players[i] && players[i].isMe) { me = players[i]; break; }
+      if (+d.serverNow > 0) clockOffset = +d.serverNow - Date.now();
       const fx = (me && !spectating && playing && me.effects) || null;
       for (let i = 0; i < chips.length; i++) {
         const ch = chips[i];
         const until = fx ? +fx[ch.type] || 0 : 0;
         if ((until > 0) !== ch.active) setChip(ch, until > 0, until);
-        else if (ch.active && Math.abs(until - ch.until) > 250 && Math.abs(until - Date.now()) <= 30000) {
+        else if (ch.active && Math.abs(until - ch.until) > 250 && Math.abs(until - serverNow()) <= 30000) {
           // renovado: el tiempo vuelve a empezar
-          ch.until = until; ch.total = Math.max(ch.total, until - Date.now()); ch.txt = '';
+          ch.until = until; ch.total = Math.max(ch.total, until - serverNow()); ch.txt = '';
         }
       }
       if (spectating !== L.spec) { specEl.classList.toggle('hidden', !spectating); L.spec = spectating; }
@@ -761,8 +766,8 @@
       ch.active = on;
       if (on) {
         ch.until = until;
-        if (ch.until && Math.abs(ch.until - Date.now()) > 30000) ch.until = 0; // reloj desfasado: sin tiempo
-        ch.total = ch.until ? Math.max(500, ch.until - Date.now()) : 0;
+        if (ch.until && Math.abs(ch.until - serverNow()) > 30000) ch.until = 0; // sin hora confiable: sin tiempo
+        ch.total = ch.until ? Math.max(500, ch.until - serverNow()) : 0;
         ch.txt = '';
         cancelMine(ch.el);
         ch.el.classList.remove('hidden');   // la entrada (bio-reveal) y el latido del icono son CSS
@@ -781,7 +786,7 @@
         if (!ch.active) continue;
         any = true;
         if (ch.until) {
-          const rem = ch.until - Date.now();
+          const rem = ch.until - serverNow();
           const txt = fmtSec(rem);
           if (txt !== ch.txt) {
             ch.time.textContent = txt; ch.txt = txt;

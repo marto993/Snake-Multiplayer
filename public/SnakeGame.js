@@ -532,6 +532,10 @@ document.addEventListener('DOMContentLoaded', function () {
   // Partida nueva (gameStart o spectatingStarted): el primer frame interpola desde este estado
   function restartTimeline(data) {
     resetTimeline();
+    // Partida nueva: hasta el primer frame no hay corona ni hora del servidor (la anterior quedaría
+    // sobre el ganador de la partida pasada)
+    crownId = null;
+    renderServerT = 0;
     if (!timeline) return;
     if (roomConfig && roomConfig.gameSpeed) timeline.setTick(roomConfig.gameSpeed);
     timeline.seed(timelineFrame(data, null));
@@ -1190,7 +1194,8 @@ document.addEventListener('DOMContentLoaded', function () {
         roundTime: roundTime(),
         players: hudPlayers(),
         playing: roundLive,
-        spectating: isSpectating
+        spectating: isSpectating,
+        serverNow: renderServerT
       });
     });
   }
