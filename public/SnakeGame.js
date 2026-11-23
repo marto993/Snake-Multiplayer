@@ -6,6 +6,7 @@
  *   - window.Arena     (js/render/arena.js)  dibuja canvas#game
  *   - window.Backdrop  (js/ui/backdrop.js)   fondo vivo
  *   - window.Scenes / Overlays / Toasts / HUD (js/ui/scenes.js)
+ *   - window.PadInput  (js/input/pad.js)    lectura del mando
  *
  * Reglas de esta capa (docs/VISUAL_SPEC.md, sección 10):
  *   - Un único requestAnimationFrame siempre vivo. Con partida en curso: Arena.render;
@@ -28,6 +29,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const Backdrop = window.Backdrop || { setMood: noop, pulse: noop };
   const Arena = window.Arena || null;
   const Motion = window.Motion || null; // sin Motion, las posiciones se aplican al llegar (sin interpolar)
+  const PadInput = window.PadInput || null; // sin PadInput, no hay mando
 
   const reportedErrors = new Set();
   function reportOnce(err) {
@@ -552,6 +554,9 @@ document.addEventListener('DOMContentLoaded', function () {
   function dispatchTimelineFrame(frame) {
     const data = frame.payload;
     dispatchFrameEvents(data);
+    callEach(data.hitEvents, function (event) {
+      if (event.targetId === socket.id && !isSpectating) rumble(!!event.headshot);
+    });
     callEach(data.consumableEvents, function (event) {
       const message = PICKUP_TOASTS[event.consumableType];
       if (message && event.playerId === socket.id && !isSpectating) toast(message, 'success', 2500);
@@ -685,6 +690,7 @@ document.addEventListener('DOMContentLoaded', function () {
       heldArrows.add(arrow);
       clearTimeout(keyReleaseTimer);
       steerMode = 'keys';
+      padActive = false;
       pointer.travel = 0;
       const angle = keysAngle();
       if (angle !== null) emitSteer(angle, perfNow());
@@ -788,7 +794,7 @@ document.addEventListener('DOMContentLoaded', function () {
     emitSteer(angle, now);
   }
 
-  // Cada cuadro: controles táctiles y el rumbo del joystick táctil
+  // Cada cuadro: controles táctiles, el rumbo del joystick táctil y el mando
   function updateSteering(now) {
     const playing = canSteer();
     let me = null;
@@ -796,7 +802,74 @@ document.addEventListener('DOMContentLoaded', function () {
     updateTouchControls(me);
     if (!playing) return;
     if (steerMode === 'touch' && stick.id !== null && stick.angle !== null) steerThrottled(stick.angle, now);
+    updatePad(now);
   }
+
+  // ---------------------------------------------------------------------------
+  // Mando (Gamepad API, js/input/pad.js): stick o cruceta para el rumbo, A o gatillo derecho para
+  // disparar. Se lee en cada cuadro; el navegador lo muestra recién cuando se aprieta un botón.
+  // ---------------------------------------------------------------------------
+  // Stick del mando y joystick táctil: 0 da cualquier ángulo; 8 los redondea a ocho rumbos, como el teclado
+  const STICK_SNAP = 0;
+  const padState = { angle: null, fire: false };
+  let padActive = false;           // el último control usado fue el mando (para vibrar al recibir un impacto)
+  let padLastShot = -Infinity;
+
+  function snapStick(angle) {
+    return PadInput ? PadInput.snapAngle(angle, STICK_SNAP) : angle;
+  }
+
+  function currentPad() {
+    if (!PadInput || !navigator.getGamepads) return null;
+    const pads = navigator.getGamepads() || [];
+    for (let i = 0; i < pads.length; i++) if (pads[i] && pads[i].connected) return pads[i];
+    return null;
+  }
+
+  // Con el stick en reposo no manda nada: la serpiente sigue con el último rumbo y las flechas mandan.
+  // Mantener el disparo apretado dispara cada shotCooldownMs, como la barra espaciadora.
+  function updatePad(now) {
+    const gp = currentPad();
+    if (!gp) return;
+    PadInput.read(gp, padState);
+    if (padState.angle !== null) {
+      padActive = true;
+      steerMode = 'pad';
+      steerThrottled(snapStick(padState.angle), now);
+    }
+    if (padState.fire) {
+      padActive = true;
+      const every = (roomConfig && +roomConfig.shotCooldownMs) || 200;
+      if (now - padLastShot >= every) {
+        padLastShot = now;
+        socket.emit('attack');
+      }
+    }
+  }
+
+  // Vibración al recibir un impacto, si el navegador la ofrece (Chrome y Edge) y se juega con el mando
+  function rumble(strong) {
+    if (!padActive) return;
+    const gp = currentPad();
+    const act = gp && gp.vibrationActuator;
+    if (!act || typeof act.playEffect !== 'function') return;
+    try {
+      const p = act.playEffect('dual-rumble', strong
+        ? { duration: 260, strongMagnitude: 0.9, weakMagnitude: 0.6 }
+        : { duration: 160, strongMagnitude: 0.5, weakMagnitude: 0.4 });
+      if (p && p.catch) p.catch(function () { /* nada */ });
+    } catch (e) { /* nada */ }
+  }
+
+  window.addEventListener('gamepadconnected', function () {
+    if (!PadInput) return;
+    toast('Mando conectado: stick o cruceta para moverte, A o gatillo derecho para disparar', 'info', 3500);
+  });
+  window.addEventListener('gamepaddisconnected', function () {
+    if (!PadInput) return;
+    padActive = false;
+    toast('Mando desconectado', 'info', 2500);
+  });
 
   // ---------------------------------------------------------------------------
   // Táctil: joystick flotante en la mitad izquierda y botón de disparo a la derecha.
@@ -891,7 +964,7 @@ document.addEventListener('DOMContentLoaded', function () {
     setKnob(dx, dy);
     if (dist > STICK_DEADZONE) {
       const first = stick.angle === null;
-      stick.angle = Math.atan2(dy, dx);
+      stick.angle = snapStick(Math.atan2(dy, dx));
       if (first) emitSteer(stick.angle, perfNow()); // el primer rumbo sale enseguida
     }
   }

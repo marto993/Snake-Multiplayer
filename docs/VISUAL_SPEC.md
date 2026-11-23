@@ -1237,7 +1237,7 @@ Responsables: LAYOUT (textos estáticos del HTML), INTEGRADOR (textos generados)
 | Leyenda de `#difficultyPicker` | Nivel |
 | Opciones de nivel (nombre y pista) | Fácil: Más lenta y con más comida / Medio: Equilibrado / Difícil: Más rápida, con disparos veloces |
 | `.config-info` | El escudo de inmunidad bloquea un disparo y se gasta. |
-| `.controls-hint` `player` | Muévete con Flechas / WASD (dos a la vez, en diagonal). Espacio o Clic para disparar: cada disparo cuesta un segmento. El mouse no apunta. |
+| `.controls-hint` `player` | Muévete con Flechas / WASD (dos a la vez, en diagonal) o con un mando. Espacio, Clic o A del mando para disparar: cada disparo cuesta un segmento. El mouse no apunta. |
 | `.controls-hint` `spectator` | Estás viendo la partida en vivo. |
 | `.controls-hint` `touch` | La partida se juega con el teléfono en horizontal. Apoya el pulgar en cualquier parte de la pantalla y arrástralo hacia donde quieras ir; el botón de la derecha dispara: cada disparo cuesta un segmento. |
 | `#spectatorBanner` | Modo espectador |
@@ -1291,7 +1291,10 @@ Reemplazo de cada `addCanvasNotification` actual. "Sin toast" significa que el c
 | `gameStart`, `countdown`, `roundEnd`, `gameEnd` | Sin toast (overlays) | |
 | `spectatingStarted` | Mirando la sala {código} | info |
 | `spectatorJoined` | {nombre} está mirando la partida | info |
-| `consumableEvents` (soy yo) | Escudo activo: bloquea un disparo | success, 2500 ms |
+| `consumableEvents` (soy yo) | Escudo activo: bloquea un disparo / Boca grande: comés desde más lejos / Abanico: disparás de a tres | success, 2500 ms |
+| `gameState.frenzy` (empieza) | Frenesí: más comida hasta el final | info, 3000 ms |
+| `gamepadconnected` | Mando conectado: stick o cruceta para moverte, A o gatillo derecho para disparar | info, 3500 ms |
+| `gamepaddisconnected` | Mando desconectado | info, 2500 ms |
 | `consumableEvents` (otro) | Sin toast | |
 | `profileLoaded` | Sin toast (lo dice la intro o la escena) | |
 | `backToMenuSuccess` | Sin toast | |
