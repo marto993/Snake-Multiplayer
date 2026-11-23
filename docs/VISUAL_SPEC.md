@@ -1237,7 +1237,7 @@ Responsables: LAYOUT (textos estáticos del HTML), INTEGRADOR (textos generados)
 | Leyenda de `#difficultyPicker` | Nivel |
 | Opciones de nivel (nombre y pista) | Fácil: Más lenta y con más comida / Medio: Equilibrado / Difícil: Más rápida, con disparos veloces |
 | `.config-info` | El escudo de inmunidad bloquea un disparo y se gasta. |
-| `.controls-hint` `player` | Muévete con Flechas / WASD (dos a la vez, en diagonal) o con un mando. Espacio, Clic o A del mando para disparar: cada disparo cuesta un segmento. El mouse no apunta. |
+| `.controls-hint` `player` | Muévete con Flechas / WASD (dos a la vez, en diagonal) o con un mando. Espacio, Clic o A del mando para disparar: cada disparo cuesta un segmento. |
 | `.controls-hint` `spectator` | Estás viendo la partida en vivo. |
 | `.controls-hint` `touch` | La partida se juega con el teléfono en horizontal. Apoya el pulgar en cualquier parte de la pantalla y arrástralo hacia donde quieras ir; el botón de la derecha dispara: cada disparo cuesta un segmento. |
 | `#spectatorBanner` | Modo espectador |

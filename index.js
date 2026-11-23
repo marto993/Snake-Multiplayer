@@ -1424,7 +1424,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Giro libre: el cliente pide un rumbo en radianes (mouse o combinaciones de flechas).
+  // Giro libre: el cliente pide un rumbo en radianes (flechas, joystick táctil o mando).
   // La serpiente gira hacia él en los próximos pasos, como mucho turnDegrees por paso.
   socket.on('steer', (data) => {
     if (!currentRoom) return;

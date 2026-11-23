@@ -1131,7 +1131,7 @@ document.addEventListener('DOMContentLoaded', function () {
         idleOptions.caption = scene === 'room' && !countdownActive ? idleCaption : '';
         Arena.renderIdle(now, idleOptions);
       }
-      // Rumbo del mouse (desde la cabeza recién dibujada) o del joystick; mira y controles táctiles
+      // Controles táctiles y rumbo del joystick táctil o del mando
       updateSteering(perfNow());
     } catch (err) {
       reportOnce(err);
