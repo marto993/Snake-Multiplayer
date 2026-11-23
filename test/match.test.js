@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { matchResult } = require('../game/match');
+const { matchResult, frenzyFoodTarget } = require('../game/match');
 
 const p = (id, length, color = '#fff') => ({
   id, name: 'n' + id, color, segments: Array.from({ length }, (_, i) => ({ x: i * 12, y: 0 }))
@@ -30,4 +30,9 @@ test('sala vacía: sin clasificación ni ganadores', () => {
 test('una serpiente sin segmentos cuenta como largo 0', () => {
   const r = matchResult([{ id: 'a', name: 'na', color: '#fff', segments: null }, p('b', 1)]);
   assert.deepEqual(r.ranking.map(e => [e.id, e.length]), [['b', 1], ['a', 0]]);
+});
+
+test('frenesí: la comida base sube un 50 %', () => {
+  assert.equal(frenzyFoodTarget(2, 20, 0.5), 33);
+  assert.equal(frenzyFoodTarget(8, 18, 0.5), 39);
 });

@@ -19,4 +19,9 @@ function matchResult(players) {
   return { ranking, winners };
 }
 
-module.exports = { matchResult };
+// Frenesí: cuánta comida base hay en la arena en los últimos segundos (la normal es jugadores + foodExtra)
+function frenzyFoodTarget(playerCount, foodExtra, foodBoost) {
+  return Math.round((playerCount + foodExtra) * (1 + foodBoost));
+}
+
+module.exports = { matchResult, frenzyFoodTarget };

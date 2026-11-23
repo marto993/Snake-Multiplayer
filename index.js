@@ -6,7 +6,7 @@ const { buildRoomConfig, consumableLimit } = require('./game/difficulty');
 const { traceProjectile, fanDirections } = require('./game/projectiles');
 const { touchedAlong, wrapPoint, cellIndex } = require('./game/geometry');
 const { cutSnake, cutAnchored, dropRemains } = require('./game/remains');
-const { matchResult } = require('./game/match');
+const { matchResult, frenzyFoodTarget } = require('./game/match');
 const { createAssets } = require('./lib/assets');
 const { secureIndex, reportHandler, REPORT_PATH, REPORT_TYPES } = require('./lib/security');
 const sqlite3 = require('sqlite3').verbose();
@@ -368,6 +368,7 @@ function resetRoomToWaiting(room) {
   room.gameState.round = 1;
   room.gameState.downCounter = 3;
   room.gameState.roundTimeLeft = room.config.roundTime;
+  room.gameState.frenzy = false;
   room.projectiles = [];
   room.pendingProjectileEvents = [];
   room.consumables = [];
@@ -768,6 +769,11 @@ function startRoundTimer(room) {
       return;
     }
     room.gameState.roundTimeLeft--;
+    // Frenesí: en los últimos segundos sube la comida base (gameLogicLoop la va sumando de a una)
+    const frenzy = room.config.frenzy;
+    if (frenzy && !room.gameState.frenzy && room.gameState.roundTimeLeft <= frenzy.lastSeconds) {
+      room.gameState.frenzy = true;
+    }
     
     io.to(room.id).emit('roundTimeUpdate', room.gameState.roundTimeLeft);
     
@@ -821,6 +827,7 @@ function startGame(room) {
     }
     
     room.gameState.playing = true;
+    room.gameState.frenzy = false;
     room.pendingProjectileEvents = []; // Arranca la ronda sin eventos de disparo viejos
     
     console.log(`Starting match in room ${room.id}`);
@@ -900,6 +907,12 @@ function gameLogicLoop(room) {
   // Los restos de los cortes vencen; la comida base no tiene expiresAt
   const tickNow = Date.now();
   room.foods = room.foods.filter(food => !food.expiresAt || food.expiresAt > tickNow);
+
+  // Frenesí: una comida base nueva por paso hasta llegar a la cantidad aumentada
+  if (room.gameState.frenzy && room.config.frenzy) {
+    const target = frenzyFoodTarget(room.players.length, room.config.foodExtra, room.config.frenzy.foodBoost);
+    if (room.foods.filter(food => !food.remains).length < target) respawnFood(room);
+  }
   
   if (room.config.attacksEnabled) {
     moveProjectiles(room, frameEvents);
@@ -1002,7 +1015,8 @@ function gameLogicLoop(room) {
     gameState: {
       playing: room.gameState.playing,
       round: room.gameState.round,
-      roundTimeLeft: room.gameState.roundTimeLeft
+      roundTimeLeft: room.gameState.roundTimeLeft,
+      frenzy: !!room.gameState.frenzy
     },
     timestamp: Date.now()
   });
@@ -1348,7 +1362,8 @@ io.on('connection', (socket) => {
           gameState: {
             playing: Boolean(room.gameState.playing),
             round: Number(room.gameState.round) || 1,
-            roundTimeLeft: Number(room.gameState.roundTimeLeft) || 60
+            roundTimeLeft: Number(room.gameState.roundTimeLeft) || 60,
+            frenzy: !!room.gameState.frenzy
           },
           roundTimeLeft: Number(room.gameState.roundTimeLeft) || 60
         });

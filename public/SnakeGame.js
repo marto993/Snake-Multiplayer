@@ -145,6 +145,7 @@ document.addEventListener('DOMContentLoaded', function () {
   let matchFinished = false;    // llegó gameEnd: la escena final está por entrar o a la vista
   let finalTimer = 0;           // espera entre gameEnd y la pantalla final
   let tensionOn = false;        // últimos 10 segundos
+  let frenzyOn = false;         // ya se avisó el frenesí de esta partida
   let lastPulseSecond = -1;
   let keyboardSeen = false;
   let previewList = [];         // criaturas de la sala para Arena.renderIdle
@@ -1217,6 +1218,15 @@ document.addEventListener('DOMContentLoaded', function () {
   function resetTension() {
     tensionOn = false;
     lastPulseSecond = -1;
+    frenzyOn = false;
+  }
+
+  // Frenesí (últimos 20 s): un aviso y un pulso lima del fondo cuando empieza
+  function checkFrenzy() {
+    if (!roundLive || frenzyOn || !gameState || !gameState.frenzy) return;
+    frenzyOn = true;
+    toast('Frenesí: más comida hasta el final', 'info', 3000);
+    ui(function () { Backdrop.pulse('#C8FF3C', 0.25); });
   }
 
   // ===========================================================================
@@ -1590,6 +1600,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // 3. HUD y tensión
     updateHUD();
     checkTension();
+    checkFrenzy();
   });
 
   // Fin de la partida: la arena se congela sobre el ganador y después entra la pantalla final.

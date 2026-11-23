@@ -34,12 +34,14 @@ const LEVELS = {
 // bigMouthReach: alcance para comer con la boca grande, en celdas (el normal es 0,85)
 // fanDegrees: apertura de cada disparo lateral del abanico
 // anchor: el ancla dura lastsMs y se recarga en rechargeMs desde que termina
+// frenzy: en los últimos lastSeconds de la partida la comida base sube foodBoost (0,5 = 50 %)
 const POWERS = {
   bigMouth: { spawnInterval: 12, duration: 6 },
   fan: { spawnInterval: 12, duration: 6 },
   bigMouthReach: 2.55,
   fanDegrees: 12,
-  anchor: { lastsMs: 1500, rechargeMs: 4000 }
+  anchor: { lastsMs: 1500, rechargeMs: 4000 },
+  frenzy: { lastSeconds: 20, foodBoost: 0.5 }
 };
 
 // Cuántos consumibles de un tipo puede haber a la vez en el mapa
@@ -75,6 +77,7 @@ function buildRoomConfig(difficulty, opts) {
     bigMouthReach: POWERS.bigMouthReach,
     fanDegrees: POWERS.fanDegrees,
     anchor: { ...POWERS.anchor },
+    frenzy: { ...POWERS.frenzy },
     consumables: {
       immunity: { enabled: true, spawnInterval: level.shieldEvery, duration: level.shieldLasts },
       bigMouth: { enabled: true, ...POWERS.bigMouth },

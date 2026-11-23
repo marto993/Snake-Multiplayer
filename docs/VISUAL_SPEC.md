@@ -718,6 +718,8 @@ Responsable: ESCENAS (`Overlays.roundStart()`) y ARENA (`Arena.onRoundStart()`),
 
 ### 4.15 Últimos 10 segundos
 
+Antes, a los 20 segundos, empieza el frenesí (`gameState.frenzy`, `docs/GAMEPLAY_SPEC.md`): la comida base sube un 50 % y aparece con la animación de 5.11, de a una por paso. INTEGRADOR muestra una vez el toast "Frenesí: más comida hasta el final" (info, 3 s) y llama a `Backdrop.pulse('#C8FF3C', 0.25)`; el temporizador ya está en la fase `warn`.
+
 Disparador: `roundTimeLeft` llega a 10. Lo pinta cada responsable en lo suyo:
 
 - **ARENA**: contador gigante (5.13) y viñeta coral creciente.
