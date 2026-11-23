@@ -67,4 +67,16 @@ function traceProjectile(projectile, cells, bounds, players, hitRadius) {
   return { outcome: 'alive', x, y };
 }
 
-module.exports = { traceProjectile };
+// Abanico: el rumbo de la cabeza y dos más abiertos `degrees` a cada lado, en ese orden
+// (central, izquierda, derecha). Vectores unitarios redondeados a 4 decimales, como Snake.setHeading.
+function fanDirections(direction, degrees) {
+  const base = Math.atan2(direction.y, direction.x);
+  const spread = degrees * Math.PI / 180;
+  const unit = angle => ({
+    x: Math.round(Math.cos(angle) * 10000) / 10000 || 0,
+    y: Math.round(Math.sin(angle) * 10000) / 10000 || 0
+  });
+  return [{ x: direction.x, y: direction.y }, unit(base - spread), unit(base + spread)];
+}
+
+module.exports = { traceProjectile, fanDirections };

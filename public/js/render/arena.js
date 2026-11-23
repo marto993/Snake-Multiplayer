@@ -3130,7 +3130,8 @@
     BO.angle = Math.atan2(dy, dx);
     BO.spread = 0.9;
     burstNow(cx - dx * s * 0.4, cy - dy * s * 0.4);
-    const rec = snakeRecs.get(e.playerId);
+    // Los laterales del abanico (spread) no repiten el costo: la ráfaga cuesta un solo segmento
+    const rec = e.spread ? null : snakeRecs.get(e.playerId);
     if (rec && rec.n > 0) {
       rec.recoilT0 = now;
       const ti = rec.n - 1;
@@ -3145,7 +3146,7 @@
       if (!tr) { tr = newTrail(); tr.seen = frameNo; trails.set(e.id, tr); }
       tr.paint = paint; tr.color = e.color;
     }
-    if (isMe(e.playerId)) shake(1.5, 80);
+    if (isMe(e.playerId) && !e.spread) shake(1.5, 80);
   }
 
   function onProjectileExpired(e) {

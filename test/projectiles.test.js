@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { traceProjectile } = require('../game/projectiles');
+const { traceProjectile, fanDirections } = require('../game/projectiles');
 
 const bounds = { cell: 12, width: 600, height: 600 };
 const right = (x, y) => ({ x, y, direction: { x: 1, y: 0 } });
@@ -80,4 +80,30 @@ test('entre dos cuerpos en el mismo tramo, pega al primero que encuentra', () =>
 test('pega a un segmento parado justo en el borde antes de expirar', () => {
   const a = snake('a', [{ x: 593, y: 120 }]);
   assert.equal(traceProjectile(right(588, 120), 3, bounds, [a]).outcome, 'hit');
+});
+
+// Abanico: tres disparos, el central en el rumbo y dos abiertos a los lados
+const near = (a, b, eps) => assert.ok(Math.abs(a - b) < eps, `${a} ≉ ${b}`);
+const deg = d => Math.atan2(d.y, d.x) * 180 / Math.PI;
+
+test('abanico: el central sigue el rumbo y los laterales se abren 12° a cada lado', () => {
+  const dirs = fanDirections({ x: 1, y: 0 }, 12);
+  assert.equal(dirs.length, 3);
+  assert.deepEqual(dirs[0], { x: 1, y: 0 });
+  near(deg(dirs[1]), -12, 1e-2);
+  near(deg(dirs[2]), 12, 1e-2);
+  for (const d of dirs) near(Math.hypot(d.x, d.y), 1, 1e-3);
+});
+
+test('abanico: gira con el rumbo de la cabeza', () => {
+  const dirs = fanDirections({ x: 0, y: 1 }, 12);
+  assert.deepEqual(dirs.map(d => Math.round(deg(d))), [90, 78, 102]);
+});
+
+test('abanico: un disparo lateral no le pega a la serpiente que lo dispara', () => {
+  const shooter = snake('a', [{ x: 300, y: 300 }, { x: 288, y: 300 }, { x: 276, y: 300 }]);
+  for (const d of fanDirections({ x: 1, y: 0 }, 12).slice(1)) {
+    const shot = { x: 300 + d.x * 12, y: 300 + d.y * 12, direction: d };
+    assert.equal(traceProjectile(shot, 3, bounds, [shooter]).outcome, 'alive');
+  }
 });

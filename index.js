@@ -3,7 +3,7 @@ const express = require('express');
 const socketIO = require('socket.io');
 const Snake = require('./public/snakeClass.js');
 const { buildRoomConfig, consumableLimit } = require('./game/difficulty');
-const { traceProjectile } = require('./game/projectiles');
+const { traceProjectile, fanDirections } = require('./game/projectiles');
 const { touchedAlong, wrapPoint, cellIndex } = require('./game/geometry');
 const { cutSnake, dropRemains } = require('./game/remains');
 const { matchResult } = require('./game/match');
@@ -628,6 +628,7 @@ function createProjectile(room, player) {
     return false;
   }
   
+  const now = Date.now();
   const head = player.segments[0];
   const { segmentSize } = room.config;
   
@@ -647,37 +648,45 @@ function createProjectile(room, player) {
   }
 
   // Pausa entre tiros: va al final, así un pedido rechazado por otra razón no la consume
-  if (!player.tryShot(Date.now(), room.config.shotCooldownMs || 0)) {
+  if (!player.tryShot(now, room.config.shotCooldownMs || 0)) {
     return false;
   }
-  
-  const projectile = {
-    id: Math.random().toString(36).substring(2, 9),
-    playerId: player.id,
-    x: newProjectileX,
-    y: newProjectileY,
-    direction: { ...player.direction },
-    color: player.color
-  };
-  
-  // Cambio 3: Reducir pérdida de segmentos de 2 a 1
+
+  // Disparar cuesta un segmento, también la ráfaga del abanico
   if (player.segments.length > 1) {
     player.segments.pop();
   }
-  
   player.updateTargets();
-  
-  room.projectiles.push(projectile);
 
-  // Evento visual: el disparo ocurre entre ticks, se envía en el próximo gameLogicFrame
+  // Con el abanico salen tres: el central y dos abiertos fanDegrees a los lados, cada uno una celda
+  // delante de la cabeza en su propio rumbo
+  const directions = player.hasEffect('fan', now)
+    ? fanDirections(player.direction, room.config.fanDegrees)
+    : [player.direction];
   if (!room.pendingProjectileEvents) room.pendingProjectileEvents = [];
-  room.pendingProjectileEvents.push({
-    id: projectile.id,
-    playerId: projectile.playerId,
-    x: projectile.x,
-    y: projectile.y,
-    direction: { ...projectile.direction },
-    color: projectile.color
+  directions.forEach((direction, index) => {
+    const projectile = {
+      id: Math.random().toString(36).substring(2, 9),
+      playerId: player.id,
+      x: index === 0 ? newProjectileX : Snake.round1(head.x + direction.x * segmentSize),
+      y: index === 0 ? newProjectileY : Snake.round1(head.y + direction.y * segmentSize),
+      direction: { ...direction },
+      color: player.color
+    };
+    room.projectiles.push(projectile);
+
+    // Evento visual: el disparo ocurre entre ticks, se envía en el próximo gameLogicFrame. Los
+    // laterales van con spread: la arena no repite el costo (la gota de la cola) por ellos.
+    const event = {
+      id: projectile.id,
+      playerId: projectile.playerId,
+      x: projectile.x,
+      y: projectile.y,
+      direction: { ...projectile.direction },
+      color: projectile.color
+    };
+    if (index > 0) event.spread = true;
+    room.pendingProjectileEvents.push(event);
   });
   return true;
 }
