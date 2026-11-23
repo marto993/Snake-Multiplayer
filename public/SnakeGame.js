@@ -855,6 +855,7 @@ document.addEventListener('DOMContentLoaded', function () {
   let touchSeen = false;            // hubo toques en esta pestaña (o el puntero principal es táctil)
   let touchShown = false;
   let fireReady = null;
+  let fireTimer = 0;               // disparo continuo mientras el botón sigue apretado
   let anchorShownState = '', anchorShownP = '';
 
   // Estado del ancla propia, medido con la hora del servidor del instante dibujado y no con
@@ -907,6 +908,7 @@ document.addEventListener('DOMContentLoaded', function () {
       stick.id = null;
       touchControls.hidden = !show;
       if (show) stickToRest();
+      else onFireUp();
     }
     if (!show) return;
     const ready = !!(me && me.renderSegments && me.renderSegments.length >= 2);
@@ -968,6 +970,8 @@ document.addEventListener('DOMContentLoaded', function () {
     stickToRest();
   }
 
+  // Mantener apretado dispara en continuo, como la barra espaciadora: un pedido por cada pausa entre
+  // tiros (el servidor igual la hace cumplir)
   function onFireDown(event) {
     event.preventDefault();
     event.stopPropagation();
@@ -976,8 +980,18 @@ document.addEventListener('DOMContentLoaded', function () {
     fireButton.classList.add('is-pressed');
     socket.emit('attack');
     if (navigator.vibrate) { try { navigator.vibrate(12); } catch (e) { /* nada */ } }
+    clearInterval(fireTimer);
+    const every = (roomConfig && +roomConfig.shotCooldownMs) || 200;
+    fireTimer = setInterval(function () {
+      if (!canSteer() || !touchShown) { onFireUp(); return; }
+      socket.emit('attack');
+    }, every);
   }
-  function onFireUp() { fireButton.classList.remove('is-pressed'); }
+  function onFireUp() {
+    clearInterval(fireTimer);
+    fireTimer = 0;
+    fireButton.classList.remove('is-pressed');
+  }
 
   function onAnchorDown(event) {
     event.preventDefault();
