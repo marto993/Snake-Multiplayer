@@ -1,6 +1,8 @@
-# Diseño: ancla, poderes acumulables y cierre de la partida
+# Diseño: poderes acumulables, cierre de la partida y controles
 
-Este documento define seis cambios de juego, pensados para que la partida tenga más decisiones y un final más intenso: una pausa mínima entre disparos, consumibles que se acumulan, dos consumibles nuevos (boca grande y abanico), una habilidad defensiva (el ancla), más comida en los últimos 20 segundos (el frenesí) y una corona para la serpiente más larga. Se implementan en cuatro etapas, cada una jugable por separado. Las reglas de base no cambian: partida por tiempo, sin choques entre serpientes, gana la más larga.
+Este documento define los cambios de juego pensados para que la partida tenga más decisiones y un final más intenso: una pausa mínima entre disparos, consumibles que se acumulan, dos consumibles nuevos (boca grande y abanico), más comida en los últimos 20 segundos (el frenesí) y una corona para la serpiente más larga. Suma un cambio de controles: el mouse deja de apuntar y se puede jugar con mando. Las reglas de base no cambian: partida por tiempo, sin choques entre serpientes, gana la más larga.
+
+Se probó también una habilidad defensiva, el ancla (frenar la serpiente 1,5 s y perder un solo segmento por impacto, con recarga), y se descartó: jugando no agregaba decisiones interesantes y sumaba un botón.
 
 ## Punto de partida
 
@@ -47,38 +49,11 @@ Mientras está activa, la serpiente come desde 2,55 celdas, el triple del alcanc
 
 Mientras está activo, cada disparo sale de a tres: uno en el rumbo de la cabeza y dos abiertos 12° a cada lado. La ráfaga cuesta un segmento, como un disparo simple, y respeta la pausa entre tiros. Cada proyectil nace una celda delante de la cabeza en su propio rumbo y se resuelve por separado; dos de la misma ráfaga pueden cortar a la misma serpiente en el mismo paso. Los dos laterales viajan en `projectileEvents` con `spread: true`, y la arena no repite para ellos la gota de la cola ni el retroceso de la cabeza (`public/js/render/arena.js:2979`), porque el costo fue uno solo.
 
-## Etapa 3. Ancla
-
-### Reglas
-
-El ancla detiene a la serpiente para defenderse. Mientras está anclada:
-
-- no avanza, no gira, no dispara, no come y no toma consumibles;
-- un impacto, en la cabeza o en el cuerpo, le quita un solo segmento de la cola, que queda en el mapa como resto (comida de valor 1 que vence a los 10 s, como en `game/remains.js`); con un solo segmento no pierde nada;
-- si además tiene escudo, el escudo bloquea primero, se consume y no pierde nada;
-- los efectos activos siguen corriendo: el ancla no congela su tiempo.
-
-El ancla dura 1,5 s. Apretar de nuevo la suelta antes. Se recarga en 4 s, contados desde que termina. Pedirla durante la recarga, durante la cuenta regresiva o como espectador no hace nada, y el pedido no queda en espera. Si el jugador mueve el mouse o el joystick mientras está anclado, el servidor guarda el rumbo pedido pero no gira; al soltarse, la serpiente gira hacia ese rumbo con el giro normal. Al terminar la partida o volver a la sala, el ancla y su recarga se reinician.
-
-### Controles
-
-La tecla E, el clic derecho sobre la arena y un segundo botón táctil, junto al de disparo, mandan el mismo evento `anchor` al servidor, que lo interpreta según el estado: anclar si está lista, soltar si ya está anclada. El clic derecho no abre el menú contextual sobre la arena. El botón táctil muestra la recarga y queda atenuado mientras no está lista, como hoy el de disparo cuando la serpiente es muy corta (`public/SnakeGame.js:864`).
-
-### Lo que viaja por red
-
-Cada jugador del frame suma `anchoredUntil` (hora del servidor en que se suelta, o 0) y `anchorReadyAt` (hora del servidor desde la que se puede volver a anclar). El cliente calcula si está anclada y cuánto le falta a la recarga con la hora del servidor del instante dibujado, la misma que usa para desvanecer los restos (`public/SnakeGame.js:592`), no con `Date.now()`, para no depender del desfase de reloj. Un impacto contra una serpiente anclada viaja en `hitEvents` con `anchored: true` y `segmentsLost: 1`.
-
-La tabla de dificultad suma `anchor: { lastsMs, rechargeMs }`, igual en los tres niveles.
-
-### Cómo se ve
-
-Anclada, la criatura se cierra: el cuerpo deja de ondular, un contorno perla lo recubre como una coraza y los fotóforos bajan de brillo. Sobre la cabeza, un anillo se vacía en el 1,5 s que dura. Un impacto contra una serpiente anclada no desprende la cola: suelta chispas que rebotan, un anillo seco y el texto "−1". La recarga no se ve en la arena: se ve en el botón táctil y en el HUD propio. Los valores exactos se agregan a `docs/VISUAL_SPEC.md`, en el catálogo de efectos.
-
 ### HUD propio
 
-El indicador del escudo del HUD (`public/js/ui/scenes.js:741-776`) pasa a ser una fila de indicadores, uno por efecto activo, cada uno con su icono y su tiempo restante. Para quien juega con teclado o mouse, la fila suma un indicador del ancla con tres estados: lista (con la tecla "E"), anclada y recargando. En pantallas táctiles ese indicador no aparece, porque el botón ya lo muestra. El marcador de jugadores sigue mostrando solo el escudo, que es lo que le importa a quien apunta.
+El indicador del escudo del HUD (`public/js/ui/scenes.js:741-776`) pasa a ser una fila de indicadores, uno por efecto activo, cada uno con su icono y su tiempo restante. El marcador de jugadores sigue mostrando solo el escudo, que es lo que le importa a quien apunta. El tiempo restante se cuenta con la hora del servidor (la del instante dibujado), no con el reloj del cliente, que puede estar desfasado.
 
-## Etapa 4. Frenesí final y corona
+## Etapa 3. Frenesí final y corona
 
 ### Frenesí
 
@@ -88,11 +63,31 @@ Con `ROUND_TIME` de 20 o menos, el frenesí empieza en el primer segundo de la p
 
 ### Corona
 
-La serpiente más larga lleva una corona de luz sobre la cabeza, siempre derecha en la pantalla, como las etiquetas de nombre. La decide el servidor en cada paso con una función pura de `game/match.js` y la manda en `gameState.leaderId`, así todos ven la misma. Si hay empate en el largo máximo, la conserva quien ya la tenía; si no la tenía ninguno de los empatados, no la lleva nadie. Por eso no aparece al empezar, cuando todas miden 3, y no salta de una serpiente a otra en cada paso. Solo existe durante la partida.
+La serpiente más larga lleva una corona de luz sobre la cabeza, siempre derecha en la pantalla, como las etiquetas de nombre. La decide el servidor en cada paso con una función pura de `game/match.js` y la manda en `gameState.leaderId`, así todos ven la misma. Si hay empate en el largo máximo, la conserva quien ya la tenía; si no la tenía ninguno de los empatados, no la lleva nadie. Por eso no aparece al empezar, cuando todas miden 3, y no salta de una serpiente a otra en cada paso. Solo existe durante la partida: al empezar otra, el cliente olvida la corona de la anterior hasta que llega el primer frame nuevo.
+
+## Etapa 4. Controles
+
+### Sin mouse para apuntar
+
+Con el mouse, la serpiente giraba hacia el puntero: apuntar era poner el puntero sobre el rival. Con el teclado, el joystick táctil o un stick se elige una dirección y el ángulo hay que calcularlo. Esa diferencia hacía mucho más fácil apuntar con el mouse, así que el mouse deja de girar la serpiente y desaparece la mira sobre la arena. El clic izquierdo sobre la arena sigue disparando, para quien juega con WASD y el mouse en la otra mano. En los menús, el mouse funciona como siempre.
+
+### Mando
+
+Se puede jugar con un mando por la Gamepad API del navegador. Con el mapeo estándar (mandos Xbox, PlayStation y la mayoría de los genéricos):
+
+- **Stick izquierdo**: el rumbo, como el joystick táctil (empujar a la derecha es ir a la derecha). Por debajo de 0,3 de inclinación no cuenta.
+- **Cruceta**: ocho rumbos, como las flechas (dos a la vez, en diagonal).
+- **Disparo**: A (Cruz en PlayStation) o el gatillo derecho. Mantenerlo apretado dispara cada `shotCooldownMs`, como la barra espaciadora y el botón táctil.
+
+Con un mando sin mapeo estándar se usan el primer par de ejes como stick y los cuatro primeros botones para disparar. El navegador muestra el mando recién cuando se aprieta un botón; ahí aparece un aviso ("Mando conectado"), y otro si se desconecta. Si el navegador lo permite (Chrome y Edge), el mando vibra al recibir un impacto, más fuerte si es en la cabeza. La Gamepad API solo funciona en contexto seguro: en producción (HTTPS) y en `localhost`, no al abrir el servidor de desarrollo por la IP de la red local.
+
+La lectura del mando (ejes, zona muerta, cruceta y botones a un rumbo y un disparo) va en un módulo propio, `public/js/input/pad.js`, que también carga en Node para probarlo. `SnakeGame.js` lo consulta en cada cuadro, junto con el joystick táctil.
+
+El stick y el joystick táctil dan cualquier ángulo, más precisión que las ocho direcciones del teclado. Para probar empiezan así; un solo valor (`STICK_SNAP` en `SnakeGame.js`, 0 para cualquier ángulo, 8 para redondear a ocho rumbos) cambia los dos si hace falta igualarlos.
 
 ## Valores
 
-Todos van en `game/difficulty.js`, con el mismo valor en los tres niveles, para poder ajustarlos por nivel después sin tocar el resto del código.
+Los de juego van en `game/difficulty.js`, con el mismo valor en los tres niveles, para poder ajustarlos por nivel después sin tocar el resto del código. La zona muerta del stick va en `public/js/input/pad.js`.
 
 | Valor | Cantidad |
 |---|---|
@@ -100,9 +95,8 @@ Todos van en `game/difficulty.js`, con el mismo valor en los tres niveles, para 
 | Boca grande: dura / alcance | 6 s / 2,55 celdas |
 | Abanico: dura / apertura | 6 s / 12° a cada lado |
 | Boca grande y abanico en el mapa | cada 12 s, máximo 1 (2 con 5 jugadores o más) |
-| Ancla: dura / recarga | 1,5 s / 4 s desde que termina |
-| Ancla: daño por impacto | 1 segmento |
 | Frenesí: desde / comida base | últimos 20 s / +50 % |
+| Stick del mando: zona muerta | 0,3 |
 
 ## Cómo se verifica
 
@@ -110,11 +104,11 @@ Cada etapa suma pruebas en `test/` para lo que carga en Node sin navegador:
 
 - **Etapa 1**: efectos que vencen por separado y se renuevan sin sumar (`test/snake.test.js`); valores nuevos de la tabla (`test/difficulty.test.js`).
 - **Etapa 2**: los rumbos del abanico (función pura en `game/projectiles.js`).
-- **Etapa 3**: anclar, soltar antes, recarga y pedidos rechazados (`test/snake.test.js`); el daño de un impacto con ancla (`game/remains.js`).
-- **Etapa 4**: la cantidad de comida del frenesí y la corona con empates (`game/match.js`).
+- **Etapa 3**: la cantidad de comida del frenesí y la corona con empates (`game/match.js`).
+- **Etapa 4**: la lectura del mando: zona muerta, cruceta, prioridad entre stick y cruceta, botones de disparo y mandos sin mapeo estándar (`test/pad.test.js`).
 
-El juego se prueba a mano en cada etapa con `npm run dev` y dos ventanas (una en incógnito), y con `ROUND_TIME=30` para llegar rápido al frenesí. Lo que hay que mirar: que mantener el disparo dé 5 tiros por segundo, que el escudo siga bloqueando, que dos efectos se vean y venzan por separado, que el ancla frene en seco y aguante un impacto con un solo segmento, que el botón táctil muestre la recarga (emulación táctil de DevTools) y que la consola no tenga errores.
+El juego se prueba a mano en cada etapa con `npm run dev` y dos ventanas (una en incógnito), y con `ROUND_TIME=30` para llegar rápido al frenesí. Lo que hay que mirar: que mantener el disparo dé 5 tiros por segundo (barra, botón táctil y mando), que el escudo siga bloqueando, que dos efectos se vean y venzan por separado, que mover el mouse no gire la serpiente y el clic dispare, que el mando gire y dispare, y que la consola no tenga errores.
 
 ## Pendiente de ajuste
 
-Los valores son un punto de partida para ajustar jugando. Lo más probable es que haya que tocar la recarga del ancla (con 4 s se puede anclar casi siempre que llega un disparo de frente), la apertura del abanico y el aumento del frenesí.
+Los valores son un punto de partida para ajustar jugando. Lo más probable es que haya que tocar la apertura del abanico, el aumento del frenesí y si el stick y el joystick táctil se redondean a ocho rumbos.
