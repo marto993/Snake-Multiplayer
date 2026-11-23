@@ -140,6 +140,7 @@ document.addEventListener('DOMContentLoaded', function () {
   let roundLive = false;        // partida en curso: entre gameStart (o spectatingStarted) y gameEnd
   let freezeUntil = 0;          // performance.now() hasta el que la arena muestra el último estado congelado
   let renderServerT = 0;        // hora del servidor del instante dibujado (la recarga del ancla se mide con esta)
+  let crownId = null;           // quién lleva la corona en el frame que alcanzó el render
   let countdownActive = false;  // cuenta regresiva 3, 2, 1 en pantalla
   let startRequested = false;   // el anfitrión pidió iniciar y el servidor todavía no arrancó
   let matchFinished = false;    // llegó gameEnd: la escena final está por entrar o a la vista
@@ -597,6 +598,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     renderServerT = s.rt;
+    crownId = (a.payload && a.payload.gameState && a.payload.gameState.leaderId) || null;
     foods = a.foods;
     consumables = a.consumables;
     // Restos de un corte: se desvanecen en sus últimos 2 s (hora del servidor del instante dibujado)
@@ -1097,7 +1099,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // Objetos reutilizados por frame (sin allocations en el bucle)
   const arenaState = {
     snakes: snakes, foods: foods, consumables: consumables, projectiles: clientProjectiles,
-    myId: null, roundTimeLeft: 0, playing: false, spectating: false, serverT: 0
+    myId: null, roundTimeLeft: 0, playing: false, spectating: false, serverT: 0, leaderId: null
   };
   const idleOptions = { snakesPreview: previewList, caption: '' };
 
@@ -1111,6 +1113,7 @@ document.addEventListener('DOMContentLoaded', function () {
     arenaState.playing = !!gameState.playing;
     arenaState.spectating = isSpectating;
     arenaState.serverT = renderServerT;
+    arenaState.leaderId = crownId;
   }
 
   function renderFrame(now) {

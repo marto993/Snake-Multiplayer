@@ -6,7 +6,7 @@ const { buildRoomConfig, consumableLimit } = require('./game/difficulty');
 const { traceProjectile, fanDirections } = require('./game/projectiles');
 const { touchedAlong, wrapPoint, cellIndex } = require('./game/geometry');
 const { cutSnake, cutAnchored, dropRemains } = require('./game/remains');
-const { matchResult, frenzyFoodTarget } = require('./game/match');
+const { matchResult, frenzyFoodTarget, crownHolder } = require('./game/match');
 const { createAssets } = require('./lib/assets');
 const { secureIndex, reportHandler, REPORT_PATH, REPORT_TYPES } = require('./lib/security');
 const sqlite3 = require('sqlite3').verbose();
@@ -369,6 +369,7 @@ function resetRoomToWaiting(room) {
   room.gameState.downCounter = 3;
   room.gameState.roundTimeLeft = room.config.roundTime;
   room.gameState.frenzy = false;
+  room.gameState.leaderId = null;
   room.projectiles = [];
   room.pendingProjectileEvents = [];
   room.consumables = [];
@@ -828,6 +829,7 @@ function startGame(room) {
     
     room.gameState.playing = true;
     room.gameState.frenzy = false;
+    room.gameState.leaderId = null;
     room.pendingProjectileEvents = []; // Arranca la ronda sin eventos de disparo viejos
     
     console.log(`Starting match in room ${room.id}`);
@@ -999,6 +1001,7 @@ function gameLogicLoop(room) {
   });
   
   updateGameBoard(room);
+  room.gameState.leaderId = crownHolder(room.players, room.gameState.leaderId || null);
   
   io.to(room.id).emit('gameLogicFrame', {
     players: serializePlayers(room.players),
@@ -1016,7 +1019,8 @@ function gameLogicLoop(room) {
       playing: room.gameState.playing,
       round: room.gameState.round,
       roundTimeLeft: room.gameState.roundTimeLeft,
-      frenzy: !!room.gameState.frenzy
+      frenzy: !!room.gameState.frenzy,
+      leaderId: room.gameState.leaderId || null
     },
     timestamp: Date.now()
   });
@@ -1363,7 +1367,8 @@ io.on('connection', (socket) => {
             playing: Boolean(room.gameState.playing),
             round: Number(room.gameState.round) || 1,
             roundTimeLeft: Number(room.gameState.roundTimeLeft) || 60,
-            frenzy: !!room.gameState.frenzy
+            frenzy: !!room.gameState.frenzy,
+            leaderId: room.gameState.leaderId ? String(room.gameState.leaderId) : null
           },
           roundTimeLeft: Number(room.gameState.roundTimeLeft) || 60
         });

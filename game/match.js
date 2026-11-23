@@ -24,4 +24,20 @@ function frenzyFoodTarget(playerCount, foodExtra, foodBoost) {
   return Math.round((playerCount + foodExtra) * (1 + foodBoost));
 }
 
-module.exports = { matchResult, frenzyFoodTarget };
+// Corona: la lleva la serpiente más larga. En un empate la conserva quien ya la tenía (prevId); si
+// no la tenía ninguno de los empatados, no la lleva nadie. Así no aparece al empezar, cuando todas
+// miden lo mismo, y no salta de una a otra en cada paso.
+function crownHolder(players, prevId) {
+  let best = 0;
+  const top = [];
+  for (const player of players) {
+    if (player.gameover) continue;
+    const length = player.segments ? player.segments.length : 0;
+    if (length > best) { best = length; top.length = 0; top.push(player.id); }
+    else if (length === best && length > 0) top.push(player.id);
+  }
+  if (top.length === 1) return top[0];
+  return top.includes(prevId) ? prevId : null;
+}
+
+module.exports = { matchResult, frenzyFoodTarget, crownHolder };

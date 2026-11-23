@@ -280,6 +280,7 @@
   let snowSprite = null;
   let pearlSprite = null, shieldSprite = null, violetSprite = null, pearlBig = null;
   let anemoneSprite = null, coralSprite = null;   // glows de la boca grande y del abanico
+  let goldSprite = null;                          // glow de la corona
   let turquoiseSprite = null;
 
   function buildBackground() {
@@ -410,6 +411,7 @@
     violetSprite = Particles.glowSprite('#B9A6FF', true);
     anemoneSprite = Particles.glowSprite('#FF8FD0', true);
     coralSprite = Particles.glowSprite('#FF7A59', true);
+    goldSprite = Particles.glowSprite('#FFE08A', false);
     turquoiseSprite = Particles.glowSprite('#1FF2D2', true);
   }
 
@@ -2645,6 +2647,51 @@
   }
   const DASH_REACH = [3, 4], NO_DASH = [];
 
+  // Corona (5.6): tres puntas de luz dorada justo encima de la cabeza de la serpiente más larga,
+  // siempre derecha en la pantalla, debajo de la etiqueta de nombre
+  function drawCrown(id, now) {
+    if (id === null || id === undefined) return;
+    const rec = snakeRecs.get(id);
+    if (!rec || rec.n === 0 || rec.lastSeenT !== now) return;
+    const c = ctx, ss = s;
+    const hx = rec.x[0], hy = rec.y[0] - 0.75 * ss + 0.6 * Math.sin(animT * 0.003);
+    const w = 0.7 * ss, hSide = 0.42 * ss, hMid = 0.62 * ss;
+    const a = rec.alphaVis;
+    // glow detrás
+    c.globalCompositeOperation = 'lighter';
+    c.globalAlpha = 0.55 * a;
+    const g = 1.3 * ss;
+    c.drawImage(goldSprite, hx - g, hy - hMid * 0.5 - g, g * 2, g * 2);
+    // contorno: base y tres puntas
+    c.globalCompositeOperation = 'source-over';
+    c.globalAlpha = 0.95 * a;
+    c.strokeStyle = '#FFE08A';
+    c.lineWidth = 1.4;
+    c.lineJoin = 'round';
+    c.beginPath();
+    c.moveTo(hx - w, hy);
+    c.lineTo(hx - w, hy - hSide);
+    c.lineTo(hx - w * 0.45, hy - hSide * 0.45);
+    c.lineTo(hx, hy - hMid);
+    c.lineTo(hx + w * 0.45, hy - hSide * 0.45);
+    c.lineTo(hx + w, hy - hSide);
+    c.lineTo(hx + w, hy);
+    c.closePath();
+    c.fillStyle = 'rgba(255, 224, 138, 0.28)';
+    c.fill();
+    c.stroke();
+    c.lineJoin = 'miter';
+    // perlas en las puntas
+    c.globalCompositeOperation = 'lighter';
+    c.globalAlpha = a;
+    const pr = 0.22 * ss;
+    c.drawImage(pearlSprite, hx - w - pr, hy - hSide - pr, pr * 2, pr * 2);
+    c.drawImage(pearlSprite, hx - pr, hy - hMid - pr, pr * 2, pr * 2);
+    c.drawImage(pearlSprite, hx + w - pr, hy - hSide - pr, pr * 2, pr * 2);
+    c.globalAlpha = 1;
+    c.globalCompositeOperation = 'source-over';
+  }
+
   function ssGame() { return s; }
 
   function drawGameLabels(now) {
@@ -2710,6 +2757,7 @@
     drawProjectiles(state.projectiles, now); // 9
     drawTails(now);                //   colas desprendidas
     drawCreatures(now, ssGame);    // 10
+    if (state.playing || fr) drawCrown(state.leaderId, now); //   corona sobre la más larga
     particles.draw(ctx);           // 11
     drawFxLayer(1, now);           //   anillos, destellos, ola
     drawGameLabels(now);           // 12

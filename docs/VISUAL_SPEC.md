@@ -964,6 +964,7 @@ Cuando una serpiente cruza un borde, dos puntos consecutivos quedan a más de me
 - **Etiqueta "Tú"** en `--bio-lime` sobre la cabeza propia durante los primeros 2500 ms de la partida; después, la propia no lleva etiqueta.
 - **Etiquetas de otros**: el nombre sobre la cabeza, centrado en `P_0.y - (0,9·s + 8)`; si queda a menos de 16 px del borde superior, va debajo. Alpha 0,8. Tamaño lógico `max(11, 10 / escala)` para que nunca baje de 10 px CSS. Recursive 600.
 - **Espectador** (`state.spectating`): no hay serpiente propia; ninguna lleva "Tú" ni sonar.
+- **Corona**: la serpiente de `state.leaderId` (la más larga, decidida por el servidor: `gameState.leaderId`, `docs/GAMEPLAY_SPEC.md`) lleva una corona de luz justo encima de la cabeza, siempre derecha en la pantalla y debajo de la etiqueta: base de `1,4·s` de ancho a `0,75·s` sobre el centro de la cabeza, tres puntas (las de los lados a `0,42·s`, la del medio a `0,62·s`), relleno `rgba(255, 224, 138, 0.28)` y trazo `#FFE08A` de 1,4 px, una perla de radio `0,22·s` en cada punta y un glow dorado de radio `1,3·s`. Sube y baja ±0,6 px. Se dibuja con la partida en curso y durante el congelado final; en el modo atracción, no.
 
 ### 5.7 Inmunidad
 
