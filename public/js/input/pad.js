@@ -5,6 +5,8 @@
  *
  *   PadInput.read(gamepad, out) -> out        out.angle: rumbo en radianes (y crece hacia abajo) o null
  *                                             out.fire: si el botón de disparo está apretado
+ *   PadInput.readAll(gamepads, out) -> out    lo mismo con todos los conectados: el rumbo del primero que
+ *                                             lo da, el disparo de cualquiera; out.pad: el que dio entrada
  *   PadInput.snapAngle(angle, steps) -> angle redondea a `steps` rumbos (0: sin redondeo)
  *   PadInput.DEADZONE                         inclinación del stick por debajo de la cual no cuenta
  *
@@ -46,11 +48,29 @@
     return out;
   }
 
+  // Algunos teclados y receptores se anuncian como mando y pueden ocupar el primer lugar de
+  // getGamepads(): se leen todos y manda el que tiene entrada
+  const one = { angle: null, fire: false };
+  function readAll(gamepads, out) {
+    out.angle = null;
+    out.fire = false;
+    out.pad = null;
+    const list = gamepads || [];
+    for (let i = 0; i < list.length; i++) {
+      const gp = list[i];
+      if (!gp || !gp.connected) continue;
+      read(gp, one);
+      if (one.angle !== null && out.angle === null) { out.angle = one.angle; if (!out.pad) out.pad = gp; }
+      if (one.fire) { out.fire = true; if (!out.pad) out.pad = gp; }
+    }
+    return out;
+  }
+
   function snapAngle(angle, steps) {
     if (!steps) return angle;
     const unit = 2 * Math.PI / steps;
     return Math.round(angle / unit) * unit;
   }
 
-  global.PadInput = { read: read, snapAngle: snapAngle, DEADZONE: DEADZONE };
+  global.PadInput = { read: read, readAll: readAll, snapAngle: snapAngle, DEADZONE: DEADZONE };
 })(typeof window !== 'undefined' ? window : this);

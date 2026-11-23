@@ -815,27 +815,22 @@ document.addEventListener('DOMContentLoaded', function () {
   // ---------------------------------------------------------------------------
   // Stick del mando y joystick táctil: 0 da cualquier ángulo; 8 los redondea a ocho rumbos, como el teclado
   const STICK_SNAP = 0;
-  const padState = { angle: null, fire: false };
+  const padState = { angle: null, fire: false, pad: null };
   let padActive = false;           // el último control usado fue el mando (para vibrar al recibir un impacto)
   let padLastShot = -Infinity;
+  let padRumble = null;            // el mando que dio la última entrada (el que vibra)
 
   function snapStick(angle) {
     return PadInput ? PadInput.snapAngle(angle, STICK_SNAP) : angle;
   }
 
-  function currentPad() {
-    if (!PadInput || !navigator.getGamepads) return null;
-    const pads = navigator.getGamepads() || [];
-    for (let i = 0; i < pads.length; i++) if (pads[i] && pads[i].connected) return pads[i];
-    return null;
-  }
-
   // Con el stick en reposo no manda nada: la serpiente sigue con el último rumbo y las flechas mandan.
-  // Mantener el disparo apretado dispara cada shotCooldownMs, como la barra espaciadora.
+  // Mantener el disparo apretado dispara cada shotCooldownMs, como la barra espaciadora. Se leen todos
+  // los mandos conectados (PadInput.readAll): manda el que tiene entrada.
   function updatePad(now) {
-    const gp = currentPad();
-    if (!gp) return;
-    PadInput.read(gp, padState);
+    if (!PadInput || !navigator.getGamepads) return;
+    PadInput.readAll(navigator.getGamepads(), padState);
+    if (padState.pad) padRumble = padState.pad;
     if (padState.angle !== null) {
       padActive = true;
       steerMode = 'pad';
@@ -853,9 +848,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // Vibración al recibir un impacto, si el navegador la ofrece (Chrome y Edge) y se juega con el mando
   function rumble(strong) {
-    if (!padActive) return;
-    const gp = currentPad();
-    const act = gp && gp.vibrationActuator;
+    if (!padActive || !padRumble || !padRumble.connected) return;
+    const act = padRumble.vibrationActuator;
     if (!act || typeof act.playEffect !== 'function') return;
     try {
       const p = act.playEffect('dual-rumble', strong
@@ -872,6 +866,7 @@ document.addEventListener('DOMContentLoaded', function () {
   window.addEventListener('gamepaddisconnected', function () {
     if (!PadInput) return;
     padActive = false;
+    padRumble = null;
     toast('Mando desconectado', 'info', 2500);
   });
 

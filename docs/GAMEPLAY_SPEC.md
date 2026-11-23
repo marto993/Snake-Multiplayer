@@ -81,7 +81,7 @@ Se puede jugar con un mando por la Gamepad API del navegador. Con el mapeo está
 
 Con un mando sin mapeo estándar se usan el primer par de ejes como stick y los cuatro primeros botones para disparar. El navegador muestra el mando recién cuando se aprieta un botón; ahí aparece un aviso ("Mando conectado"), y otro si se desconecta. Si el navegador lo permite (Chrome y Edge), el mando vibra al recibir un impacto, más fuerte si es en la cabeza. La Gamepad API solo funciona en contexto seguro: en producción (HTTPS) y en `localhost`, no al abrir el servidor de desarrollo por la IP de la red local.
 
-La lectura del mando (ejes, zona muerta, cruceta y botones a un rumbo y un disparo) va en un módulo propio, `public/js/input/pad.js`, que también carga en Node para probarlo. `SnakeGame.js` lo consulta en cada cuadro, junto con el joystick táctil.
+La lectura del mando (ejes, zona muerta, cruceta y botones a un rumbo y un disparo) va en un módulo propio, `public/js/input/pad.js`, que también carga en Node para probarlo. `SnakeGame.js` lo consulta en cada cuadro, junto con el joystick táctil. Lee todos los mandos conectados, porque algunos teclados y receptores se anuncian como mando y pueden ocupar el primer lugar: el rumbo sale del primero que lo da y el disparo de cualquiera.
 
 El stick y el joystick táctil dan cualquier ángulo, más precisión que las ocho direcciones del teclado. Para probar empiezan así; un solo valor (`STICK_SNAP` en `SnakeGame.js`, 0 para cualquier ángulo, 8 para redondear a ocho rumbos) cambia los dos si hace falta igualarlos.
 

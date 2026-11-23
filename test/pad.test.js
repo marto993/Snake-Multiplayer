@@ -65,3 +65,25 @@ test('snapAngle: redondea a N rumbos, o nada con 0', () => {
   near(PadInput.snapAngle(0.5, 8), Math.PI / 4);
   assert.equal(PadInput.snapAngle(0.3, 0), 0.3);
 });
+
+// Varios dispositivos: algunos teclados y receptores se anuncian como mando y ocupan el primer lugar
+test('readAll: el rumbo sale del primer mando que lo da y el disparo de cualquiera', () => {
+  const phantom = pad({ mapping: '' });
+  const xbox = pad({ x: 0, y: 1, pressed: [7] });
+  const out = PadInput.readAll([null, phantom, xbox], { angle: null, fire: false, pad: null });
+  near(out.angle, Math.PI / 2);
+  assert.equal(out.fire, true);
+  assert.equal(out.pad, xbox);
+});
+
+test('readAll: sin entrada en ningún mando, nada (y sin mando para vibrar)', () => {
+  const out = PadInput.readAll([pad(), pad({ x: 0.1 })], { angle: null, fire: false, pad: null });
+  assert.deepEqual(out, { angle: null, fire: false, pad: null });
+  assert.deepEqual(PadInput.readAll(null, { angle: null, fire: false, pad: null }), { angle: null, fire: false, pad: null });
+});
+
+test('readAll: ignora mandos desconectados', () => {
+  const gone = Object.assign(pad({ x: 1, pressed: [0] }), { connected: false });
+  const out = PadInput.readAll([gone], { angle: null, fire: false, pad: null });
+  assert.deepEqual(out, { angle: null, fire: false, pad: null });
+});
