@@ -242,3 +242,11 @@ test('arena apaisada: cada eje envuelve con su propio período', () => {
   Motion.snakeAt([{ x: 100, y: 10 }], [{ x: 100, y: 22 }], 0.5, CELL, { x: 768, y: 432 }, out);
   assert.equal(out[0].y, 16);
 });
+
+test('una serpiente anclada no se extrapola aunque el frame llegue tarde', () => {
+  // Anclada hasta 2000 (hora del servidor): quieta, no avanza media celda y vuelve
+  assert.equal(Motion.leadFor({ anchoredUntil: 2000 }, 0.5, 1500), 0);
+  // Ya suelta, o sin ancla: se extrapola como siempre
+  assert.equal(Motion.leadFor({ anchoredUntil: 2000 }, 0.5, 2000), 0.5);
+  assert.equal(Motion.leadFor({}, 0.4, 1500), 0.4);
+});

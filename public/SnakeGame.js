@@ -586,7 +586,7 @@ document.addEventListener('DOMContentLoaded', function () {
       const pa = a.snakes.get(snake.id);
       const pb = b ? b.snakes.get(snake.id) : null;
       if (pa && pb) Motion.snakeAt(pa.segments, pb.segments, s.f, cell, period, snake.renderSegments);
-      else if (pa) Motion.snakeAhead(pa.segments, pa.direction, b ? 0 : s.e, cell, period, snake.renderSegments);
+      else if (pa) Motion.snakeAhead(pa.segments, pa.direction, b ? 0 : Motion.leadFor(pa, s.e, s.rt), cell, period, snake.renderSegments);
       else if (pb) Motion.snakeAt(null, pb.segments, 0, cell, period, snake.renderSegments);
       else continue;
       snake.direction = (pb || pa).direction;
