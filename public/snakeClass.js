@@ -249,10 +249,12 @@ class Snake {
         return true;
     }
     
-    // Pausa entre tiros: si pasaron cooldownMs desde el último, anota este y devuelve true
+    // Pausa entre tiros: si pasaron cooldownMs desde el último, anota este y devuelve true. Acepta un
+    // pedido que llega hasta SHOT_SLACK_MS antes (el jitter de red adelanta algunos del disparo
+    // sostenido), pero lo cuenta como hecho a su hora: la cadencia nunca pasa de uno cada cooldownMs.
     tryShot(now, cooldownMs) {
-      if (now - this.lastShotAt < cooldownMs) return false;
-      this.lastShotAt = now;
+      if (now - this.lastShotAt < cooldownMs - Snake.SHOT_SLACK_MS) return false;
+      this.lastShotAt = Math.max(now, this.lastShotAt + cooldownMs);
       return true;
     }
 
@@ -349,6 +351,8 @@ class Snake {
 
 // Giro máximo por paso si la sala no dice otro (40°, como la tabla de dificultad)
 Snake.DEFAULT_TURN_RATE = 40 * Math.PI / 180;
+// Tolerancia de la pausa entre tiros al jitter de red (ms)
+Snake.SHOT_SLACK_MS = 25;
 
 // Verificar si el código se está ejecutando en Node.js o en el navegador
 if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {

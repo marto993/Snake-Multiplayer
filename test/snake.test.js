@@ -153,8 +153,30 @@ test('activeEffects devuelve una copia', () => {
 test('pausa entre tiros: el siguiente sale recién a los cooldownMs', () => {
   const s = make();
   assert.equal(s.tryShot(1000, 200), true);
-  assert.equal(s.tryShot(1199, 200), false);
+  assert.equal(s.tryShot(1170, 200), false);
   assert.equal(s.tryShot(1200, 200), true);
   s.reset(60, 120, 1, 0, 3);
   assert.equal(s.tryShot(0, 200), true);
+});
+
+test('pausa entre tiros: tolera unos ms de jitter de red sin pasar de 5 por segundo', () => {
+  const s = make();
+  assert.equal(s.tryShot(1000, 200), true);
+  // llega 20 ms antes por el jitter: se acepta, y el siguiente se cuenta desde 1200
+  assert.equal(s.tryShot(1180, 200), true);
+  assert.equal(s.tryShot(1360, 200), false);
+  assert.equal(s.tryShot(1380, 200), true);
+  // demasiado temprano (más que la tolerancia): no
+  const t = make();
+  t.tryShot(0, 200);
+  assert.equal(t.tryShot(170, 200), false);
+});
+
+test('pausa entre tiros: pidiendo sin parar, nunca más de 5 por segundo', () => {
+  for (const every of [10, 90, 180, 190, 200, 210]) {
+    const s = make();
+    let shots = 0;
+    for (let t = 0; t < 10000; t += every) if (s.tryShot(t, 200)) shots++;
+    assert.ok(shots <= 51, `cada ${every} ms: ${shots} tiros en 10 s`);
+  }
 });

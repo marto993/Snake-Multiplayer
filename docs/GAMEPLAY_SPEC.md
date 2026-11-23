@@ -16,7 +16,7 @@ La comida base se mantiene en `jugadores + foodExtra`: cada vez que se come una,
 
 ### Pausa entre tiros
 
-Entre un disparo y el siguiente del mismo jugador pasan al menos 200 ms. El servidor guarda la hora del último disparo en la serpiente y rechaza el pedido si no pasó ese tiempo. Mantener apretada la barra espaciadora, o el botón táctil, dispara entonces a 5 tiros por segundo. La regla de no tener un proyectil propio enfrente se mantiene. La pausa va en la tabla de dificultad (`shotCooldownMs`), con el mismo valor en los tres niveles.
+Entre un disparo y el siguiente del mismo jugador pasan al menos 200 ms. El servidor guarda la hora del último disparo en la serpiente y rechaza el pedido si no pasó ese tiempo. Acepta uno que llega hasta 25 ms antes, porque el jitter de red adelanta algunos pedidos del disparo sostenido, pero lo cuenta como hecho a su hora: la cadencia nunca pasa de uno cada 200 ms. Mantener apretada la barra espaciadora, o el botón táctil, dispara entonces a 5 tiros por segundo. La regla de no tener un proyectil propio enfrente se mantiene. La pausa va en la tabla de dificultad (`shotCooldownMs`), con el mismo valor en los tres niveles.
 
 ### Efectos acumulables
 
