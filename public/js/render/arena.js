@@ -1,7 +1,8 @@
 /*
- * arena.js — renderizador bioluminiscente de la arena (window.Arena).
+ * arena.js — renderizador de la arena en el espacio profundo (window.Arena).
  *
- * Dibuja canvas#game en coordenadas lógicas de W x H (768 x 432 por defecto), con el backing store
+ * Nebulosa tenue, estrellas que titilan, criaturas del vacío de cuerpo de gas, planetas con lunas
+ * como comida. Dibuja canvas#game en coordenadas lógicas de W x H (768 x 432 por defecto), con el backing store
  * escalado por devicePixelRatio. Sin shadowBlur por frame: todo brillo sale de
  * sprites cacheados con globalCompositeOperation 'lighter'. Sin allocations
  * grandes por frame (buffers Float32Array reutilizados, pools de efectos).
@@ -27,8 +28,8 @@
   // Mundo apaisado de 768 × 432 (16:9); setConfig lo actualiza con canvasWidth / canvasHeight del servidor
   let W = 768, H = 432, HALF_W = 384, HALF_H = 216;
   const TAU = Math.PI * 2;
-  const BG_HEX = '#020A12';
-  const BG_RGB = [2, 10, 18];
+  const BG_HEX = '#07070D';
+  const BG_RGB = [7, 7, 13];
 
   const FONT_UI = '"Recursive", "Segoe UI", system-ui, sans-serif';
   const FONT_DISPLAY = '"Fraunces", "Iowan Old Style", Georgia, serif';
@@ -69,22 +70,22 @@
   // Colores de jugador (sección 2.3)
   // ---------------------------------------------------------------------------
   const BIO_PLAYER = {
-    '#00ff41': { slot: 0, body: '#7DFF6A', core: '#E5FDE1', deep: '#0B4B01', text: '#ABECA1' },
-    '#ff0080': { slot: 1, body: '#FF5FC8', core: '#FEF1F8', deep: '#6E0051', text: '#FEC3E5' },
-    '#00ffff': { slot: 2, body: '#3FE9FF', core: '#E1FBFF', deep: '#00464E', text: '#6FEDFF' },
-    '#ffff00': { slot: 3, body: '#FFE45C', core: '#FDF6D4', deep: '#483D01', text: '#ECD877' },
-    '#ff4040': { slot: 4, body: '#FF5E5E', core: '#FEF2F1', deep: '#770213', text: '#FEC8C4' },
-    '#8040ff': { slot: 5, body: '#A884FF', core: '#F5F3FF', deep: '#442879', text: '#DAD0FE' },
-    '#40ff80': { slot: 6, body: '#3DFFB8', core: '#DCFFED', deep: '#004931', text: '#87F1C1' },
-    '#ff8040': { slot: 7, body: '#FF9A4D', core: '#FFF2EB', deep: '#5F2E01', text: '#FFCBA9' },
-    '#4080ff': { slot: 8, body: '#5C9DFF', core: '#F0F6FE', deep: '#0D3A7A', text: '#C1D9FE' },
-    '#ff40ff': { slot: 9, body: '#E36BFF', core: '#FCF1FE', deep: '#610173', text: '#F3C4FF' },
-    '#80ff40': { slot: 10, body: '#C3FF4A', core: '#EDFBDB', deep: '#314500', text: '#C3E68E' },
-    '#ff4080': { slot: 11, body: '#FF7A9C', core: '#FFF1F3', deep: '#6E1533', text: '#FFC6D1' },
-    '#4040ff': { slot: 12, body: '#7E7BFF', core: '#F3F4FE', deep: '#342C85', text: '#D0D4FE' },
-    '#ffff80': { slot: 13, body: '#FFF3A8', core: '#FCF7D4', deep: '#463E06', text: '#E6DA8F' },
-    '#80ffff': { slot: 14, body: '#A6FFF4', core: '#D7FFF9', deep: '#034742', text: '#92EBE0' },
-    '#ff8080': { slot: 15, body: '#FFB0A0', core: '#FEF2F0', deep: '#5D2D24', text: '#FFC9BD' }
+    '#00ff41': { slot: 0, body: '#75D87A', core: '#EBFAEB', deep: '#133D17', text: '#BFE8BF' },
+    '#ff0080': { slot: 1, body: '#FA89A5', core: '#FFEFF3', deep: '#531E2D', text: '#FFC8D4' },
+    '#00ffff': { slot: 2, body: '#6AE2D4', core: '#E4FBF7', deep: '#003F38', text: '#A6EAE1' },
+    '#ffff00': { slot: 3, body: '#FAD957', core: '#FAF5E3', deep: '#403100', text: '#E9DBA6' },
+    '#ff4040': { slot: 4, body: '#E76348', core: '#FFF0EA', deep: '#542016', text: '#FFCBBD' },
+    '#8040ff': { slot: 5, body: '#AC8FF8', core: '#F6F2FF', deep: '#362957', text: '#DDD2FF' },
+    '#40ff80': { slot: 6, body: '#A3FAD4', core: '#E7FBF1', deep: '#003F28', text: '#B0EACF' },
+    '#ff8040': { slot: 7, body: '#FFA04E', core: '#FFF1E5', deep: '#502600', text: '#FFD0AE' },
+    '#4080ff': { slot: 8, body: '#76ACFC', core: '#EBF6FF', deep: '#17325B', text: '#BFDDFF' },
+    '#ff40ff': { slot: 9, body: '#DB9FDE', core: '#FEF0FF', deep: '#472349', text: '#F3CBF5' },
+    '#80ff40': { slot: 10, body: '#C6E867', core: '#F2F8E6', deep: '#2C3900', text: '#D3E3AF' },
+    '#ff4080': { slot: 11, body: '#FFBCC1', core: '#FFEFF0', deep: '#541E25', text: '#FFC9CC' },
+    '#4040ff': { slot: 12, body: '#7E86EC', core: '#F1F4FF', deep: '#2A2D5B', text: '#CFD7FF' },
+    '#ffff80': { slot: 13, body: '#FCF1AA', core: '#F9F6E3', deep: '#3D3300', text: '#E5DDA7' },
+    '#80ffff': { slot: 14, body: '#C0FBFF', core: '#E3FAFD', deep: '#003D46', text: '#ACE7EE' },
+    '#ff8080': { slot: 15, body: '#FFCDA9', core: '#FFF1E6', deep: '#512500', text: '#FFCFAF' }
   };
 
   function parseHex(str) {
@@ -185,7 +186,6 @@
       bodyRgb: body,
       coreRgb: core,
       deepRgb: deep,
-      lure: rgbaStr(body, 0.8),
       ramps: new Array(DIM_LEVELS),
       inners: new Array(DIM_LEVELS),
       mids: new Array(DIM_LEVELS),
@@ -193,40 +193,42 @@
       glowBody: Particles.glowSprite(rec.body, false),
       glowBodyBig: Particles.glowSprite(rec.body, true),
       glowCore: Particles.glowSprite(rec.core, false),
-      glowDeep: Particles.glowSprite(rec.deep, false)
+      glowDeep: Particles.glowSprite(rec.deep, false),
+      starCore: starSprite(rec.core),
+      gasCore: softSprite(rec.core),
+      gasBody: softSprite(rec.body)
     };
     paints.set(rec, p);
     return p;
   }
 
-  // Rampa de cuerpo (5.3): mix(body, deep, smoothstep(0.15, 1, t) * 0.85); alpha 1 hasta
-  // t = 0,7 y luego baja a 0,35. Se precalcula opaca, mezclando contra el fondo (el
-  // atenuado de fin de ronda usa los niveles de DIM_LEVELS). Además de la rampa de la
-  // membrana (borde luminoso) hay una rampa interior más oscura: el cuerpo se lee como
-  // tejido translúcido con borde de luz, no como un tubo de neón macizo.
+  // Rampas del cuerpo de gas: tres capas de afuera hacia adentro, cada vez más densas (borde
+  // tenue, cuerpo, centro) con saltos chicos entre sí, así el gas se lee volumétrico y sin contorno
+  // luminoso; el núcleo claro lo ponen después las bocanadas aditivas, que no tienen bordes. A lo
+  // largo del cuerpo el color tira apenas al profundo y la cola se adelgaza contra el fondo, en
+  // pasos chicos para que no se vean los trozos. Se precalculan opacas, mezclando contra el fondo
+  // (el atenuado de fin de ronda usa los niveles de DIM_LEVELS).
   function rampFor(p, level) {
     let r = p.ramps[level];
     if (r) return r;
     r = new Array(32);
     const inner = new Array(32);
     const mid = new Array(32);
-    const under = mixRgb(BG_RGB, p.bodyRgb, 0.1);
+    const under = mixRgb(BG_RGB, p.bodyRgb, 0.08);
     const am = dimAlpha(level);
     for (let i = 0; i < 32; i++) {
       const t = i / 31;
-      const c = mixRgb(p.bodyRgb, p.deepRgb, smoothstep(0.15, 1, t) * 0.85);
-      let a = t <= 0.7 ? 1 : 1 - ((t - 0.7) / 0.3) * 0.65;
+      const c = mixRgb(p.bodyRgb, p.deepRgb, smoothstep(0.2, 1, t) * 0.4);
+      let a = t <= 0.5 ? 1 : 1 - ((t - 0.5) / 0.5) * 0.55;
       a *= am;
-      r[i] = rgbStr(mixRgb(under, c, a));
-      const cm = mixRgb(c, p.deepRgb, 0.28 + 0.12 * t);
-      mid[i] = rgbStr(mixRgb(under, cm, a));
-      const ci = mixRgb(c, p.deepRgb, 0.56 + 0.18 * t);
-      inner[i] = rgbStr(mixRgb(under, ci, a));
+      r[i] = rgbStr(mixRgb(under, c, 0.5 * a));
+      mid[i] = rgbStr(mixRgb(under, c, 0.68 * a));
+      inner[i] = rgbStr(mixRgb(under, c, 0.84 * a));
     }
     p.ramps[level] = r;
     p.mids[level] = mid;
     p.inners[level] = inner;
-    p.heads[level] = r[0];
+    p.heads[level] = rgbStr(mixRgb(under, mixRgb(p.bodyRgb, p.coreRgb, 0.12), am));
     return r;
   }
 
@@ -267,21 +269,39 @@
     return c;
   }
 
-  // Fondo abisal + grilla de puntos (cacheado a resolución del backing store).
-  // La grilla se hornea en el mismo caché: con alpha 0,07 su orden respecto de
-  // las cáusticas aditivas es visualmente equivalente y ahorra un drawImage por frame.
+  // Fondo del vacío (cacheado a resolución del backing store): negro con una banda galáctica
+  // muy tenue y un polvo de estrellas lejanas, fijas y sin brillo propio. Las estrellas cercanas
+  // (que titilan y derivan) y la nebulosa se dibujan por frame encima.
   let bgCanvas = null;
-  let vignetteDark = null, vignetteCoral = null;
+  let vignetteDark = null, vignetteRed = null;
   let stripTop = null, stripBottom = null, stripLeft = null, stripRight = null;
-  let causticCyan = null, causticCoral = null;
-  let patCyan = null, patCoral = null;
-  let patMatrix = null;
-  const causticOff = new Float32Array(4); // ax, ay, bx, by
-  let snowSprite = null;
-  let pearlSprite = null, shieldSprite = null, violetSprite = null, pearlBig = null;
-  let anemoneSprite = null, coralSprite = null;   // glows de la boca grande y del abanico
+  let lightSprite = null, lightBig = null;        // luz estelar: destellos, estelas, núcleos
+  let shieldSprite = null, violetSprite = null;   // aurora (escudo e inmunidad)
+  let pinkSprite = null, coralSprite = null;      // glows de la boca grande y del abanico
+  let pinkDot = null;                             // motas que caen hacia la boca grande
   let goldSprite = null;                          // glow de la corona
   let turquoiseSprite = null;
+  let greenSprite = null;                         // borde verde de la aurora (oxígeno)
+
+  // Generador determinista: el polvo de estrellas no cambia al redimensionar
+  function seededRandom(seed) {
+    let a = seed >>> 0;
+    return function () {
+      a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // Colores de estrella por temperatura (azuladas, blancas, amarillas, naranjas) y su peso
+  const STAR_COLORS = ['#CFDBFF', '#F4F3FF', '#FFF2D6', '#FFD9A8', '#FFB98A'];
+  const STAR_WEIGHTS = [0.16, 0.34, 0.27, 0.15, 0.08];
+  function pickStarColor(r) {
+    let acc = 0;
+    for (let i = 0; i < STAR_WEIGHTS.length; i++) { acc += STAR_WEIGHTS[i]; if (r < acc) return i; }
+    return STAR_WEIGHTS.length - 1;
+  }
 
   function buildBackground() {
     const bw = canvas.width, bh = canvas.height;
@@ -293,27 +313,52 @@
     g.globalAlpha = 1;
     g.fillStyle = BG_HEX;
     g.fillRect(0, 0, W, H);
-    const rg = g.createRadialGradient(W / 2, H * 0.2, 0, W / 2, H * 0.2, Math.max(W, H) * 0.87);
-    rg.addColorStop(0, 'rgba(7,37,54,0.55)');
-    rg.addColorStop(1, 'rgba(7,37,54,0)');
+    // banda galáctica: elipse muy estirada y en diagonal, apenas más clara que el fondo
+    g.save();
+    g.translate(W * 0.52, H * 0.46);
+    g.rotate(-0.38);
+    g.scale(1, 0.26);
+    const rg = g.createRadialGradient(0, 0, 0, 0, 0, W * 0.62);
+    rg.addColorStop(0, 'rgba(34,30,48,0.55)');
+    rg.addColorStop(0.5, 'rgba(24,22,36,0.32)');
+    rg.addColorStop(1, 'rgba(24,22,36,0)');
     g.fillStyle = rg;
-    g.fillRect(0, 0, W, H);
-    const lg = g.createLinearGradient(0, H * 0.65, 0, H);
-    lg.addColorStop(0, 'rgba(1,5,9,0)');
-    lg.addColorStop(1, 'rgba(1,5,9,0.6)');
-    g.fillStyle = lg;
-    g.fillRect(0, H * 0.65, W, H * 0.35);
-    // grilla de puntos en cada esquina de celda (cada dos celdas con s = 8)
-    const step = s < 10 ? s * 2 : s;
-    g.fillStyle = 'rgba(79,216,255,0.07)';
-    const rr = 0.6;
-    for (let y = step; y < H; y += step) {
-      for (let x = step; x < W; x += step) {
-        g.beginPath();
-        g.arc(x, y, rr, 0, TAU);
-        g.fill();
+    g.fillRect(-W, -W * 2, W * 2, W * 4);
+    g.restore();
+    // calidad baja: la nebulosa no se dibuja por frame, queda una copia quieta en el fondo
+    if (quality === 0 && !highContrast && nebReady) {
+      const pat = g.createPattern(nebCalm, 'repeat');
+      if (pat && pat.setTransform && typeof DOMMatrix !== 'undefined') {
+        pat.setTransform(new DOMMatrix([NEB_SA, 0, 0, NEB_SA, 0, 0]));
+        g.globalCompositeOperation = 'lighter';
+        g.globalAlpha = NEB_ALPHA_A;
+        g.fillStyle = pat;
+        g.fillRect(0, 0, W, H);
+        g.globalAlpha = 1;
+        g.globalCompositeOperation = 'source-over';
       }
     }
+    // polvo de estrellas lejanas: puntos fijos de 0,3 a 0,7 px, más densos cerca de la banda
+    const rnd = seededRandom(7919);
+    const count = Math.round(W * H / 2300);
+    for (let i = 0; i < count; i++) {
+      let x = rnd() * W, y = rnd() * H;
+      if (rnd() < 0.35) {
+        // atraídas hacia la banda
+        const along = (rnd() - 0.5) * W * 1.1, across = (rnd() + rnd() + rnd() - 1.5) * H * 0.16;
+        x = W * 0.52 + along * Math.cos(-0.38) - across * Math.sin(-0.38);
+        y = H * 0.46 + along * Math.sin(-0.38) + across * Math.cos(-0.38);
+        if (x < 0 || x > W || y < 0 || y > H) continue;
+      }
+      const col = STAR_COLORS[pickStarColor(rnd())];
+      const r = 0.3 + rnd() * rnd() * 0.45;
+      g.globalAlpha = 0.18 + rnd() * 0.38;
+      g.fillStyle = col;
+      g.beginPath();
+      g.arc(x, y, r, 0, TAU);
+      g.fill();
+    }
+    g.globalAlpha = 1;
   }
 
   function buildVignettes() {
@@ -331,8 +376,8 @@
       g.fillRect(0, 0, size, size);
       return c;
     }
-    vignetteDark = vig('1,5,9', 0.75);
-    vignetteCoral = vig('255,77,109', 0.18);
+    vignetteDark = vig('3,3,7', 0.75);
+    vignetteRed = vig('236,79,90', 0.16);
   }
 
   function buildStrips() {
@@ -346,9 +391,9 @@
       const grad = horizontal
         ? g.createLinearGradient(0, fromStart ? 0 : ch, 0, fromStart ? ch : 0)
         : g.createLinearGradient(fromStart ? 0 : cw, 0, fromStart ? cw : 0, 0);
-      grad.addColorStop(0, 'rgba(31,242,210,1)');
-      grad.addColorStop(0.35, 'rgba(31,242,210,0.35)');
-      grad.addColorStop(1, 'rgba(31,242,210,0)');
+      grad.addColorStop(0, 'rgba(94,216,196,1)');
+      grad.addColorStop(0.35, 'rgba(94,216,196,0.35)');
+      grad.addColorStop(1, 'rgba(94,216,196,0)');
       g.fillStyle = grad;
       g.fillRect(0, 0, cw, ch);
       return c;
@@ -359,60 +404,190 @@
     stripRight = strip(false, false);
   }
 
-  // Cáusticas (5.2): Voronoi de 12 puntos con distancia envolvente, venas entre celdas.
-  function buildCaustics() {
-    if (causticCyan) return;
-    const N = 256, P = 12;
-    const ptx = new Float32Array(P), pty = new Float32Array(P);
-    for (let p = 0; p < P; p++) { ptx[p] = Math.random(); pty[p] = Math.random(); }
-    const vals = new Float32Array(N * N);
-    for (let y = 0; y < N; y++) {
-      const v = (y + 0.5) / N;
+  // ---------------------------------------------------------------------------
+  // Nebulosa (reemplaza las cáusticas): ruido fBm de valor, repetible sin costura, con el dominio
+  // deformado para que las nubes tengan hebras y huecos oscuros. Se genera una sola vez, de a
+  // franjas en varios frames (no traba la carga), y se tiñe en dos copias: calma (oxígeno y
+  // polvo cálido) y tensión (rojo H-alfa). Por frame solo se pinta como patrón aditivo y tenue.
+  // ---------------------------------------------------------------------------
+  const NEB_N = 256;
+  const NEB_SA = 3.0, NEB_SB = 4.4;        // escala de las dos capas (la B, girada)
+  const NEB_ALPHA_A = 0.17, NEB_ALPHA_B = 0.11;
+  const NEB_ROT_B = 2.2;                   // giro de la capa B: esconde que es la misma textura
+  let nebCalm = null, nebRed = null;
+  let patCalm = null, patRed = null, patMatrix = null;
+  let nebReady = false, nebRow = 0, nebImgCalm = null, nebImgRed = null, nebReadyT = -1e9;
+  const nebOff = new Float32Array(4);       // ax, ay, bx, by
+
+  function latticeHash(ix, iy, seed) {
+    let h = (Math.imul(ix, 374761393) + Math.imul(iy, 668265263) + Math.imul(seed, 1442695041)) | 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  }
+  // ruido de valor periódico: x, y en celdas de la red, período P celdas
+  function vnoise(x, y, P, seed) {
+    const ix = Math.floor(x), iy = Math.floor(y);
+    const fx = x - ix, fy = y - iy;
+    const ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
+    let x0 = ix % P; if (x0 < 0) x0 += P;
+    let y0 = iy % P; if (y0 < 0) y0 += P;
+    const x1 = x0 + 1 === P ? 0 : x0 + 1, y1 = y0 + 1 === P ? 0 : y0 + 1;
+    const a = latticeHash(x0, y0, seed), b = latticeHash(x1, y0, seed);
+    const c = latticeHash(x0, y1, seed), d = latticeHash(x1, y1, seed);
+    return a + (b - a) * ux + (c - a) * uy + (a - b - c + d) * ux * uy;
+  }
+  // fBm repetible en u, v ∈ [0, 1)
+  function fbm(u, v, seed, oct) {
+    let sum = 0, amp = 0.5, P = 3, norm = 0;
+    for (let o = 0; o < oct; o++) {
+      sum += amp * vnoise(u * P, v * P, P, seed + o * 17);
+      norm += amp; amp *= 0.5; P *= 2;
+    }
+    return sum / norm;
+  }
+
+  // Colores de la nebulosa: oxígeno, polvo cálido y su núcleo dorado; H-alfa y su borde anaranjado
+  const NEB_O = [94, 216, 196], NEB_DUST = [201, 138, 75], NEB_GOLD = [234, 194, 85];
+  const NEB_HA = [236, 79, 90], NEB_HA2 = [240, 138, 60], NEB_STAR = [246, 243, 238];
+
+  function buildNebulaRows(rows) {
+    if (nebReady) return;
+    const N = NEB_N;
+    if (!nebImgCalm) {
+      nebCalm = makeCanvas(N, N);
+      nebRed = makeCanvas(N, N);
+      nebImgCalm = nebCalm.getContext('2d').createImageData(N, N);
+      nebImgRed = nebRed.getContext('2d').createImageData(N, N);
+    }
+    const dc = nebImgCalm.data, dr = nebImgRed.data;
+    const end = Math.min(N, nebRow + rows);
+    for (let y = nebRow; y < end; y++) {
+      const v = y / N;
       for (let x = 0; x < N; x++) {
-        const u = (x + 0.5) / N;
-        let f1 = 9, f2 = 9;
-        for (let p = 0; p < P; p++) {
-          let dx = u - ptx[p]; if (dx < 0) dx = -dx; if (dx > 0.5) dx = 1 - dx;
-          let dy = v - pty[p]; if (dy < 0) dy = -dy; if (dy > 0.5) dy = 1 - dy;
-          const d = Math.sqrt(dx * dx + dy * dy);
-          if (d < f1) { f2 = f1; f1 = d; } else if (d < f2) { f2 = d; }
-        }
-        const val = 1 - smoothstep(0, 0.06, f2 - f1);
-        vals[y * N + x] = Math.pow(val, 1.5) * 0.9;
+        const u = x / N;
+        const wu = u + 0.24 * (fbm(u, v, 11, 4) - 0.5);
+        const wv = v + 0.24 * (fbm(u, v, 23, 4) - 0.5);
+        // densidad: nubes con huecos; hebras: crestas del ruido cerca de las nubes
+        const d = fbm(wu, wv, 37, 5);
+        const cloud = smoothstep(0.46, 0.78, d);
+        const ridge = 1 - Math.abs(2 * fbm(wu + 0.31, wv + 0.17, 67, 5) - 1);
+        const wisp = Math.pow(ridge, 6) * smoothstep(0.34, 0.6, d);
+        const a = clamp01(0.85 * Math.pow(cloud, 1.5) + 0.55 * wisp);
+        // tono: polvo cálido de base, oxígeno en algunas regiones, núcleos dorados donde es denso
+        const m = smoothstep(0.44, 0.66, fbm(u, v, 51, 3));
+        const core = smoothstep(0.66, 0.84, d);
+        const j = (y * N + x) * 4;
+        let r = NEB_DUST[0] + (NEB_O[0] - NEB_DUST[0]) * m;
+        let gg = NEB_DUST[1] + (NEB_O[1] - NEB_DUST[1]) * m;
+        let b = NEB_DUST[2] + (NEB_O[2] - NEB_DUST[2]) * m;
+        r += (NEB_GOLD[0] - r) * core * 0.55; gg += (NEB_GOLD[1] - gg) * core * 0.55; b += (NEB_GOLD[2] - b) * core * 0.55;
+        r += (NEB_STAR[0] - r) * wisp * 0.3; gg += (NEB_STAR[1] - gg) * wisp * 0.3; b += (NEB_STAR[2] - b) * wisp * 0.3;
+        dc[j] = r; dc[j + 1] = gg; dc[j + 2] = b; dc[j + 3] = a * 255;
+        // tensión: la misma nube en hidrógeno, con bordes que tiran al naranja
+        const h = 0.35 * m + 0.4 * wisp;
+        dr[j] = NEB_HA[0] + (NEB_HA2[0] - NEB_HA[0]) * h;
+        dr[j + 1] = NEB_HA[1] + (NEB_HA2[1] - NEB_HA[1]) * h;
+        dr[j + 2] = NEB_HA[2] + (NEB_HA2[2] - NEB_HA[2]) * h;
+        dr[j + 3] = a * 255;
       }
     }
-    function tinted(r, g, b) {
-      const c = makeCanvas(N, N);
-      const cx = c.getContext('2d');
-      const img = cx.createImageData(N, N);
-      const d = img.data;
-      for (let i = 0, j = 0; i < N * N; i++, j += 4) {
-        d[j] = r; d[j + 1] = g; d[j + 2] = b; d[j + 3] = Math.round(vals[i] * 255);
-      }
-      cx.putImageData(img, 0, 0);
-      return c;
+    nebRow = end;
+    if (nebRow >= N) {
+      nebCalm.getContext('2d').putImageData(nebImgCalm, 0, 0);
+      nebRed.getContext('2d').putImageData(nebImgRed, 0, 0);
+      nebImgCalm = null; nebImgRed = null;
+      nebReady = true;
+      nebReadyT = nowMs();
+      buildPatterns();
+      if (quality === 0 && canvas) buildBackground();
     }
-    causticCyan = tinted(79, 216, 255);
-    causticCoral = tinted(255, 77, 109);
   }
 
   function buildPatterns() {
-    if (!ctx || !causticCyan) return;
-    patCyan = ctx.createPattern(causticCyan, 'repeat');
-    patCoral = ctx.createPattern(causticCoral, 'repeat');
+    if (!ctx || !nebReady) return;
+    patCalm = ctx.createPattern(nebCalm, 'repeat');
+    patRed = ctx.createPattern(nebRed, 'repeat');
     if (typeof DOMMatrix !== 'undefined') patMatrix = new DOMMatrix();
   }
 
+  // Mancha blanda de gas: perfil ancho y sin pico (a diferencia del glow de Particles), para que
+  // una cadena de manchas a lo largo del cuerpo se vea continua y no como cuentas. Una por color.
+  const softSprites = new Map();
+  function softSprite(color) {
+    let c = softSprites.get(color);
+    if (c) return c;
+    const N = 64, h = N / 2;
+    c = makeCanvas(N, N);
+    const g = c.getContext('2d');
+    const rgb = parseHex(color) || NEB_STAR;
+    const base = 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',';
+    const rg = g.createRadialGradient(h, h, 0, h, h, h);
+    rg.addColorStop(0, base + '1)');
+    rg.addColorStop(0.3, base + '0.85)');
+    rg.addColorStop(0.6, base + '0.4)');
+    rg.addColorStop(0.85, base + '0.08)');
+    rg.addColorStop(1, base + '0)');
+    g.fillStyle = rg;
+    g.fillRect(0, 0, N, N);
+    softSprites.set(color, c);
+    return c;
+  }
+
+  // Estrella de 4 puntas: halo, dos rayos de difracción que se afinan y se apagan y un núcleo
+  // blanco. Horneada una vez por color (64 px). La usan los fotóforos de las criaturas, las
+  // estrellas más brillantes del fondo, la corona y los efectos.
+  const starSprites = new Map();
+  function starSprite(color) {
+    let c = starSprites.get(color);
+    if (c) return c;
+    const N = 64, h = N / 2;
+    c = makeCanvas(N, N);
+    const g = c.getContext('2d');
+    const rgb = parseHex(color) || NEB_STAR;
+    const base = 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',';
+    const rg = g.createRadialGradient(h, h, 0, h, h, h * 0.5);
+    rg.addColorStop(0, base + '0.9)');
+    rg.addColorStop(0.2, base + '0.4)');
+    rg.addColorStop(0.55, base + '0.08)');
+    rg.addColorStop(1, base + '0)');
+    g.fillStyle = rg;
+    g.fillRect(0, 0, N, N);
+    const sg = g.createRadialGradient(h, h, 0, h, h, h);
+    sg.addColorStop(0, base + '1)');
+    sg.addColorStop(0.25, base + '0.45)');
+    sg.addColorStop(0.7, base + '0.06)');
+    sg.addColorStop(1, base + '0)');
+    g.fillStyle = sg;
+    const w = 2.2;
+    g.beginPath();
+    g.moveTo(0, h); g.lineTo(h, h - w); g.lineTo(N, h); g.lineTo(h, h + w); g.closePath();
+    g.moveTo(h, 0); g.lineTo(h + w, h); g.lineTo(h, N); g.lineTo(h - w, h); g.closePath();
+    g.fill();
+    const cg = g.createRadialGradient(h, h, 0, h, h, 5);
+    cg.addColorStop(0, 'rgba(255,255,255,1)');
+    cg.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = cg;
+    g.fillRect(h - 5, h - 5, 10, 10);
+    starSprites.set(color, c);
+    return c;
+  }
+
   function buildSprites() {
-    snowSprite = Particles.glowSprite('#9FE3F2', false);
-    pearlSprite = Particles.glowSprite('#E8FBFF', false);
-    pearlBig = Particles.glowSprite('#E8FBFF', true);
-    shieldSprite = Particles.glowSprite('#9FF4FF', false);
-    violetSprite = Particles.glowSprite('#B9A6FF', true);
-    anemoneSprite = Particles.glowSprite('#FF8FD0', true);
-    coralSprite = Particles.glowSprite('#FF7A59', true);
+    lightSprite = Particles.glowSprite('#F6F3EE', false);
+    lightBig = Particles.glowSprite('#F6F3EE', true);
+    shieldSprite = Particles.glowSprite('#C7B8FF', false);
+    violetSprite = Particles.glowSprite('#BDAEFF', true);
+    pinkSprite = Particles.glowSprite('#F29BC9', true);
+    pinkDot = Particles.glowSprite('#F29BC9', false);
+    coralSprite = Particles.glowSprite('#F0875F', true);
     goldSprite = Particles.glowSprite('#FFE08A', false);
-    turquoiseSprite = Particles.glowSprite('#1FF2D2', true);
+    turquoiseSprite = Particles.glowSprite('#5ED8C4', true);
+    greenSprite = Particles.glowSprite('#A8EADF', false);
+    for (let i = 0; i < STAR_COLORS.length; i++) {
+      starDots[i] = Particles.glowSprite(STAR_COLORS[i], false);
+      starSpikes[i] = starSprite(STAR_COLORS[i]);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -462,7 +637,7 @@
   let meLabel = null, meLabelEpoch = 0;
   function getMeLabel() {
     if (!meLabel || meLabelEpoch !== textEpoch) {
-      meLabel = textSprite(meLabel, 'Tú', fontUi(700, 12), labelPx() * 1.08, '#C8FF3C', 'rgba(2,10,18,0.85)', 3);
+      meLabel = textSprite(meLabel, 'Tú', fontUi(700, 12), labelPx() * 1.08, '#EAC255', 'rgba(7,7,13,0.85)', 3);
       meLabelEpoch = textEpoch;
     }
     return meLabel;
@@ -476,7 +651,7 @@
   // Sprites del contador gigante: uno por número (10..1), cada número tiene su color fijo.
   const digitSprites = new Array(11);
   const digitEpoch = new Int32Array(11);
-  function countdownColor(n) { return n >= 6 ? '#1FF2D2' : (n >= 4 ? '#FFB547' : '#FF4D6D'); }
+  function countdownColor(n) { return n >= 6 ? '#5ED8C4' : (n >= 4 ? '#F08A3C' : '#EC4F5A'); }
   function countdownSize(n) { return (n <= 3 ? 340 : 300) * H / 600; }
   function buildDigit(n) {
     const px = countdownSize(n);
@@ -511,16 +686,28 @@
   }
   function digitReady(n) { return digitSprites[n] && digitEpoch[n] === textEpoch; }
 
-  // Sprites de comida (5.8): disco con contorno oscuro, degradado y dígito horneado, por valor.
-  // Colores de verde menta a ámbar, sin el celeste de la nieve ni del escudo. Radios en px de la
-  // arena (600), fijos: no dependen del tamaño de celda, para que la comida se lea a cualquier escala.
-  const FOOD_COL = ['#7CFFB2', '#B8FF5A', '#E8F24A', '#FFD447', '#FFA347'];
+  // Sprites de comida (5.8): planetas chicos, uno por valor. Contorno oscuro (se lee como objeto,
+  // separado de su halo y de las estrellas), luz desde arriba a la izquierda con terminador suave,
+  // bandas tenues (los chicos, manchas), borde de atmósfera del lado iluminado y dígito horneado. El
+  // valor 5 lleva un anillo inclinado horneado en el mismo sprite: la mitad de atrás debajo del
+  // planeta y la de adelante encima. Colores de verde a ámbar, sin el violeta del escudo. Radios en
+  // px de la arena, fijos: no dependen del tamaño de celda, para que la comida se lea a cualquier escala.
+  const FOOD_COL = ['#8FE3B4', '#BEE07A', '#E6DC6A', '#F2C35A', '#EE9A52'];
   const FOOD_R = [4.0, 4.4, 4.8, 5.2, 5.6];
-  const FOOD_GLOW = 1.9;         // radio del glow = FOOD_GLOW × r × (1 + 0,1 × valor)
+  const FOOD_GLOW = 1.9;         // radio del halo = FOOD_GLOW × r × (1 + 0,1 × valor)
+  const RING_TILT = -0.42, RING_RX = 2.05, RING_RY = 0.6;   // anillo del 5 (× r)
+  const MOON_TILT = 0.38, MOON_FLAT = 0.6;                    // órbita de las lunas: inclinada, achatada
+  const NIGHT = [9, 8, 15];
   const foodOrbs = new Array(5);
   const foodGlows = new Array(5);
   let foodKey = '';            // '' fuerza la regeneración
   let foodKS = 0, foodKK = 0, foodKE = 0, foodKA = 0;
+
+  function ringHalf(g, cx, cy, rx, ry, back) {
+    g.beginPath();
+    g.ellipse(cx, cy, rx, ry, RING_TILT, back ? Math.PI : 0, back ? TAU : Math.PI);
+  }
+
   function ensureFoodSprites() {
     if (foodKey !== '' && foodKS === s && foodKK === K && foodKE === textEpoch && foodKA === arenaScale) return;
     foodKey = 'ok';
@@ -529,31 +716,103 @@
       const r = FOOD_R[v];
       const showDigit = 1.15 * r * arenaScale >= 7;
       const dev = r * K;
-      const rim = Math.max(1.2, 1.3 * K); // contorno oscuro: lo separa del glow y de la nieve
-      const size = Math.ceil((dev + rim) * 2 + 4);
+      const rim = Math.max(1.2, 1.3 * K);
+      const ringed = v === 4;
+      const ext = ringed ? dev * RING_RX + 2 * K : dev + rim;
+      const size = Math.ceil(ext * 2 + 4);
       const c = foodOrbs[v] || makeCanvas(size, size);
       c.width = size; c.height = size;
       const g = c.getContext('2d');
       const cx = size / 2;
-      g.fillStyle = 'rgba(2, 19, 28, 0.85)';
+      const rgb = parseHex(FOOD_COL[v]);
+      const ringCol = rgbStr(mixRgb(rgb, NEB_STAR, 0.3));
+      const rrx = dev * RING_RX, rry = dev * RING_RY;
+      if (ringed) {
+        // mitad de atrás del anillo: más apagada, el planeta la tapa
+        g.strokeStyle = ringCol;
+        g.globalAlpha = 0.5;
+        g.lineWidth = 1.6 * K;
+        ringHalf(g, cx, cx, rrx, rry, true); g.stroke();
+        g.globalAlpha = 0.3;
+        g.lineWidth = 0.8 * K;
+        ringHalf(g, cx, cx, rrx * 0.8, rry * 0.8, true); g.stroke();
+        g.globalAlpha = 1;
+      }
+      // contorno oscuro
+      g.fillStyle = 'rgba(10, 9, 16, 0.88)';
       g.beginPath();
       g.arc(cx, cx, dev + rim, 0, TAU);
       g.fill();
-      const rgb = parseHex(FOOD_COL[v]);
-      const grad = g.createRadialGradient(cx - dev * 0.25, cx - dev * 0.25, 0, cx, cx, dev);
-      grad.addColorStop(0, '#E8FBFF');
-      grad.addColorStop(0.45, rgbStr(mixRgb([232, 251, 255], rgb, 0.55)));
-      grad.addColorStop(1, FOOD_COL[v]);
-      g.fillStyle = grad;
+      // planeta: color plano, superficie, sombra con terminador y brillo del lado de la luz
+      g.save();
       g.beginPath();
       g.arc(cx, cx, dev, 0, TAU);
-      g.fill();
+      g.clip();
+      g.fillStyle = FOOD_COL[v];
+      g.fillRect(cx - dev, cx - dev, dev * 2, dev * 2);
+      g.fillStyle = rgbStr(mixRgb(rgb, NIGHT, 0.35));
+      g.globalAlpha = 0.45;
+      if (v >= 2) {
+        // gigante gaseoso: bandas apenas inclinadas
+        g.save();
+        g.translate(cx, cx);
+        g.rotate(-0.22);
+        g.fillRect(-dev, -dev * 0.42, dev * 2, dev * 0.2);
+        g.fillRect(-dev, dev * 0.08, dev * 2, dev * 0.28);
+        g.fillRect(-dev, dev * 0.58, dev * 2, dev * 0.14);
+        g.restore();
+      } else {
+        // rocoso: dos manchas
+        g.beginPath();
+        g.arc(cx + dev * 0.3, cx - dev * 0.15, dev * 0.26, 0, TAU);
+        g.arc(cx - dev * 0.25, cx + dev * 0.4, dev * 0.18, 0, TAU);
+        g.fill();
+      }
+      g.globalAlpha = 1;
+      const lx = cx - dev * 0.45, ly = cx - dev * 0.45;
+      const sh = g.createRadialGradient(lx, ly, 0, lx, ly, dev * 1.95);
+      const nb = 'rgba(' + NIGHT[0] + ',' + NIGHT[1] + ',' + NIGHT[2] + ',';
+      sh.addColorStop(0, nb + '0)');
+      sh.addColorStop(0.5, nb + '0.03)');
+      sh.addColorStop(0.68, nb + '0.5)');
+      sh.addColorStop(0.82, nb + '0.86)');
+      sh.addColorStop(1, nb + '0.95)');
+      g.fillStyle = sh;
+      g.fillRect(cx - dev, cx - dev, dev * 2, dev * 2);
+      const hl = g.createRadialGradient(lx, ly, 0, lx, ly, dev * 0.85);
+      hl.addColorStop(0, 'rgba(246,243,238,0.6)');
+      hl.addColorStop(1, 'rgba(246,243,238,0)');
+      g.fillStyle = hl;
+      g.fillRect(cx - dev, cx - dev, dev * 2, dev * 2);
+      g.restore();
+      // borde de atmósfera del lado de la luz
+      g.strokeStyle = rgbStr(mixRgb(rgb, NEB_STAR, 0.45));
+      g.globalAlpha = 0.5;
+      g.lineWidth = Math.max(0.8, 0.7 * K);
+      g.beginPath();
+      g.arc(cx, cx, dev - g.lineWidth * 0.5, Math.PI * 0.8, Math.PI * 1.7);
+      g.stroke();
+      g.globalAlpha = 1;
       if (showDigit) {
-        g.fillStyle = '#02131C';
+        g.fillStyle = '#0A0910';
         g.font = '700 ' + (1.15 * r * K).toFixed(2) + 'px ' + FONT_UI;
         g.textAlign = 'center';
         g.textBaseline = 'middle';
-        g.fillText(String(v + 1), cx, cx + 0.04 * s * K);
+        g.fillText(String(v + 1), cx - dev * 0.06, cx - dev * 0.04 + 0.04 * s * K);
+      }
+      if (ringed) {
+        // mitad de adelante del anillo, encima del planeta
+        g.strokeStyle = 'rgba(10, 9, 16, 0.7)';
+        g.lineWidth = 2.6 * K;
+        ringHalf(g, cx, cx, rrx, rry, false); g.stroke();
+        g.strokeStyle = ringCol;
+        g.globalAlpha = 0.95;
+        g.lineWidth = 1.6 * K;
+        ringHalf(g, cx, cx, rrx, rry, false); g.stroke();
+        g.globalAlpha = 0.55;
+        g.lineWidth = 0.8 * K;
+        ringHalf(g, cx, cx, rrx * 0.8, rry * 0.8, false); g.stroke();
+        g.globalAlpha = 1;
       }
       c._r = size / 2 / K;
       foodOrbs[v] = c;
@@ -592,8 +851,8 @@
   // ---------------------------------------------------------------------------
   // Calidad adaptativa (5.17)
   // ---------------------------------------------------------------------------
-  function snowCountFor(q) {
-    let n = q === 2 ? 70 : (q === 1 ? 45 : 25);
+  function starCountFor(q) {
+    let n = q === 2 ? 80 : (q === 1 ? 50 : 28);
     if (coarsePointer) n = Math.round(n * 0.6);
     return n;
   }
@@ -607,7 +866,7 @@
     const dprChange = (q === 0) !== (quality === 0);
     quality = q;
     if (particles) particles.setLimit(particleLimitFor(q));
-    snowActive = snowCountFor(q);
+    starActive = starCountFor(q);
     if (dprChange && canvas) applySize(true);
   }
 
@@ -674,32 +933,36 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Partículas ambientales: nieve marina (5.2)
+  // Campo de estrellas (reemplaza la nieve marina): estrellas con colores de temperatura que
+  // titilan y derivan lentísimo hacia un lado, un poco más rápido las cercanas (paralaje). No
+  // suben ni flotan. En la sala, las que rozan la cabeza de una criatura se encienden en su color.
   // ---------------------------------------------------------------------------
-  const SNOW_MAX = 70;
-  const snowX = new Float32Array(SNOW_MAX), snowY = new Float32Array(SNOW_MAX);
-  const snowZ = new Float32Array(SNOW_MAX), snowPh = new Float32Array(SNOW_MAX);
-  const snowW = new Float32Array(SNOW_MAX), snowDx = new Float32Array(SNOW_MAX);
-  const snowRise = new Float32Array(SNOW_MAX), snowGlow = new Float32Array(SNOW_MAX);
-  const snowPaint = new Array(SNOW_MAX);
-  let snowActive = 70;
-  let snowSpeed = 1; // multiplicador (cámara lenta)
+  const STAR_MAX = 80;
+  const starX = new Float32Array(STAR_MAX), starY = new Float32Array(STAR_MAX);
+  const starZ = new Float32Array(STAR_MAX), starPh = new Float32Array(STAR_MAX);
+  const starW = new Float32Array(STAR_MAX), starTw = new Float32Array(STAR_MAX);
+  const starCol = new Uint8Array(STAR_MAX), starGlow = new Float32Array(STAR_MAX);
+  const starPaint = new Array(STAR_MAX);
+  const starDots = new Array(STAR_COLORS.length), starSpikes = new Array(STAR_COLORS.length);
+  let starActive = 80;
+  let starSpeed = 1; // multiplicador (cámara lenta)
 
-  function initSnow() {
-    for (let i = 0; i < SNOW_MAX; i++) {
-      snowX[i] = Math.random() * W;
-      snowY[i] = Math.random() * H;
-      snowZ[i] = 0.3 + Math.random() * 0.7;
-      snowPh[i] = Math.random() * TAU;
-      snowW[i] = TAU / (6000 + Math.random() * 5000); // período de 6 a 11 s
-      snowDx[i] = (Math.random() * 2 - 1) * 3;
-      snowRise[i] = 2 + Math.random() * 4;
-      snowGlow[i] = 0;
-      snowPaint[i] = null;
+  function initStars() {
+    for (let i = 0; i < STAR_MAX; i++) {
+      starX[i] = Math.random() * W;
+      starY[i] = Math.random() * H;
+      const r = Math.random();
+      starZ[i] = 0.3 + 0.7 * r * r;                    // pocas cercanas y brillantes
+      starPh[i] = Math.random() * TAU;
+      starW[i] = TAU / (1800 + Math.random() * 4200);  // titileo de 1,8 a 6 s
+      starTw[i] = 0.25 + Math.random() * 0.5;          // cuánto baja al titilar
+      starCol[i] = pickStarColor(Math.random());
+      starGlow[i] = 0;
+      starPaint[i] = null;
     }
   }
 
-  // Cabezas (y puntero) que encienden la nieve: se llenan al preparar las serpientes.
+  // Cabezas (y puntero) que encienden las estrellas: se llenan al preparar las criaturas de la sala.
   const HEADS_MAX = 40;
   const headX = new Float32Array(HEADS_MAX), headY = new Float32Array(HEADS_MAX);
   const headR2 = new Float32Array(HEADS_MAX);
@@ -715,66 +978,74 @@
     headCount++;
   }
 
-  function updateSnow(dtMs) {
-    const dt = dtMs / 1000 * snowSpeed;
+  function updateStars(dtMs) {
+    const dt = reducedMotion ? 0 : dtMs / 1000 * starSpeed;
     const decay = dtMs / 900;
-    for (let i = 0; i < snowActive; i++) {
-      let x = snowX[i] + snowDx[i] * dt;
-      let y = snowY[i] - snowRise[i] * snowZ[i] * dt;
-      if (y < -6) { y = H + 6; x = Math.random() * W; }
-      if (x < -6) x += W + 12; else if (x > W + 6) x -= W + 12;
-      snowX[i] = x;
-      snowY[i] = y;
-      let g = snowGlow[i] - decay;
+    for (let i = 0; i < starActive; i++) {
+      const z = starZ[i];
+      // paralaje: de 0,5 a 2,3 px/s hacia la derecha y apenas hacia abajo, como la nebulosa
+      let x = starX[i] + (0.5 + 1.8 * z * z) * dt;
+      let y = starY[i] + (0.2 + 0.7 * z * z) * dt;
+      if (x > W + 6) x -= W + 12;
+      if (y > H + 6) y -= H + 12;
+      starX[i] = x;
+      starY[i] = y;
+      let g = starGlow[i] - decay;
       if (g < 0) g = 0;
-      // estela de dinoflagelados
-      const sx = x + 4 * Math.sin(animT * snowW[i] + snowPh[i]);
       for (let h = 0; h < headCount; h++) {
-        const dx = sx - headX[h], dy = y - headY[h];
-        if (dx * dx + dy * dy < headR2[h]) { g = 1; snowPaint[i] = headPaint[h]; break; }
+        const dx = x - headX[h], dy = y - headY[h];
+        if (dx * dx + dy * dy < headR2[h]) { g = 1; starPaint[i] = headPaint[h]; break; }
       }
-      snowGlow[i] = g;
+      starGlow[i] = g;
     }
   }
 
-  // En partida (`inGame`) la nieve queda más chica y tenue: es fondo, no tiene que competir con la
-  // comida ni con el escudo.
-  function drawSnow(inGame) {
+  // En partida (`inGame`) las estrellas quedan más chicas y tenues: son fondo, no tienen que
+  // competir con la comida ni con los consumibles. Las más cercanas llevan rayos de difracción.
+  function drawStars(inGame) {
     const c = ctx;
-    const sizeK = inGame ? 0.7 : 1, alphaK = inGame ? 0.55 : 1;
+    const sizeK = inGame ? 0.75 : 1, alphaK = inGame ? 0.6 : 1;
+    const twK = reducedMotion ? 0.3 : 1;
     c.globalCompositeOperation = 'lighter';
-    for (let i = 0; i < snowActive; i++) {
-      const z = snowZ[i];
-      const x = snowX[i] + 4 * Math.sin(animT * snowW[i] + snowPh[i]);
-      const y = snowY[i];
-      const size = (0.6 + (z - 0.3) / 0.7 * 1.2) * sizeK;
-      const a = (0.08 + (z - 0.3) / 0.7 * 0.27) * alphaK;
-      const g = snowGlow[i];
-      const R = size * 2.6;
-      c.globalAlpha = a * (1 - g * 0.5);
-      c.drawImage(snowSprite, x - R, y - R, R + R, R + R);
-      if (g > 0.02 && snowPaint[i]) {
+    for (let i = 0; i < starActive; i++) {
+      const zz = (starZ[i] - 0.3) / 0.7;
+      const x = starX[i], y = starY[i];
+      const tw = 1 - starTw[i] * twK * (0.5 + 0.5 * Math.sin(animT * starW[i] + starPh[i]));
+      const size = (0.55 + zz * 1.1) * sizeK;
+      const g = starGlow[i];
+      const ci = starCol[i];
+      c.globalAlpha = (0.24 + zz * 0.6) * alphaK * tw * (1 - g * 0.4);
+      if (zz > 0.8) {
+        const R = size * (3.6 + 1.4 * tw);
+        c.drawImage(starSpikes[ci], x - R, y - R, R + R, R + R);
+      } else {
+        const R = size * 2.4;
+        c.drawImage(starDots[ci], x - R, y - R, R + R, R + R);
+      }
+      if (g > 0.02 && starPaint[i]) {
         const R2 = size * 6;
+        c.globalAlpha = 0.7 * g;
+        c.drawImage(starPaint[i].glowBody, x - R2, y - R2, R2 + R2, R2 + R2);
+        const R3 = size * 3.4;
         c.globalAlpha = 0.8 * g;
-        c.drawImage(snowPaint[i].glowBody, x - R2, y - R2, R2 + R2, R2 + R2);
-        c.globalAlpha = 0.6 * g;
-        c.drawImage(snowPaint[i].glowCore, x - R, y - R, R + R, R + R);
+        c.drawImage(starPaint[i].starCore, x - R3, y - R3, R3 + R3, R3 + R3);
       }
     }
     c.globalAlpha = 1;
   }
 
   // ---------------------------------------------------------------------------
-  // Cáusticas, viñeta, membrana
+  // Nebulosa, viñeta, bordes
   // ---------------------------------------------------------------------------
   let tensionLevel = 0;      // suavizado
   let tensionBumpT0 = -1e9;
   let countFade = 1;         // fundido de contador y tensión en el congelamiento
 
-  function drawCausticLayer(pat, scale, ox, oy, alpha) {
+  function drawNebulaLayer(pat, scale, rot, ox, oy, alpha) {
     if (alpha <= 0.001 || !pat) return;
     if (patMatrix && pat.setTransform) {
-      patMatrix.a = scale; patMatrix.b = 0; patMatrix.c = 0; patMatrix.d = scale;
+      const cs = Math.cos(rot) * scale, sn = Math.sin(rot) * scale;
+      patMatrix.a = cs; patMatrix.b = sn; patMatrix.c = -sn; patMatrix.d = cs;
       patMatrix.e = ox; patMatrix.f = oy;
       pat.setTransform(patMatrix);
     }
@@ -783,25 +1054,32 @@
     ctx.fillRect(0, 0, W, H);
   }
 
-  function drawCaustics(dtMs, alphaMul) {
+  // Dos capas de la misma nube a distinta escala, giro y velocidad: su cruce hace que la forma
+  // cambie despacio. En los últimos 10 s se funde con la copia roja (H-alfa).
+  function drawNebula(dtMs, alphaMul) {
+    if (!nebReady) { buildNebulaRows(16); return; }
     if (quality === 0 || highContrast) return;
-    const drift = (dtMs / 1000) * snowSpeed * (1 + 0.6 * tensionLevel);
-    causticOff[0] = (causticOff[0] + 6 * drift) % (256 * 2.4);
-    causticOff[1] = (causticOff[1] + 3 * drift) % (256 * 2.4);
-    causticOff[2] = (causticOff[2] - 4 * drift) % (256 * 3.4);
-    causticOff[3] = (causticOff[3] + 5 * drift) % (256 * 3.4);
+    const drift = reducedMotion ? 0 : (dtMs / 1000) * starSpeed * (1 + 0.5 * tensionLevel);
+    const pa = NEB_N * NEB_SA, pb = NEB_N * NEB_SB;
+    nebOff[0] = (nebOff[0] + 0.8 * drift) % pa;
+    nebOff[1] = (nebOff[1] + 0.3 * drift) % pa;
+    nebOff[2] = (nebOff[2] + 0.45 * drift) % pb;
+    nebOff[3] = (nebOff[3] + 0.2 * drift) % pb;
+    // aparece de a poco cuando termina de generarse
+    const am = alphaMul * smoothstep(0, 1500, nowMs() - nebReadyT);
     ctx.globalCompositeOperation = 'lighter';
-    const coral = 0.6 * tensionLevel * countFade;
-    drawCausticLayer(patCyan, 2.4, causticOff[0], causticOff[1], 0.055 * alphaMul * (1 - coral));
-    if (coral > 0.01) drawCausticLayer(patCoral, 2.4, causticOff[0], causticOff[1], 0.055 * alphaMul * coral);
+    const red = 0.9 * tensionLevel * countFade;
+    drawNebulaLayer(patCalm, NEB_SA, 0, nebOff[0], nebOff[1], NEB_ALPHA_A * am * (1 - red));
+    if (red > 0.01) drawNebulaLayer(patRed, NEB_SA, 0, nebOff[0], nebOff[1], NEB_ALPHA_A * 1.3 * am * red);
     if (quality === 2) {
-      drawCausticLayer(patCyan, 3.4, causticOff[2], causticOff[3], 0.035 * alphaMul * (1 - coral));
-      if (coral > 0.01) drawCausticLayer(patCoral, 3.4, causticOff[2], causticOff[3], 0.035 * alphaMul * coral);
+      drawNebulaLayer(patCalm, NEB_SB, NEB_ROT_B, nebOff[2], nebOff[3], NEB_ALPHA_B * am * (1 - red));
+      if (red > 0.01) drawNebulaLayer(patRed, NEB_SB, NEB_ROT_B, nebOff[2], nebOff[3], NEB_ALPHA_B * 1.3 * am * red);
     }
     ctx.globalAlpha = 1;
   }
 
-  function drawMembrane(now) {
+  // Resplandor tenue de los cuatro bordes: marca dónde están los portales
+  function drawEdges(now) {
     const a = reducedMotion ? 0.10 : 0.10 + 0.02 * Math.sin(now * TAU / 6400);
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = a;
@@ -821,7 +1099,7 @@
     const ta = (tensionLevel + bump) * countFade;
     if (ta > 0.003) {
       ctx.globalAlpha = Math.min(1, ta);
-      ctx.drawImage(vignetteCoral, 0, 0, W, H);
+      ctx.drawImage(vignetteRed, 0, 0, W, H);
       ctx.globalAlpha = 1;
     }
   }
@@ -903,7 +1181,7 @@
       if (f.type === FX_TEXT) releaseTextCanvas(f.sprite);
     }
     f.on = true; f.type = type; f.t0 = t0; f.dur = dur;
-    f.x = 0; f.y = 0; f.r0 = 0; f.r1 = 0; f.lw = 1.5; f.a = 1; f.color = '#E8FBFF';
+    f.x = 0; f.y = 0; f.r0 = 0; f.r1 = 0; f.lw = 1.5; f.a = 1; f.color = '#F6F3EE';
     f.sprite = null; f.id = null; f.edge = 0; f.vx = 0; f.vy = 0; f.n = 0; f.paint = null; f.s = s; f.rise = 0;
     return f;
   }
@@ -924,7 +1202,7 @@
   function fxText(x, y, str, color, px, rise, dur) {
     const f = fxSpawn(FX_TEXT, nowMs(), dur || 700);
     f.x = x; f.y = y; f.rise = rise === undefined ? 18 : rise;
-    f.sprite = textSprite(takeTextCanvas(), str, fontUi(700, 12), px, color, 'rgba(2,10,18,0.85)', 3);
+    f.sprite = textSprite(takeTextCanvas(), str, fontUi(700, 12), px, color, 'rgba(7,7,13,0.85)', 3);
     return f;
   }
 
@@ -954,7 +1232,7 @@
         continue;
       }
       if (f.type === FX_FOUNTAIN && el >= 0) {
-        // fuente de plancton del ganador: 80 partículas repartidas en 1200 ms
+        // polvo estelar del ganador: 80 partículas en todas direcciones, repartidas en 1200 ms
         const total = scaleCount(80);
         const want = Math.min(total, Math.floor(total * el / 1200));
         const rec = snakeRecs.get(f.id);
@@ -962,9 +1240,7 @@
           const hx = rec.x[0], hy = rec.y[0];
           while (f.n < want) {
             const p = f.n & 1 ? rec.paint.core : rec.paint.body;
-            setBurst(1, p, 40, 140, 900, 1600, 1.2, 2.6, 'dot', -20, 0.97);
-            BO.angle = -Math.PI / 2;
-            BO.spread = 1.2;
+            setBurst(1, p, 40, 140, 900, 1600, 1.2, 2.6, 'dot', 0, 0.96);
             particles.burst(hx, hy, BO);
             f.n++;
           }
@@ -990,12 +1266,10 @@
         if (type !== FX_COLUMN) continue;
         const rec = snakeRecs.get(f.id);
         if (!rec || rec.n === 0) continue;
-        const cx = rec.x[0];
-        const ca = 0.35 * smoothstep(0, 500, el) * (1 - smoothstep(f.dur - 400, f.dur, el));
-        const cw = 6 * f.s;
+        const ca = 0.5 * smoothstep(0, 500, el) * (1 - smoothstep(f.dur - 400, f.dur, el));
         c.globalCompositeOperation = 'lighter';
         c.globalAlpha = ca;
-        drawColumn(cx, rec.y[0], cw, rec.paint);
+        drawNova(rec.x[0], rec.y[0], f.s, rec.paint, el);
       } else if (layer === 1) {
         if (type === FX_RING) {
           const rr = f.r0 + (f.r1 - f.r0) * easeOutCubic(t);
@@ -1010,28 +1284,28 @@
           const fr = f.r0;
           c.globalCompositeOperation = 'lighter';
           c.globalAlpha = f.a * (1 - t);
-          c.drawImage(pearlBig, f.x - fr, f.y - fr, fr * 2, fr * 2);
+          c.drawImage(lightBig, f.x - fr, f.y - fr, fr * 2, fr * 2);
         } else if (type === FX_WAVE) {
           const wr = 450 * easeOutExpo(t);
           c.globalCompositeOperation = 'lighter';
           c.globalAlpha = 0.25 * (1 - t * t);
-          c.strokeStyle = '#1FF2D2';
+          c.strokeStyle = '#5ED8C4';
           c.lineWidth = 40 + (2 - 40) * t;
           c.beginPath();
           c.arc(W / 2, H / 2, Math.max(0.5, wr), 0, TAU);
           c.stroke();
           c.globalAlpha = 0.18 * (1 - t);
           c.lineWidth = 2;
-          c.strokeStyle = '#E8FBFF';
+          c.strokeStyle = '#F6F3EE';
           c.beginPath();
           c.arc(W / 2, H / 2, Math.max(0.5, wr), 0, TAU);
           c.stroke();
         } else if (type === FX_DROP) {
-          const dy = f.y + 14 * easeOutCubic(t);
-          const dr = f.r0 * (1 - 0.4 * t);
+          // segmento gastado al disparar: una bocanada de gas que se abre y se apaga donde quedó
+          const dy = f.y, dr = f.r0 * (1 + 0.6 * easeOutCubic(t));
           c.globalCompositeOperation = 'lighter';
           c.globalAlpha = 0.9 * (1 - t);
-          const spr = f.paint ? f.paint.glowCore : pearlSprite;
+          const spr = f.paint ? f.paint.glowCore : lightSprite;
           c.drawImage(spr, f.x - dr * 2.4, dy - dr * 2.4, dr * 4.8, dr * 4.8);
           if (f.paint) {
             c.globalAlpha = 0.6 * (1 - t);
@@ -1054,7 +1328,7 @@
           c.stroke();
           c.globalAlpha = 0.9;
           const sr = 0.9 * f.s;
-          c.drawImage(pearlSprite, px - sr, py - sr, sr * 2, sr * 2);
+          c.drawImage(lightSprite, px - sr, py - sr, sr * 2, sr * 2);
         }
       } else if (layer === 2) {
         if (type !== FX_TEXT || !f.sprite) continue;
@@ -1082,7 +1356,7 @@
           const inward = 0.5 * f.s * (0.35 + 0.65 * pe) + 1;
           c.globalCompositeOperation = 'lighter';
           c.globalAlpha = 0.6 * (1 - t);
-          c.strokeStyle = f.paint ? f.paint.body : '#1FF2D2';
+          c.strokeStyle = f.paint ? f.paint.body : '#5ED8C4';
           c.lineWidth = 2;
           c.beginPath();
           if (f.edge === 0 || f.edge === 2) c.ellipse(f.x, f.y, along, inward, 0, 0, TAU);
@@ -1098,37 +1372,25 @@
     c.globalCompositeOperation = 'source-over';
   }
 
-  // Columna de luz del ganador: degradado vertical cacheado
-  let columnSprite = null;
-  function drawColumn(cx, headYv, width, paint) {
-    if (!columnSprite) {
-      columnSprite = makeCanvas(64, 256);
-      const g = columnSprite.getContext('2d');
-      const lg = g.createLinearGradient(0, 0, 0, 256);
-      lg.addColorStop(0, 'rgba(232,251,255,0)');
-      lg.addColorStop(0.55, 'rgba(232,251,255,0.55)');
-      lg.addColorStop(0.92, 'rgba(232,251,255,1)');
-      lg.addColorStop(1, 'rgba(232,251,255,0)');
-      g.fillStyle = lg;
-      g.fillRect(0, 0, 64, 256);
-      // bordes horizontales suaves
-      g.globalCompositeOperation = 'destination-in';
-      const hg = g.createLinearGradient(0, 0, 64, 0);
-      hg.addColorStop(0, 'rgba(0,0,0,0)');
-      hg.addColorStop(0.5, 'rgba(0,0,0,1)');
-      hg.addColorStop(1, 'rgba(0,0,0,0)');
-      g.fillStyle = hg;
-      g.fillRect(0, 0, 64, 256);
-    }
-    const bottom = headYv + 0.6 * s;
+  // Brillo del ganador: la criatura se enciende como una estrella cercana, con un halo de su color,
+  // rayos de difracción largos de luz estelar y un anillo tenue que se abre despacio. Va debajo de
+  // lo jugable; reemplaza a la columna de luz (que en el espacio no tiene de dónde venir).
+  function drawNova(cx, cy, ss, paint, el) {
     const a = ctx.globalAlpha;
-    // velo del color del ganador detrás de la columna perla
-    ctx.globalAlpha = a * 0.55;
-    ctx.drawImage(paint.glowBodyBig, cx - width * 0.9, -bottom * 0.15, width * 1.8, bottom * 1.3);
-    ctx.globalAlpha = a;
-    ctx.drawImage(columnSprite, cx - width / 2, -10, width, bottom + 10);
+    const grow = easeOutCubic(clamp01(el / 900));
+    const hr = (2.4 + 1.2 * grow) * ss;
     ctx.globalAlpha = a * 0.8;
-    ctx.drawImage(paint.glowBodyBig, cx - width, bottom - width, width * 2, width * 2);
+    ctx.drawImage(paint.glowBodyBig, cx - hr, cy - hr, hr * 2, hr * 2);
+    const sr = (4 + 3 * grow) * ss;
+    ctx.globalAlpha = a;
+    ctx.drawImage(starSprite('#F6F3EE'), cx - sr, cy - sr, sr * 2, sr * 2);
+    const rr = (1.5 + 4.5 * easeOutCubic(clamp01(el / 1800))) * ss;
+    ctx.globalAlpha = a * 0.5 * (1 - clamp01(el / 1800));
+    ctx.strokeStyle = paint.core;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, rr, 0, TAU);
+    ctx.stroke();
     ctx.globalAlpha = a;
   }
 
@@ -1160,6 +1422,7 @@
   }
 
   function burstNow(x, y) { if (particles && BO.count > 0) particles.burst(x, y, BO); }
+  const DUST_END = [0, 0];   // tamaño final de la nube de polvo oscuro (se reutiliza)
 
   // ---------------------------------------------------------------------------
   // Registros por serpiente (buffers persistentes por id)
@@ -1198,6 +1461,7 @@
     this.anon = false;
     this.labelScale = 1;
     this.winner = false;
+    this.dustAcc = Math.random() * 110;
   }
 
   function ensureCap(rec, n) {
@@ -1308,7 +1572,8 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Pasadas de dibujo de una criatura (5.4)
+  // Pasadas de dibujo de una criatura del vacío (5.4): halo difuso de gas, cuerpo en tres capas
+  // de densidad, bocanadas de gas, estrellas internas (los fotóforos de antes) y cabeza con ojos.
   // ---------------------------------------------------------------------------
   let haloBoostT0 = -1e9;
 
@@ -1322,22 +1587,25 @@
     const c = ctx, p = rec.paint, n = rec.n;
     if (n === 0) return;
     const inv = 1 / Math.max(n - 1, 1);
-    // Q2: cada punto; Q1: cada 2 (alpha x1,5); Q0: cada 3 (alpha x1,9), para el raster por software
-    const step = quality === 2 ? 1 : (quality === 1 ? 2 : 3);
-    const mul = (step === 1 ? 1 : (step === 2 ? 1.5 : 1.9)) * (rec.isMe ? 1.25 : 1) * haloBoost(now) * rec.alphaVis;
-    const big = 3.2 * ss * 0.46 > 24;
+    // Q2: cada 2 puntos; Q1 y Q0: cada 3, con el alpha compensado. El halo es ancho y su centro
+    // queda tapado por el cuerpo, así que no se notan las cuentas
+    const step = quality === 2 ? 2 : 3;
+    const mul = (step === 2 ? 1.5 : 1.95) * (rec.isMe ? 1.25 : 1) * haloBoost(now) * rec.alphaVis;
+    const big = 4.2 * ss * 0.46 > 24;
     const spr = big ? p.glowBodyBig : p.glowBody;
     const X = rec.x, Y = rec.y;
+    // el halo respira de a trechos: el gas se expande y se contrae, no es un tubo parejo
+    const breathe = reducedMotion ? 0 : 0.14;
     for (let r = 0; r < rec.runCount; r++) {
       const a = rec.runs[r * 2], b = rec.runs[r * 2 + 1];
       for (let i = a; i <= b; i += step) {
         const t = i * inv;
-        const R = 3.2 * radAt(t, ss);
-        const al = 0.22 * (1 - 0.6 * t) * mul;
+        const R = 4.2 * radAt(t, ss) * (1 + breathe * Math.sin(animT * 0.0021 - i * 0.7));
+        const al = 0.16 * (1 - 0.5 * t) * mul;
         c.globalAlpha = al > 1 ? 1 : al;
         c.drawImage(spr, X[i] - R, Y[i] - R, R + R, R + R);
       }
-      // extremos de tramo que tocan un borde: la criatura atraviesa la membrana
+      // extremos de tramo que tocan un borde: la criatura atraviesa el portal
       if (rec.runCount > 1) {
         if (r > 0) borderGlow(rec, a, a - 1, ss);
         if (r < rec.runCount - 1) borderGlow(rec, b, b + 1, ss);
@@ -1369,54 +1637,29 @@
     }
   }
 
-  // Prolonga hasta el borde los extremos de tramo cortados, con el ancho y estilo actuales.
-  function strokeCutEnds(rec, r, a, b) {
-    const c = ctx;
-    if (rec.runCount < 2) return;
-    if (r > 0) {
-      edgeExt(rec, a, a - 1);
-      c.beginPath();
-      c.moveTo(EXT[0], EXT[1]);
-      c.lineTo(rec.x[a], rec.y[a]);
-      c.stroke();
-    }
-    if (r < rec.runCount - 1) {
-      edgeExt(rec, b, b + 1);
-      c.beginPath();
-      c.moveTo(rec.x[b], rec.y[b]);
-      c.lineTo(EXT[0], EXT[1]);
-      c.stroke();
-    }
-  }
-
-  function strokeCutEnds1(rec, i, j, atStart) {
-    const c = ctx;
-    edgeExt(rec, i, j);
-    c.beginPath();
-    if (atStart) { c.moveTo(EXT[0], EXT[1]); c.lineTo(rec.x[i], rec.y[i]); }
-    else { c.moveTo(rec.x[i], rec.y[i]); c.lineTo(EXT[0], EXT[1]); }
-    c.stroke();
-  }
-
-  function passImmunityMembrane(rec, ss, now) {
+  // Inmunidad: velo de aurora muy tenue a lo largo de todo el cuerpo, manchas blandas violetas y
+  // verdes con una onda de brillo que corre hacia la cola (la magnetosfera de la cabeza es la seña
+  // fuerte; esto solo dice "todo el cuerpo está protegido")
+  function passImmunityVeil(rec, ss, now) {
     if (!rec.immune || rec.n === 0) return;
-    const c = ctx;
-    const beat = Math.sin(now * 0.001 * 1.6 * TAU);
-    c.strokeStyle = '#9FF4FF';
-    c.globalAlpha = (0.10 + 0.05 * beat) * rec.alphaVis * bellBlink(rec);
-    c.lineWidth = 2 * radAt(0, ss) + 0.5 * ss;
-    for (let r = 0; r < rec.runCount; r++) {
-      const a = rec.runs[r * 2], b = rec.runs[r * 2 + 1];
-      c.beginPath();
-      pathRange(c, rec.x, rec.y, a, b, 0, b - a);
-      c.stroke();
-      strokeCutEnds(rec, r, a, b);
+    const c = ctx, n = rec.n, X = rec.x, Y = rec.y;
+    const inv = 1 / Math.max(n - 1, 1);
+    const step = quality === 2 ? 2 : 3;
+    const tt = reducedMotion ? 0 : animT;
+    const am = (step === 2 ? 1 : 1.3) * rec.alphaVis * shieldBlink(rec);
+    for (let i = 0; i < n; i += step) {
+      const t = i * inv;
+      const R = 2.6 * radAt(t, ss) + 0.3 * ss;
+      c.globalAlpha = 0.2 * (0.6 + 0.4 * Math.sin(tt * 0.004 - i * 0.6)) * (1 - 0.4 * t) * am;
+      c.drawImage((i / step) & 1 ? greenSprite : violetSprite, X[i] - R, Y[i] - R, R + R, R + R);
     }
   }
 
   // Cuerpo: tramos troceados con extremos 'butt'. La curva por puntos medios es C1 en cada
   // unión de piezas, así que los trozos empalman sin huecos ni solapes (sin cuentas en las
-  // uniones aunque cambie el color). Dos capas: membrana (rampa clara) e interior (oscura).
+  // uniones aunque cambie el color). Tres capas de gas, cada una más angosta, densa y clara:
+  // borde tenue (ancho completo), cuerpo (76 %) y centro (48 %).
+  const BODY_W = [1, 0.76, 0.48];
   function passBody(rec, ss) {
     const c = ctx, n = rec.n;
     if (n === 0) return;
@@ -1426,11 +1669,10 @@
     const midR = rec.paint.mids[level];
     const inv = 1 / Math.max(n - 1, 1);
     const chunk = n > 48 ? Math.ceil(n / 24) : (n > 24 ? 2 : 1);
-    const rim = Math.max(0.9, 0.075 * ss);
     const X = rec.x, Y = rec.y;
     for (let layer = 0; layer < 3; layer++) {
       const R = layer === 0 ? ramp : (layer === 1 ? midR : inner);
-      const sub = layer === 0 ? 0 : (layer === 1 ? rim * 2 : rim * 4.5);
+      const wm = BODY_W[layer];
       for (let r = 0; r < rec.runCount; r++) {
         const a = rec.runs[r * 2], b = rec.runs[r * 2 + 1];
         const m = b - a;
@@ -1439,20 +1681,20 @@
           const t0 = a * inv;
           c.fillStyle = R[(t0 * 31 + 0.5) | 0];
           c.beginPath();
-          c.arc(X[a], Y[a], Math.max(0.5, radAt(t0, ss) - sub * 0.5), 0, TAU);
+          c.arc(X[a], Y[a], Math.max(0.5, radAt(t0, ss) * wm), 0, TAU);
           c.fill();
           continue;
         }
         if (rec.runCount > 1) {
           c.lineCap = 'butt';
           if (r > 0) {
-            c.lineWidth = Math.max(0.6, 2 * radAt(a * inv, ss) - sub);
+            c.lineWidth = Math.max(0.6, 2 * radAt(a * inv, ss) * wm);
             c.strokeStyle = R[(a * inv * 31 + 0.5) | 0];
             edgeExt(rec, a, a - 1);
             c.beginPath(); c.moveTo(EXT[0], EXT[1]); c.lineTo(X[a], Y[a]); c.stroke();
           }
           if (r < rec.runCount - 1) {
-            c.lineWidth = Math.max(0.6, 2 * radAt(b * inv, ss) - sub);
+            c.lineWidth = Math.max(0.6, 2 * radAt(b * inv, ss) * wm);
             c.strokeStyle = R[(b * inv * 31 + 0.5) | 0];
             edgeExt(rec, b, b + 1);
             c.beginPath(); c.moveTo(X[b], Y[b]); c.lineTo(EXT[0], EXT[1]); c.stroke();
@@ -1464,7 +1706,7 @@
           if (q1 > m) q1 = m;
           const tm = (a + (q + q1) * 0.5) * inv;
           c.lineCap = q1 === m ? 'round' : 'butt';
-          c.lineWidth = Math.max(0.6, 2 * radAt(tm, ss) - sub);
+          c.lineWidth = Math.max(0.6, 2 * radAt(tm, ss) * wm);
           c.strokeStyle = R[(tm * 31 + 0.5) | 0];
           c.beginPath();
           pathRange(c, X, Y, a, b, q, q1);
@@ -1483,68 +1725,81 @@
     c.lineCap = 'round';
   }
 
-  // Filamento interno: línea de luz que se afina y apaga hacia la cola, por grupos de
-  // piezas con extremos 'butt' (empalmes C1: sin puntos más brillantes en modo aditivo).
-  function passFilament(rec, ss) {
+  // Núcleo y bocanadas de gas (aditivos, sin bordes). El núcleo es una cadena de luz clara sobre el
+  // eje que se apaga hacia la cola; las bocanadas son manchas del color del cuerpo que se corren a
+  // los lados y cambian de tamaño despacio, en una ola que viaja de la cabeza a la cola. Le dan al
+  // cuerpo textura de nube en movimiento sin perder la silueta. Se apagan con el resto del brillo
+  // interno (rec.filament) en el congelamiento de fin de ronda.
+  function passGas(rec, ss) {
     const c = ctx, n = rec.n;
     if (n < 2 || rec.filament <= 0.01) return;
-    const X = rec.x, Y = rec.y;
+    const X = rec.x, Y = rec.y, NX = rec.nx, NY = rec.ny;
     const inv = 1 / Math.max(n - 1, 1);
-    const g = n > 48 ? 3 : (n > 24 ? 2 : 1);
-    const am = rec.filament * rec.alphaVis;
-    c.strokeStyle = rec.paint.core;
-    c.lineCap = 'butt';
-    for (let r = 0; r < rec.runCount; r++) {
-      const a = rec.runs[r * 2], b = rec.runs[r * 2 + 1];
-      const m = b - a;
-      if (m === 0) continue;
-      for (let q = 0; q <= m; q += g) {
-        let q1 = q + g - 1;
-        if (q1 > m) q1 = m;
-        const t = (a + (q + q1) * 0.5) * inv;
-        c.lineWidth = Math.max(0.6, ss * (0.13 - 0.08 * t));
-        c.globalAlpha = (0.55 - 0.45 * t) * am;
-        c.beginPath();
-        pathRange(c, X, Y, a, b, q, q1);
-        c.stroke();
-        if (q === 0 && r > 0) strokeCutEnds1(rec, a, a - 1, true);
-        if (q1 === m && r < rec.runCount - 1) strokeCutEnds1(rec, b, b + 1, false);
-      }
+    const tt = reducedMotion ? 0 : animT;
+    const am0 = rec.filament * rec.alphaVis;
+    // núcleo: en calidad alta, cada punto en la mitad de adelante y cada 2 hacia la cola (ahí es más
+    // tenue); en media y baja, cada 2 puntos y más ancho, para que no se vean cuentas
+    const cs = quality === 2 ? 1 : 2;
+    const wide = cs === 1 ? 1.75 : 2.3;
+    const core = rec.paint.gasCore;
+    for (let i = 1; i < n; i += (cs === 1 && i * inv > 0.5) ? 2 : cs) {
+      const t = i * inv;
+      const sparse = cs > 1 || t > 0.5;
+      const R = radAt(t, ss) * (sparse ? Math.max(wide, 2.3) : wide) * (1 + 0.12 * Math.sin(tt * 0.0023 - i * 0.8));
+      c.globalAlpha = 0.2 * (1 - 0.7 * t) * am0 * (sparse ? 1.25 : 1);
+      c.drawImage(core, X[i] - R, Y[i] - R, R + R, R + R);
     }
-    c.lineCap = 'round';
+    if (quality !== 2) return;
+    // bocanadas: solo en calidad alta, cada 3 puntos
+    const spr = rec.paint.gasBody;
+    for (let i = 1; i < n; i += 3) {
+      const t = i * inv;
+      const rr = radAt(t, ss);
+      const ph = tt * 0.0016 - i * 0.55;
+      const off = 0.4 * rr * Math.sin(ph * 1.3 + i);
+      const R = rr * (1.8 + 0.5 * Math.sin(ph));
+      c.globalAlpha = 0.25 * (1 - 0.6 * t) * am0 * (0.6 + 0.4 * Math.sin(ph * 0.7 + i * 2.1));
+      c.drawImage(spr, X[i] + NX[i] * off - R, Y[i] + NY[i] * off - R, R + R, R + R);
+    }
   }
 
-  function passPhotophores(rec, ss, now) {
+  // Estrellas internas (antes fotóforos): estrellitas de 4 puntas que titilan dentro del gas. El
+  // patrón depende del slot del color (pares, una al centro, alternadas a los lados, tríos a lo
+  // largo) y sirve para distinguir jugadores de color parecido.
+  function passStars(rec, ss, now) {
     const c = ctx, n = rec.n, p = rec.paint;
     if (n < 2) return;
     const inv = 1 / Math.max(n - 1, 1);
-    const spr = p.glowCore;
-    const dotR = Math.max(1, 0.09 * ss);
-    const R = dotR * 3.2;
+    const spr = p.starCore;
     const X = rec.x, Y = rec.y, NX = rec.nx, NY = rec.ny;
     const pattern = p.slot % 4;
     const sp = ss < 12 ? 2 : 1;
     const period = pattern === 0 ? 3 * sp : (pattern === 3 ? 5 * sp : 2 * sp);
     const phase0 = pattern === 3 ? 2 : 1;
     const av = rec.alphaVis;
+    const twK = reducedMotion ? 0.35 : 1;
+    // varias estrellas por posición: más chicas, para que sus rayos no se pisen
+    const sizeK = pattern === 0 || pattern === 3 ? 0.8 : 1.05;
     for (let i = phase0; i < n; i += period) {
       const t = i * inv;
       const rr = radAt(t, ss);
-      const tw = 0.5 + 0.5 * Math.sin(animT * 0.004 + i * 1.7);
-      c.globalAlpha = tw * av;
+      const tw = 0.5 + 0.5 * Math.sin(animT * 0.0035 + i * 1.7);
+      const spark = 1 - twK * (1 - tw * tw);
+      const R = rr * sizeK * (0.7 + 0.45 * spark);
+      c.globalAlpha = (0.3 + 0.7 * spark) * (1 - 0.35 * t) * av;
       const x = X[i], y = Y[i];
       if (pattern === 0) {
-        const ox = NX[i] * 0.6 * rr, oy = NY[i] * 0.6 * rr;
+        const ox = NX[i] * 0.5 * rr, oy = NY[i] * 0.5 * rr;
         c.drawImage(spr, x + ox - R, y + oy - R, R + R, R + R);
         c.drawImage(spr, x - ox - R, y - oy - R, R + R, R + R);
       } else if (pattern === 1) {
         c.drawImage(spr, x - R, y - R, R + R, R + R);
       } else if (pattern === 2) {
-        const side = ((i / period) | 0) & 1 ? 0.6 : -0.6;
+        const side = ((i / period) | 0) & 1 ? 0.5 : -0.5;
         c.drawImage(spr, x + NX[i] * side * rr - R, y + NY[i] * side * rr - R, R + R, R + R);
       } else {
-        // tres puntos en línea a lo largo del cuerpo
-        const tx = NY[i] * 0.3 * ss, ty = -NX[i] * 0.3 * ss;
+        // tres estrellas en línea a lo largo del cuerpo
+        const tx = NY[i] * 0.32 * ss, ty = -NX[i] * 0.32 * ss;
         c.drawImage(spr, x - R, y - R, R + R, R + R);
         c.drawImage(spr, x + tx - R, y + ty - R, R + R, R + R);
         c.drawImage(spr, x - tx - R, y - ty - R, R + R, R + R);
@@ -1560,11 +1815,11 @@
         if (jx > HALF_W || jx < -HALF_W || jy > HALF_H || jy < -HALF_H) continue;
         const pt = pp * inv;
         const prr = radAt(pt, ss) * 1.6;
-        c.globalAlpha = 0.32 * (1 - pt) * av * rec.filament;
+        c.globalAlpha = 0.26 * (1 - pt) * av * rec.filament;
         c.drawImage(p.glowCore, X[j0] + jx * jf - prr, Y[j0] + jy * jf - prr, prr * 2, prr * 2);
       }
     }
-    // peristalsis: bultos luminosos que recorren el cuerpo a 22 segmentos por segundo
+    // digestión: un bulto de luz recorre el cuerpo a 22 segmentos por segundo después de comer
     for (let k = 0; k < rec.bulgeN; k++) {
       const pos = (now - rec.bulge[k]) * 0.022;
       if (pos > n - 1) {
@@ -1583,13 +1838,43 @@
       const br = radAt(pos * inv, ss) * 1.25;
       const fade = 1 - smoothstep(0.8, 1, pos * inv);
       c.globalAlpha = 0.55 * fade * av;
-      c.drawImage(spr, bx - br * 2.2, by - br * 2.2, br * 4.4, br * 4.4);
+      c.drawImage(p.glowCore, bx - br * 2.2, by - br * 2.2, br * 4.4, br * 4.4);
       c.globalAlpha = 0.35 * fade * av;
       c.drawImage(p.glowBody, bx - br * 3, by - br * 3, br * 6, br * 6);
     }
   }
 
-  function bellBlink(rec) {
+  // Polvo de la cola: motas finas que se sueltan de la punta, derivan hacia atrás y se apagan.
+  // Pocas (una cada 110 ms por criatura en calidad alta, la mitad en media, ninguna en baja), siempre
+  // más chicas y tenues que la comida, y no compiten por el tope de partículas con los efectos.
+  const DUST = { x: 0, y: 0, vx: 0, vy: 0, life: [700, 1300], size: [0.35, 0.7], endSize: 0.15,
+    alpha: 0.45, gravity: 0, drag: 0.985, shape: 'dot', glow: true, color: '#F6F3EE', lineWidth: 1 };
+  function emitTailDust(rec, dtMs) {
+    if (!particles || quality === 0 || reducedMotion || rec.n < 4) return;
+    const every = quality === 2 ? 110 : 220;
+    rec.dustAcc += dtMs * timeScale;
+    if (rec.dustAcc < every) return;
+    rec.dustAcc %= every;
+    if (particles.count() > particleLimitFor(quality) * 0.6) return;
+    const n = rec.n;
+    const i = n - 1 - ((Math.random() * 3) | 0);
+    const tx = rec.x[i], ty = rec.y[i];
+    let dx = tx - rec.x[i - 1], dy = ty - rec.y[i - 1];
+    if (dx > HALF_W || dx < -HALF_W || dy > HALF_H || dy < -HALF_H) return;
+    const l = Math.sqrt(dx * dx + dy * dy) || 1;
+    dx /= l; dy /= l;
+    const sp = 4 + Math.random() * 8, side = (Math.random() - 0.5) * 9;
+    const rr = radAt(i / (n - 1), rec.s);
+    DUST.x = tx + (Math.random() - 0.5) * rr;
+    DUST.y = ty + (Math.random() - 0.5) * rr;
+    DUST.vx = dx * sp - dy * side;
+    DUST.vy = dy * sp + dx * side;
+    DUST.color = Math.random() < 0.3 ? rec.paint.core : rec.paint.body;
+    DUST.alpha = 0.45 * rec.alphaVis;
+    particles.emit(DUST);
+  }
+
+  function shieldBlink(rec) {
     if (!rec.immune || !rec.immuneEnd) return 1;
     const left = rec.immuneEnd - Date.now();
     if (left > 1500 || left < -500) return 1;
@@ -1611,10 +1896,10 @@
     }
     const av = rec.alphaVis;
     const ang = Math.atan2(dy, dx);
-    // glow de cabeza
+    // glow de cabeza: el núcleo denso del gas
     c.globalCompositeOperation = 'lighter';
-    c.globalAlpha = 0.6 * av;
-    const gr = 1.0 * ss;
+    c.globalAlpha = 0.55 * av;
+    const gr = 1.1 * ss;
     c.drawImage(p.glowCore, hx - gr, hy - gr, gr * 2, gr * 2);
     // cabeza
     c.globalCompositeOperation = 'source-over';
@@ -1626,7 +1911,7 @@
     c.fill();
     // brillo interno de la cabeza
     c.globalCompositeOperation = 'lighter';
-    c.globalAlpha = 0.45 * av;
+    c.globalAlpha = 0.4 * av;
     const ir = 0.55 * ss;
     c.drawImage(p.glowCore, hx + dx * 0.05 * ss - ir, hy + dy * 0.05 * ss - ir, ir * 2, ir * 2);
     c.globalCompositeOperation = 'source-over';
@@ -1635,50 +1920,27 @@
     const ex = hx + dx * 0.18 * ss, ey = hy + dy * 0.18 * ss;
     if (ss >= 12) {
       const o = 0.22 * ss, sr = 0.12 * ss, pr = 0.07 * ss, pf = 0.03 * ss;
-      c.fillStyle = '#E8FBFF';
+      c.fillStyle = '#F6F3EE';
       c.beginPath();
       c.arc(ex + nxh * o, ey + nyh * o, sr, 0, TAU);
       c.moveTo(ex - nxh * o + sr, ey - nyh * o);
       c.arc(ex - nxh * o, ey - nyh * o, sr, 0, TAU);
       c.fill();
-      c.fillStyle = '#01060A';
+      c.fillStyle = '#030307';
       c.beginPath();
       c.arc(ex + nxh * o + dx * pf, ey + nyh * o + dy * pf, pr, 0, TAU);
       c.moveTo(ex - nxh * o + dx * pf + pr, ey - nyh * o + dy * pf);
       c.arc(ex - nxh * o + dx * pf, ey - nyh * o + dy * pf, pr, 0, TAU);
       c.fill();
-      // señuelo
-      const sw1 = Math.sin(animT * 0.003), sw2 = Math.sin(animT * 0.004 + 1);
-      const lx0 = hx + dx * 0.3 * ss, ly0 = hy + dy * 0.3 * ss;
-      const lcx = hx + dx * 0.7 * ss + nxh * 0.25 * ss * sw1, lcy = hy + dy * 0.7 * ss + nyh * 0.25 * ss * sw1;
-      const lex = hx + dx * 0.85 * ss + nxh * 0.15 * ss * sw2, ley = hy + dy * 0.85 * ss + nyh * 0.15 * ss * sw2;
-      c.strokeStyle = p.lure;
-      c.lineWidth = 1;
-      c.beginPath();
-      c.moveTo(lx0, ly0);
-      c.quadraticCurveTo(lcx, lcy, lex, ley);
-      c.stroke();
-      c.globalCompositeOperation = 'lighter';
-      const lr = 0.35 * ss;
-      c.globalAlpha = 0.9 * av;
-      c.drawImage(p.glowCore, lex - lr * 1.6, ley - lr * 1.6, lr * 3.2, lr * 3.2);
-      c.globalAlpha = 0.5 * av;
-      c.drawImage(p.glowBody, lex - lr * 2.6, ley - lr * 2.6, lr * 5.2, lr * 5.2);
-      c.globalCompositeOperation = 'source-over';
-      c.globalAlpha = av;
-      c.fillStyle = '#E8FBFF';
-      c.beginPath();
-      c.arc(lex, ley, Math.max(0.7, 0.08 * ss), 0, TAU);
-      c.fill();
     } else {
       const o2 = 0.22 * ss;
-      c.fillStyle = '#01060A';
+      c.fillStyle = '#030307';
       c.fillRect(ex + nxh * o2 - 0.5, ey + nyh * o2 - 0.5, 1, 1);
       c.fillRect(ex - nxh * o2 - 0.5, ey - nyh * o2 - 0.5, 1, 1);
     }
     c.globalAlpha = 1;
-    drawBell(rec, ss, now, hx, hy, ang);
-    // sonar del jugador propio (y sonar triple al empezar la ronda)
+    drawMagnetosphere(rec, ss, now, hx, hy, ang);
+    // pulso del jugador propio (y pulso triple al empezar la ronda)
     if (rec.isMe && mode === 'game') {
       for (let k = 0; k < 3; k++) {
         const el = now - roundStartT - k * 200;
@@ -1686,7 +1948,7 @@
         const tt = el / 700;
         c.globalCompositeOperation = 'lighter';
         c.globalAlpha = 0.5 * (1 - tt);
-        c.strokeStyle = '#E8FBFF';
+        c.strokeStyle = '#F6F3EE';
         c.lineWidth = 1.5;
         c.beginPath();
         c.arc(hx, hy, (0.5 + 3.5 * easeOutCubic(tt)) * ss, 0, TAU);
@@ -1696,12 +1958,12 @@
       c.globalAlpha = 1;
     }
     if (rec.isMe) {
-      const sp = (now - sonarBase) % 2400;
+      const sp = (now - pulseBase) % 2400;
       if (sp >= 0 && sp < 900) {
         const st = sp / 900;
         c.globalCompositeOperation = 'lighter';
         c.globalAlpha = 0.35 * (1 - st);
-        c.strokeStyle = '#E8FBFF';
+        c.strokeStyle = '#F6F3EE';
         c.lineWidth = 1.5;
         c.beginPath();
         c.arc(hx, hy, (0.8 + 1.4 * easeOutCubic(st)) * ss, 0, TAU);
@@ -1711,70 +1973,80 @@
       }
     }
   }
-  let sonarBase = 0;
+  let pulseBase = 0;
 
-  // Campana de medusa (5.7)
-  function drawBell(rec, ss, now, hx, hy, ang) {
+  // Magnetosfera (inmunidad puesta, 5.7): arco de choque delante de la cabeza, violeta afuera y
+  // verde oxígeno adentro, con brillo de aurora que ondula. Se infla al tomar el escudo, titila
+  // cuando está por vencer y estalla al bloquear (se abre hacia adelante y se apaga).
+  const MAG_SEG = 12, MAG_SPAN = 1.3, MAG_POP_MS = 320;
+  function drawMagnetosphere(rec, ss, now, hx, hy, ang) {
     const c = ctx;
     const popEl = now - rec.popT0;
-    const popping = popEl >= 0 && popEl < 280;
+    const popping = popEl >= 0 && popEl < MAG_POP_MS;
     if (!rec.immune && !popping) return;
-    let scale = 1, alpha = 1;
+    let scale = 1, alpha = 1, pt = 0;
     const inf = now - rec.inflateT0;
     if (inf >= 0 && inf < 360) scale = Math.max(0, easeOutBack(inf / 360));
     if (popping) {
-      const pt = popEl / 280;
-      scale = 1 + 0.35 * easeOutCubic(pt);
+      pt = popEl / MAG_POP_MS;
+      scale = 1 + 0.7 * easeOutCubic(pt);
       alpha = 1 - pt;
     } else {
-      alpha = bellBlink(rec);
+      alpha = shieldBlink(rec);
     }
     if (scale <= 0.01) return;
-    const beat = reducedMotion ? 0 : Math.sin(now * 0.001 * 1.6 * TAU);
-    const rx = 0.95 * ss * scale * (1 + 0.08 * beat);
-    const ry = 0.95 * ss * scale * (1 - 0.08 * beat);
-    const cosA = Math.cos(ang), sinA = Math.sin(ang);
-    const bx = hx - cosA * 0.15 * ss, by = hy - sinA * 0.15 * ss;
     alpha *= rec.alphaVis;
-    // glow suave
+    const cosA = Math.cos(ang), sinA = Math.sin(ang);
+    const nx = -sinA, ny = cosA;
+    const R = 0.8 * ss * scale;
+    const cx = hx + cosA * 0.12 * ss, cy = hy + sinA * 0.12 * ss;
+    const mv = reducedMotion ? 0 : 1;
     c.globalCompositeOperation = 'lighter';
-    c.globalAlpha = 0.35 * alpha;
-    const gr = 1.6 * ss * scale;
-    c.drawImage(shieldSprite, bx - gr, by - gr, gr * 2, gr * 2);
-    // campana: media elipse orientada hacia adelante (el borde abierto queda atrás)
-    c.globalCompositeOperation = 'source-over';
-    c.beginPath();
-    c.ellipse(bx, by, rx, ry, ang, -Math.PI / 2, Math.PI / 2);
-    c.globalAlpha = 0.18 * alpha;
-    c.fillStyle = '#9FF4FF';
-    c.fill();
-    c.globalAlpha = 0.7 * alpha;
-    c.strokeStyle = '#E8FBFF';
-    c.lineWidth = 1.5;
-    c.stroke();
-    // borde interior más tenue: da volumen a la campana
-    c.beginPath();
-    c.ellipse(bx, by, rx * 0.72, ry * 0.8, ang, -Math.PI / 2 + 0.25, Math.PI / 2 - 0.25);
-    c.globalAlpha = 0.3 * alpha;
-    c.lineWidth = 1;
-    c.stroke();
-    // tentáculos cortos hacia atrás
-    if (ss >= 12 && !popping) {
-      c.globalAlpha = 0.35 * alpha;
-      c.lineWidth = 1;
-      c.strokeStyle = '#9FF4FF';
-      c.beginPath();
-      for (let k = -1; k <= 1; k++) {
-        const ox = -sinA * k * ry * 0.7, oy = cosA * k * ry * 0.7;
-        const sx0 = bx + ox, sy0 = by + oy;
-        const sway = Math.sin(animT * 0.004 + k * 1.3) * 0.18 * ss;
-        c.moveTo(sx0, sy0);
-        c.quadraticCurveTo(sx0 - cosA * 0.45 * ss - sinA * sway, sy0 - sinA * 0.45 * ss + cosA * sway,
-          sx0 - cosA * 0.8 * ss, sy0 - sinA * 0.8 * ss);
-      }
-      c.stroke();
+    // brillo difuso delante de la cabeza
+    c.globalAlpha = 0.38 * alpha;
+    const gr = 1.5 * ss * scale;
+    const gx = hx + cosA * 0.6 * ss * scale, gy = hy + sinA * 0.6 * ss * scale;
+    c.drawImage(shieldSprite, gx - gr, gy - gr, gr * 2, gr * 2);
+    // velo: manchas blandas sobre el arco (la parte "aurora", sin borde duro)
+    for (let k = 0; k < 5; k++) {
+      const th = (k / 4 * 2 - 1) * MAG_SPAN * 0.8;
+      const rr = R * (1 + 0.3 * th * th);
+      const lx = Math.cos(th) * rr, ly = Math.sin(th) * rr;
+      const vr = 0.5 * ss * scale * (1 + 0.2 * mv * Math.sin(animT * 0.004 + k * 1.9));
+      c.globalAlpha = (0.32 - 0.12 * Math.abs(th)) * alpha;
+      c.drawImage(k & 1 ? greenSprite : violetSprite, cx + cosA * lx + nx * ly - vr, cy + sinA * lx + ny * ly - vr, vr * 2, vr * 2);
     }
+    // arco: tramos más anchos y claros al frente que en las puntas; ondula como una cortina
+    c.lineCap = 'butt';
+    for (let layer = 0; layer < 2; layer++) {
+      c.strokeStyle = layer === 0 ? '#D9CFFF' : '#A8EADF';
+      const rl = layer === 0 ? R : R * 0.8;
+      let px = 0, py = 0;
+      for (let k = 0; k <= MAG_SEG; k++) {
+        const u = k / MAG_SEG;
+        const th = (u * 2 - 1) * MAG_SPAN;
+        const wob = mv * 0.05 * ss * Math.sin(animT * 0.006 + u * 7 + layer * 2);
+        // el radio crece hacia los costados: el arco se abre hacia atrás, como una onda de choque
+        const rr = rl * (1 + 0.3 * th * th) + wob;
+        const lx = Math.cos(th) * rr, ly = Math.sin(th) * rr;
+        const x = cx + cosA * lx + nx * ly, y = cy + sinA * lx + ny * ly;
+        if (k > 0) {
+          const um = (k - 0.5) / MAG_SEG;
+          const mid = 1 - Math.abs(um * 2 - 1);
+          const fl = mv ? 0.72 + 0.28 * Math.sin(animT * 0.009 + k * 1.3 + layer * 2.4) : 1;
+          c.globalAlpha = (layer === 0 ? 0.8 : 0.45) * mid * fl * alpha;
+          c.lineWidth = (layer === 0 ? 1.5 : 1.1) * (0.25 + 0.75 * mid) * (1 - 0.5 * pt);
+          c.beginPath();
+          c.moveTo(px, py);
+          c.lineTo(x, y);
+          c.stroke();
+        }
+        px = x; py = y;
+      }
+    }
+    c.lineCap = 'round';
     c.globalAlpha = 1;
+    c.globalCompositeOperation = 'source-over';
   }
 
   // ---------------------------------------------------------------------------
@@ -1782,7 +2054,7 @@
   // ---------------------------------------------------------------------------
   function ensureLabel(rec) {
     if (rec.label && rec.labelKey === rec.name && rec.labelColor === rec.paint.text && rec.labelEpoch === textEpoch) return rec.label;
-    rec.label = textSprite(rec.label, truncateName(rec.name), fontUi(600, 12), labelPx(), rec.paint.text, 'rgba(2,10,18,0.85)', 3);
+    rec.label = textSprite(rec.label, truncateName(rec.name), fontUi(600, 12), labelPx(), rec.paint.text, 'rgba(7,7,13,0.85)', 3);
     rec.labelKey = rec.name;
     rec.labelColor = rec.paint.text;
     rec.labelEpoch = textEpoch;
@@ -1921,7 +2193,7 @@
         consSpawnT0[consSpawnN] = now;
         consSpawnN++;
         const half = s / 2;
-        fxRing(c.x + half, c.y + half, 0.3 * s, 1.8 * s, 420, '#9FF4FF', 0.7, 1.5, 0);
+        fxRing(c.x + half, c.y + half, 0.3 * s, 1.8 * s, 420, '#C7B8FF', 0.7, 1.5, 0);
       }
     }
     const tmp = prevConsIds; prevConsIds = curConsIds; curConsIds = tmp;
@@ -1954,89 +2226,98 @@
     return f.fade === undefined ? 1 : f.fade;
   }
 
+  // Planetas: halo de atmósfera (aditivo), lunas del lado de atrás, planeta, lunas del lado de
+  // adelante. Los planetas no laten ni flotan; lo único que se mueve son las lunas, que orbitan en
+  // una elipse inclinada y pasan por detrás del planeta. La cantidad de lunas es el valor.
   function drawFoods(foods, now) {
     if (!foods || foods.length === 0) return;
     ensureFoodSprites();
     const c = ctx, half = s / 2, n = foods.length;
-    const w = 0.8 * TAU / 1000;
-    // glows
+    const tt = reducedMotion ? 0 : animT;
     c.globalCompositeOperation = 'lighter';
     for (let i = 0; i < n; i++) {
       const f = foods[i];
       const fa = foodAlpha(f);
       if (fa <= 0.01) continue;
       const v = clamp((f.score | 0) - 1, 0, 4);
-      const ph = foodPhase(f.x, f.y);
       const sc = spawnScale(f.x * 1000 + f.y, now);
       if (sc <= 0.01) continue;
-      const br = 1 + 0.06 * Math.sin(animT * w + ph);
-      const cx = f.x + half, cy = f.y + half + 0.06 * s * Math.sin(animT * w * 0.9 + ph * 1.3);
-      const r = FOOD_R[v];
-      const R = FOOD_GLOW * r * (1 + 0.1 * (v + 1)) * br * sc;
-      c.globalAlpha = 0.9 * fa;
+      const cx = f.x + half, cy = f.y + half;
+      const R = FOOD_GLOW * FOOD_R[v] * (1 + 0.1 * (v + 1)) * sc;
+      c.globalAlpha = 0.8 * fa;
       c.drawImage(foodGlows[v], cx - R, cy - R, R * 2, R * 2);
+      drawMoons(cx, cy, FOOD_R[v] * sc, v + 1, foodPhase(f.x, f.y), tt, fa, true, true);
     }
-    // discos (con contorno y dígito horneados)
     c.globalCompositeOperation = 'source-over';
     for (let i = 0; i < n; i++) {
       const f = foods[i];
       const fa = foodAlpha(f);
       if (fa <= 0.01) continue;
       const v = clamp((f.score | 0) - 1, 0, 4);
-      const ph = foodPhase(f.x, f.y);
       const sc = spawnScale(f.x * 1000 + f.y, now);
       if (sc <= 0.01) continue;
-      const br = 1 + 0.06 * Math.sin(animT * w + ph);
-      const cx = f.x + half, cy = f.y + half + 0.06 * s * Math.sin(animT * w * 0.9 + ph * 1.3);
+      const ph = foodPhase(f.x, f.y);
+      const cx = f.x + half, cy = f.y + half;
+      drawMoons(cx, cy, FOOD_R[v] * sc, v + 1, ph, tt, fa, false, false);
       const orb = foodOrbs[v];
-      const hr = orb._r * br * sc;
+      const hr = orb._r * sc;
       c.globalAlpha = fa;
       c.drawImage(orb, cx - hr, cy - hr, hr * 2, hr * 2);
-    }
-    // satélites y anillo exterior del 5
-    c.globalCompositeOperation = 'lighter';
-    const satR = Math.max(1, 0.06 * s) * 3;
-    for (let i = 0; i < n; i++) {
-      const f = foods[i];
-      const fa = foodAlpha(f);
-      if (fa <= 0.01) continue;
-      const v = clamp((f.score | 0) - 1, 0, 4);
-      const ph = foodPhase(f.x, f.y);
-      const sc = spawnScale(f.x * 1000 + f.y, now);
-      if (sc <= 0.01) continue;
-      const cx = f.x + half, cy = f.y + half + 0.06 * s * Math.sin(animT * w * 0.9 + ph * 1.3);
-      const r = FOOD_R[v] * sc;
-      const orbit = 1.6 * r + 1.5;
-      const count = v + 1;
-      const base = animT * 0.0016 + ph;
-      c.globalAlpha = 0.95 * fa;
-      for (let k = 0; k < count; k++) {
-        const a = base + k * TAU / count;
-        c.drawImage(pearlSprite, cx + Math.cos(a) * orbit - satR, cy + Math.sin(a) * orbit - satR, satR * 2, satR * 2);
-      }
-      if (v === 4) {
-        c.globalAlpha = 0.5 * fa;
-        c.strokeStyle = FOOD_COL[4];
-        c.lineWidth = 1;
-        c.beginPath();
-        c.arc(cx, cy, 2.2 * r + 1.5, 0, TAU);
-        c.stroke();
-      }
+      drawMoons(cx, cy, FOOD_R[v] * sc, v + 1, ph, tt, fa, true, false);
     }
     c.globalAlpha = 1;
     c.globalCompositeOperation = 'source-over';
   }
 
+  // Lunas de un planeta, solo las de un lado de la órbita (`front`: las que pasan por delante).
+  // Disco claro y nítido; las de atrás, más chicas y apagadas. Con `glow` dibuja solo el brillo chico
+  // de las de adelante (en la pasada aditiva, junto con los halos).
+  const MOON_X = new Float32Array(5), MOON_Y = new Float32Array(5);
+  function drawMoons(cx, cy, r, count, ph, tt, fa, front, glow) {
+    const c = ctx;
+    const orx = 1.7 * r + 1.6, ory = orx * MOON_FLAT;
+    const tilt = MOON_TILT + 0.3 * Math.sin(ph * 3);
+    const cosT = Math.cos(tilt), sinT = Math.sin(tilt);
+    const base = tt * 0.0011 + ph;
+    const mr = front ? 1.1 : 0.85;
+    let m = 0;
+    for (let k = 0; k < count; k++) {
+      const a = base + k * TAU / count;
+      const sa = Math.sin(a);
+      if ((sa >= 0) !== front) continue;
+      const ex = Math.cos(a) * orx, ey = sa * ory;
+      MOON_X[m] = cx + ex * cosT - ey * sinT;
+      MOON_Y[m] = cy + ex * sinT + ey * cosT;
+      m++;
+    }
+    if (m === 0) return;
+    if (glow) {
+      // solo el brillo (el que llama ya puso 'lighter')
+      c.globalAlpha = 0.45 * fa;
+      const gr = mr * 2.6;
+      for (let k = 0; k < m; k++) c.drawImage(lightSprite, MOON_X[k] - gr, MOON_Y[k] - gr, gr * 2, gr * 2);
+      return;
+    }
+    c.globalAlpha = (front ? 1 : 0.6) * fa;
+    c.fillStyle = '#E9E3D8';
+    c.beginPath();
+    for (let k = 0; k < m; k++) {
+      c.moveTo(MOON_X[k] + mr, MOON_Y[k]);
+      c.arc(MOON_X[k], MOON_Y[k], mr, 0, TAU);
+    }
+    c.fill();
+  }
+
   // Consumibles en el mapa (5.9): cada tipo con su silueta y su color, de tamaño fijo en px de la
-  // arena. Todos comparten el anillo de sonar (en su color), que es la seña de "esto se toma".
-  // sonar: anillo y partículas; ring: anillo al tomarlo y pulso del fondo; light: partículas claras
+  // arena. Todos comparten el pulso de baliza (un anillo en su color que se abre y se apaga), que es
+  // la seña de "esto se toma". No flotan: quedan quietos donde aparecieron.
+  // pulse: anillo y partículas; ring: anillo al tomarlo y pulso del fondo; light: partículas claras
   const CONS_LOOK = {
-    immunity: { sonar: '#B9A6FF', ring: '#9FF4FF', light: '#C9F8FF' },
-    bigMouth: { sonar: '#FF8FD0', ring: '#FF8FD0', light: '#FFD6EC' },
-    fan: { sonar: '#FF7A59', ring: '#FF7A59', light: '#FFE3D9' }
+    immunity: { pulse: '#BDAEFF', ring: '#C7B8FF', light: '#E4DDFF' },
+    bigMouth: { pulse: '#F29BC9', ring: '#F29BC9', light: '#FFD6EC' },
+    fan: { pulse: '#F0875F', ring: '#F0875F', light: '#FFE3D9' }
   };
-  const CONS_BELL_W = 7.5, CONS_BELL_H = 9;   // semiancho y alto de la campana
-  const CONS_SONAR_MS = 2000;
+  const CONS_PULSE_MS = 2000;
   function drawConsumables(cons, now) {
     if (!cons || cons.length === 0) return;
     const c = ctx, half = s / 2;
@@ -2048,179 +2329,160 @@
       const look = CONS_LOOK[it.type] || CONS_LOOK.immunity;
       const ph = foodPhase(it.x, it.y);
       const cx = it.x + half;
-      const cy = it.y + half + 1.2 * Math.sin(animT * 0.0012 * TAU / 1.2 + ph) - 2;
-      const beat = Math.sin(animT * 0.001 * 1.4 * TAU + ph);
-      // sonar: un anillo que nace en el centro y se abre hasta 26 px mientras se apaga
-      const st = ((animT + ph * 318) % CONS_SONAR_MS) / CONS_SONAR_MS;
+      const cy = it.y + half;
+      // pulso: un anillo que nace en el centro y se abre hasta 26 px mientras se apaga
+      const st = ((animT + ph * 318) % CONS_PULSE_MS) / CONS_PULSE_MS;
       c.globalCompositeOperation = 'lighter';
-      c.globalAlpha = 0.6 * (1 - st) * (1 - st) * sc;
-      c.strokeStyle = look.sonar;
+      c.globalAlpha = 0.5 * (1 - st) * (1 - st) * sc;
+      c.strokeStyle = look.pulse;
       c.lineWidth = 1.5;
       c.beginPath();
-      c.arc(cx, cy + 2, 9 + 17 * easeOutCubic(st), 0, TAU);
+      c.arc(cx, cy, 9 + 17 * easeOutCubic(st), 0, TAU);
       c.stroke();
-      if (look === CONS_LOOK.bigMouth) drawAnemone(c, cx, cy + 2, sc, ph, beat);
-      else if (look === CONS_LOOK.fan) drawStarfish(c, cx, cy + 2, sc, ph);
-      else drawJelly(c, cx, cy, sc, ph, beat);
+      if (look === CONS_LOOK.bigMouth) drawBlackHole(c, cx, cy, sc, ph);
+      else if (look === CONS_LOOK.fan) drawTripleStar(c, cx, cy, sc, ph);
+      else drawAurora(c, cx, cy, sc, ph);
     }
     c.globalAlpha = 1;
     c.globalCompositeOperation = 'source-over';
   }
 
-  // Escudo: medusa violeta
-  function drawJelly(c, cx, cy, sc, ph, beat) {
-    // glows: violeta amplio y celeste cerca del núcleo
-    const g2 = 20 * sc * (1 + 0.08 * Math.sin(animT * 0.001 * 0.7 * TAU + ph));
+  // Escudo: aurora. Un velo de rayos finos colgado de una cinta que ondula en S, más ancho que
+  // alto: abajo el borde claro, verde oxígeno, que se vuelve violeta y se apaga hacia arriba. La
+  // cinta se mueve despacio y los rayos cambian de alto, así el velo ondula.
+  const AURORA_RAYS = 13;
+  let auroraRay = null;
+  function ensureAuroraRay() {
+    if (auroraRay) return auroraRay;
+    const w = 16, h = 96;
+    const cnv = makeCanvas(w, h);
+    const g = cnv.getContext('2d');
+    const lg = g.createLinearGradient(0, h, 0, 0);
+    lg.addColorStop(0, 'rgba(200,240,230,0)');
+    lg.addColorStop(0.05, 'rgba(206,242,234,0.95)');
+    lg.addColorStop(0.22, 'rgba(199,184,255,0.75)');
+    lg.addColorStop(0.6, 'rgba(189,174,255,0.25)');
+    lg.addColorStop(1, 'rgba(189,174,255,0)');
+    g.fillStyle = lg;
+    g.fillRect(0, 0, w, h);
+    g.globalCompositeOperation = 'destination-in';
+    const hg = g.createLinearGradient(0, 0, w, 0);
+    hg.addColorStop(0, 'rgba(0,0,0,0)');
+    hg.addColorStop(0.5, 'rgba(0,0,0,1)');
+    hg.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = hg;
+    g.fillRect(0, 0, w, h);
+    auroraRay = cnv;
+    return cnv;
+  }
+
+  function drawAurora(c, cx, cy, sc, ph) {
+    const tt = reducedMotion ? 0 : animT;
+    const g2 = 18 * sc;
     c.globalCompositeOperation = 'lighter';
-    c.globalAlpha = 0.5 + 0.1 * Math.sin(animT * 0.001 * 0.7 * TAU + ph);
+    c.globalAlpha = 0.45;
     c.drawImage(violetSprite, cx - g2, cy - g2, g2 * 2, g2 * 2);
-    const g1 = 12 * sc;
-    c.globalAlpha = 0.35;
-    c.drawImage(shieldSprite, cx - g1, cy - g1, g1 * 2, g1 * 2);
-    // tentáculos
-    c.globalCompositeOperation = 'source-over';
-    const bw = CONS_BELL_W * sc * (1 + 0.06 * beat), bh = CONS_BELL_H * sc * (1 - 0.06 * beat);
-    c.globalAlpha = 0.85;
-    c.strokeStyle = '#D6CCFF';
-    c.lineWidth = 1.2;
-    c.beginPath();
-    for (let k = 0; k < 3; k++) {
-      const tx = cx + (k - 1) * bw * 0.55;
-      const sway = Math.sin(animT * 0.004 + k) * 1.8 * sc;
-      c.moveTo(tx, cy);
-      c.quadraticCurveTo(tx + sway, cy + 4 * sc, tx - sway * 0.6, cy + 8 * sc);
+    const ray = ensureAuroraRay();
+    const span = 10.5 * sc, rw = 2.6 * sc;
+    for (let k = 0; k < AURORA_RAYS; k++) {
+      const u = k / (AURORA_RAYS - 1), x0 = u * 2 - 1;
+      const x = cx + x0 * span;
+      // cinta en S, apenas inclinada, que se desliza despacio
+      const base = cy + 3.2 * sc - 1.6 * sc * x0 + 2.6 * sc * Math.sin(u * 4.6 + tt * 0.0015 + ph);
+      const h = 10 * sc * (0.55 + 0.45 * Math.sin(Math.PI * (0.08 + 0.84 * u))) * (0.78 + 0.22 * Math.sin(tt * 0.0033 + k * 2.3 + ph));
+      c.globalAlpha = 0.85;
+      c.drawImage(ray, x - rw / 2, base - h, rw, h * 1.05);
     }
-    c.stroke();
-    // campana (sprite horneado con su degradado y su borde)
-    const bell = ensureConsSprite();
-    c.globalAlpha = 1;
-    c.drawImage(bell, cx - bw * bell._sx, cy - bh * bell._sy, bw * 2 * bell._sx, bh * bell._sy * bell._hy);
-    // núcleo
-    c.globalCompositeOperation = 'lighter';
-    c.globalAlpha = 0.9;
-    const nr = 4 * sc;
-    c.drawImage(pearlSprite, cx - nr, cy - bh * 0.45 - nr, nr * 2, nr * 2);
   }
 
-  // Boca grande: anémona rosa. Ocho tentáculos que se mecen alrededor de una boca que se abre y
-  // se cierra con el latido.
-  const ANEMONE_ARMS = 8, ANEMONE_SWAY = 0.14;   // vaivén en radianes: 8 brazos a 45° no llegan a cruzarse
-  function anemoneSway(k, ph) { return ANEMONE_SWAY * Math.sin(animT * 0.003 + k * 1.3 + ph); }
-  function drawAnemone(c, cx, cy, sc, ph, beat) {
-    const g = 18 * sc * (1 + 0.08 * Math.sin(animT * 0.001 * 0.7 * TAU + ph));
+  // Boca grande: agujero negro visto de frente. Disco de acreción rosa con brazos en espiral que
+  // giran y caen hacia el centro (atrae la comida), horizonte negro y un anillo de fotones fino y
+  // claro. De frente, y no de canto, para que no se confunda con el planeta anillado del valor 5.
+  const HOLE_ARMS = 3, HOLE_PTS = 9;
+  function drawBlackHole(c, cx, cy, sc, ph) {
+    const tt = reducedMotion ? 0 : animT;
+    const g = 17 * sc;
     c.globalCompositeOperation = 'lighter';
-    c.globalAlpha = 0.5;
-    c.drawImage(anemoneSprite, cx - g, cy - g, g * 2, g * 2);
-    c.globalCompositeOperation = 'source-over';
-    const open = 1 + 0.12 * beat;
-    const r0 = 3 * sc * open, r1 = 8.5 * sc;
-    c.globalAlpha = 0.9;
-    c.strokeStyle = '#FF8FD0';
-    c.lineWidth = 1.4;
-    c.lineCap = 'round';
+    c.globalAlpha = 0.42;
+    c.drawImage(pinkSprite, cx - g, cy - g, g * 2, g * 2);
+    const hr = 3.4 * sc;
+    // disco: anillo ancho y difuso alrededor del horizonte
+    c.strokeStyle = '#F29BC9';
+    c.globalAlpha = 0.32;
+    c.lineWidth = 4.4 * sc;
     c.beginPath();
-    for (let k = 0; k < ANEMONE_ARMS; k++) {
-      const a = k * TAU / ANEMONE_ARMS + ph;
-      const sway = anemoneSway(k, ph);
-      c.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
-      c.quadraticCurveTo(cx + Math.cos(a + sway) * (r0 + r1) * 0.55, cy + Math.sin(a + sway) * (r0 + r1) * 0.55,
-        cx + Math.cos(a + sway * 1.6) * r1, cy + Math.sin(a + sway * 1.6) * r1);
-    }
+    c.arc(cx, cy, hr + 2.6 * sc, 0, TAU);
     c.stroke();
+    // brazos en espiral: del borde hacia el horizonte, cada vez más claros
+    const rot = tt * 0.0019 + ph;
     c.lineCap = 'butt';
-    // puntas
-    c.fillStyle = '#FFD6EC';
-    c.beginPath();
-    for (let k = 0; k < ANEMONE_ARMS; k++) {
-      const a = k * TAU / ANEMONE_ARMS + ph + anemoneSway(k, ph) * 1.6;
-      const tx = cx + Math.cos(a) * r1, ty = cy + Math.sin(a) * r1;
-      c.moveTo(tx + 1.1 * sc, ty);
-      c.arc(tx, ty, 1.1 * sc, 0, TAU);
-    }
-    c.fill();
-    // boca: centro oscuro con borde claro
-    c.fillStyle = 'rgba(58, 8, 40, 0.9)';
-    c.beginPath();
-    c.arc(cx, cy, 2.6 * sc * open, 0, TAU);
-    c.fill();
-    c.strokeStyle = '#FFD6EC';
-    c.lineWidth = 1.2;
-    c.stroke();
-  }
-
-  // Abanico: estrella de mar coral de cinco brazos que gira despacio
-  function drawStarfish(c, cx, cy, sc, ph) {
-    const g = 18 * sc * (1 + 0.08 * Math.sin(animT * 0.001 * 0.7 * TAU + ph));
-    c.globalCompositeOperation = 'lighter';
-    c.globalAlpha = 0.5;
-    c.drawImage(coralSprite, cx - g, cy - g, g * 2, g * 2);
-    c.globalCompositeOperation = 'source-over';
-    const rot = animT * 0.0004 + ph - Math.PI / 2;
-    const ro = 8.5 * sc, ri = 3.6 * sc;
-    c.beginPath();
-    for (let k = 0; k < 10; k++) {
-      const a = rot + k * Math.PI / 5;
-      const r = k % 2 ? ri : ro;
-      if (k === 0) c.moveTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
-      else c.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
-    }
-    c.closePath();
-    c.globalAlpha = 0.9;
-    c.fillStyle = '#FF7A59';
-    c.fill();
-    c.strokeStyle = '#FFD2C4';
-    c.lineWidth = 1.2;
-    c.lineJoin = 'round';
-    c.stroke();
-    c.lineJoin = 'miter';
-    // poros a lo largo de cada brazo
-    c.fillStyle = '#FFE3D9';
-    c.beginPath();
-    for (let k = 0; k < 5; k++) {
-      const a = rot + k * TAU / 5;
-      for (let j = 1; j <= 2; j++) {
-        const px = cx + Math.cos(a) * ro * j * 0.32, py = cy + Math.sin(a) * ro * j * 0.32;
-        c.moveTo(px + 0.8 * sc, py);
-        c.arc(px, py, 0.8 * sc, 0, TAU);
+    c.lineWidth = 1.2 * sc;
+    for (let k = 0; k < HOLE_ARMS; k++) {
+      const a0 = rot + k * TAU / HOLE_ARMS;
+      let px = 0, py = 0;
+      for (let j = 0; j <= HOLE_PTS; j++) {
+        const u = j / HOLE_PTS;               // 0 afuera, 1 en el horizonte
+        const r = (9.8 - 5.8 * u) * sc;
+        const a = a0 + u * 2.4;
+        const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r;
+        if (j > 0) {
+          c.globalAlpha = 0.9 * u;
+          c.strokeStyle = u > 0.55 ? '#FFD6EC' : '#F29BC9';
+          c.beginPath();
+          c.moveTo(px, py);
+          c.lineTo(x, y);
+          c.stroke();
+        }
+        px = x; py = y;
       }
     }
+    c.lineCap = 'round';
+    // horizonte de sucesos
+    c.globalCompositeOperation = 'source-over';
+    c.globalAlpha = 1;
+    c.fillStyle = '#030307';
+    c.beginPath();
+    c.arc(cx, cy, hr, 0, TAU);
     c.fill();
+    // anillo de fotones
     c.globalCompositeOperation = 'lighter';
-    c.globalAlpha = 0.8;
-    const nr = 3 * sc;
-    c.drawImage(pearlSprite, cx - nr, cy - nr, nr * 2, nr * 2);
+    c.strokeStyle = '#FFE3F0';
+    c.globalAlpha = 0.85;
+    c.lineWidth = 0.9 * sc;
+    c.beginPath();
+    c.arc(cx, cy, hr + 0.45 * sc, 0, TAU);
+    c.stroke();
   }
 
-  // Campana del escudo: media elipse con degradado violeta (#D9CCFF -> #9C82FF, alpha 0,75) y
-  // borde #F3EEFF al 90 %, horneada en un sprite por escala.
-  let consSprite = null, consKK = 0;
-  function ensureConsSprite() {
-    if (consSprite && consKK === K) return consSprite;
-    consKK = K;
-    const rx = CONS_BELL_W * K, ry = CONS_BELL_H * K;
-    const pad = 2;
-    const cw = Math.ceil(rx * 2 + pad * 2), ch = Math.ceil(ry + pad * 2);
-    const cnv = consSprite || makeCanvas(cw, ch);
-    cnv.width = cw; cnv.height = ch;
-    const g = cnv.getContext('2d');
-    const cx = cw / 2, base = ry + pad;
-    const lg = g.createLinearGradient(0, pad, 0, base);
-    lg.addColorStop(0, 'rgba(217,204,255,0.75)');
-    lg.addColorStop(1, 'rgba(156,130,255,0.75)');
-    g.beginPath();
-    g.ellipse(cx, base, rx, ry, 0, Math.PI, TAU);
-    g.closePath();
-    g.fillStyle = lg;
-    g.fill();
-    g.strokeStyle = 'rgba(243,238,255,0.9)';
-    g.lineWidth = Math.max(1, 1.2 * K);
-    g.stroke();
-    // factores para dibujarlo con el tamaño lógico de la campana
-    cnv._sx = cw / (rx * 2);
-    cnv._sy = (ry + pad) / ry;
-    cnv._hy = ch / (ry + pad);
-    consSprite = cnv;
-    return cnv;
+  // Abanico: estrella triple coral. Tres soles de distinto tamaño que giran despacio alrededor de
+  // su centro común, sobre una órbita apenas marcada.
+  const TRIPLE_SIZE = [1.15, 0.85, 0.72];
+  function drawTripleStar(c, cx, cy, sc, ph) {
+    const tt = reducedMotion ? 0 : animT;
+    const g = 16 * sc;
+    c.globalCompositeOperation = 'lighter';
+    c.globalAlpha = 0.42;
+    c.drawImage(coralSprite, cx - g, cy - g, g * 2, g * 2);
+    const orb = 5.4 * sc;
+    c.strokeStyle = '#F0875F';
+    c.globalAlpha = 0.18;
+    c.lineWidth = 1;
+    c.beginPath();
+    c.arc(cx, cy, orb, 0, TAU);
+    c.stroke();
+    const spr = starSprite('#F0875F');
+    const rot = tt * 0.0009 + ph;
+    for (let k = 0; k < 3; k++) {
+      const a = rot + k * TAU / 3;
+      const x = cx + Math.cos(a) * orb, y = cy + Math.sin(a) * orb;
+      const z = TRIPLE_SIZE[k] * sc;
+      const R = 6.5 * z;
+      c.globalAlpha = 0.95;
+      c.drawImage(spr, x - R, y - R, R * 2, R * 2);
+      const cr = 2.4 * z;
+      c.globalAlpha = 0.9;
+      c.drawImage(lightSprite, x - cr, y - cr, cr * 2, cr * 2);
+    }
   }
 
   // Estelas de proyectiles por id
@@ -2319,7 +2581,8 @@
     c.globalAlpha = 1;
   }
 
-  // Colas desprendidas (impactos)
+  // Colas desprendidas (impactos): el pedazo cortado deriva hacia un lado al azar (sin gravedad),
+  // se apaga y suelta polvo
   const TAIL_MAX = 8, TAIL_PTS = 96;
   const tails = [];
   for (let ti = 0; ti < TAIL_MAX; ti++) tails.push({ on: false, t0: 0, n: 0, bx: new Float32Array(TAIL_PTS), by: new Float32Array(TAIL_PTS), paint: null, vx: 0, vy: 0, t0n: 0, s: 20 });
@@ -2350,9 +2613,15 @@
     slot.n = count;
     slot.paint = rec.paint;
     slot.vx = (Math.random() * 2 - 1) * 10;
-    slot.vy = (Math.random() * 2 - 1) * 10 + 8;
+    slot.vy = (Math.random() * 2 - 1) * 10;
     slot.t0n = start / Math.max(rec.n - 1, 1);
     slot.s = rec.s;
+    // el gas del pedazo cortado se deshace en polvo que deriva y se apaga
+    for (let k = 0; k < count; k += 2) {
+      setBurst(scaleCount(2), (k & 2) ? rec.paint.core : rec.paint.body, 6, 28, 600, 1200, 0.6, 1.3, 'dot', 0, 0.97);
+      BO.alpha = 0.6;
+      burstNow(slot.bx[k], slot.by[k]);
+    }
   }
 
   function drawTails(now) {
@@ -2457,7 +2726,7 @@
     const targetScale = (mode === 'game' && frozen(now)) ? 0.25 : 1;
     const stepK = clamp01(dt / 400) * 3;
     timeScale += (targetScale - timeScale) * (stepK > 1 ? 1 : stepK);
-    snowSpeed = timeScale;
+    starSpeed = timeScale;
     animT += dt * timeScale;
     // dpr cambiado (pantalla distinta)
     const dprRaw = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
@@ -2474,7 +2743,7 @@
     c.lineJoin = 'round';
   }
 
-  function drawBase(dt, causticMul) {
+  function drawBase(dt, nebulaMul) {
     const c = ctx;
     if (shakeX !== 0 || shakeY !== 0) {
       c.fillStyle = BG_HEX;
@@ -2482,7 +2751,7 @@
       c.setTransform(K, 0, 0, K, shakeX * K, shakeY * K);
     }
     c.drawImage(bgCanvas, 0, 0, W, H);
-    drawCaustics(dt, causticMul);
+    drawNebula(dt, nebulaMul);
     c.globalCompositeOperation = 'source-over';
   }
 
@@ -2549,52 +2818,63 @@
       }
       if (rec.isMe) meRec = rec;
       else if (visCount < 31) visRecs[visCount++] = rec;
-      // En partida las cabezas no encienden la nieve: esos destellos de color parecían comida
+      // En partida las cabezas no encienden las estrellas: esos destellos de color parecían comida
     }
     if (meRec) visRecs[visCount++] = meRec;
   }
 
   function drawCreatures(now, ssOf) {
     let c = ctx, i, rec;
-    // 1. halos
+    // polvo que sueltan las colas (se dibuja con el resto de las partículas)
+    for (i = 0; i < visCount; i++) emitTailDust(visRecs[i], frameDt);
+    // 1. halos de gas
     c.globalCompositeOperation = 'lighter';
     for (i = 0; i < visCount; i++) { rec = visRecs[i]; passHalo(rec, ssOf(rec), now); }
-    // membrana de inmunidad
-    for (i = 0; i < visCount; i++) { rec = visRecs[i]; if (rec.immune) passImmunityMembrane(rec, ssOf(rec), now); }
+    // velo de aurora de la inmunidad
+    for (i = 0; i < visCount; i++) { rec = visRecs[i]; if (rec.immune) passImmunityVeil(rec, ssOf(rec), now); }
     // alcance de la boca grande
     for (i = 0; i < visCount; i++) { rec = visRecs[i]; if (rec.bigMouth && rec.n > 0) passBigMouthReach(rec, ssOf(rec)); }
     // 2. cuerpos
     c.globalCompositeOperation = 'source-over';
     c.globalAlpha = 1;
     for (i = 0; i < visCount; i++) { rec = visRecs[i]; passBody(rec, ssOf(rec)); }
-    // 3. filamentos
+    // 3. bocanadas de gas
     c.globalCompositeOperation = 'lighter';
-    for (i = 0; i < visCount; i++) { rec = visRecs[i]; passFilament(rec, ssOf(rec)); }
-    // 4. fotóforos
-    for (i = 0; i < visCount; i++) { rec = visRecs[i]; passPhotophores(rec, ssOf(rec), now); }
+    for (i = 0; i < visCount; i++) { rec = visRecs[i]; passGas(rec, ssOf(rec)); }
+    // 4. estrellas internas
+    for (i = 0; i < visCount; i++) { rec = visRecs[i]; passStars(rec, ssOf(rec), now); }
     // 5. cabezas
     for (i = 0; i < visCount; i++) { rec = visRecs[i]; passHead(rec, ssOf(rec), now); }
     c.globalAlpha = 1;
     c.globalCompositeOperation = 'source-over';
   }
 
-  // Boca grande: un anillo punteado y tenue, del color de la anémona, marca hasta dónde come
+  // Boca grande: el agujero negro atrae. Un anillo muy tenue marca hasta dónde come y unas motas de
+  // polvo rosa caen en espiral desde ese borde hacia la boca.
   let bigMouthReach = 2.55;
+  const REACH_MOTES = 14;
   function passBigMouthReach(rec, ss) {
     const c = ctx;
+    const hx = rec.x[0], hy = rec.y[0];
+    const R = bigMouthReach * ss;
+    const av = rec.alphaVis;
     c.globalCompositeOperation = 'lighter';
-    c.globalAlpha = (0.34 + 0.08 * Math.sin(animT * 0.004)) * rec.alphaVis;
-    c.strokeStyle = '#FF8FD0';
-    c.lineWidth = 1.2;
-    c.setLineDash(DASH_REACH);
-    c.lineDashOffset = -animT * 0.01;
+    c.globalAlpha = 0.18 * av;
+    c.strokeStyle = '#F29BC9';
+    c.lineWidth = 1;
     c.beginPath();
-    c.arc(rec.x[0], rec.y[0], bigMouthReach * ss, 0, TAU);
+    c.arc(hx, hy, R, 0, TAU);
     c.stroke();
-    c.setLineDash(NO_DASH);
-    c.lineDashOffset = 0;
+    const tt = reducedMotion ? 0 : animT;
+    const mr = Math.max(1.6, 0.2 * ss);
+    for (let k = 0; k < REACH_MOTES; k++) {
+      const u = (tt * 0.00045 + k * 0.618) % 1;   // 0 en el borde, 1 en la boca
+      const a = k * TAU / REACH_MOTES + u * 1.6 + tt * 0.0003;
+      const r = R * (1 - 0.6 * u * u);
+      c.globalAlpha = 0.8 * (1 - u) * smoothstep(0, 0.12, u) * av;
+      c.drawImage(pinkDot, hx + Math.cos(a) * r - mr, hy + Math.sin(a) * r - mr, mr * 2, mr * 2);
+    }
   }
-  const DASH_REACH = [3, 4], NO_DASH = [];
 
   // Corona (5.6): tres puntas de luz dorada justo encima de la cabeza de la serpiente más larga,
   // siempre derecha en la pantalla, debajo de la etiqueta de nombre
@@ -2630,13 +2910,13 @@
     c.fill();
     c.stroke();
     c.lineJoin = 'miter';
-    // perlas en las puntas
+    // estrellitas en las puntas
     c.globalCompositeOperation = 'lighter';
     c.globalAlpha = a;
-    const pr = 0.22 * ss;
-    c.drawImage(pearlSprite, hx - w - pr, hy - hSide - pr, pr * 2, pr * 2);
-    c.drawImage(pearlSprite, hx - pr, hy - hMid - pr, pr * 2, pr * 2);
-    c.drawImage(pearlSprite, hx + w - pr, hy - hSide - pr, pr * 2, pr * 2);
+    const pr = 0.42 * ss, tip = starSprite('#FFE08A');
+    c.drawImage(tip, hx - w - pr, hy - hSide - pr, pr * 2, pr * 2);
+    c.drawImage(tip, hx - pr, hy - hMid - pr, pr * 2, pr * 2);
+    c.drawImage(tip, hx + w - pr, hy - hSide - pr, pr * 2, pr * 2);
     c.globalAlpha = 1;
     c.globalCompositeOperation = 'source-over';
   }
@@ -2693,12 +2973,12 @@
     detectFoodSpawns(state.foods, now);
     detectConsumableSpawns(state.consumables, now);
     prepareSnakes(state, now);
-    updateSnow(dt);
+    updateStars(dt);
 
     // Dibujo, en el orden de capas de 5.1
     beginDraw();
-    drawBase(dt, 1);               // 1-4: sacudida, fondo (+grilla), cáusticas
-    drawSnow(true);                // 5
+    drawBase(dt, 1);               // 1-4: sacudida, fondo (+polvo de estrellas), nebulosa
+    drawStars(true);               // 5: estrellas cercanas
     drawCountdown(state, now);     // 6
     drawFxLayer(0, now);           //   columna de luz del ganador (debajo de lo jugable)
     drawFoods(state.foods, now);   // 7
@@ -2713,7 +2993,7 @@
     drawFxLayer(2, now);           //   textos flotantes
     ctx.setTransform(K, 0, 0, K, 0, 0);
     drawFxLayer(3, now);           // 13: destellos de portal
-    drawMembrane(now);             //     membrana de bordes
+    drawEdges(now);                //     resplandor de los bordes (portales)
     drawVignette(now);             // 14
 
     if (now - recSweepT > 5000) { recSweepT = now; snakeRecs.forEach(recSweep); }
@@ -2787,12 +3067,12 @@
       cr.hist[k * 2] = clamp(rec.rx[k + 1], 4, W - 4);
       cr.hist[k * 2 + 1] = clamp(rec.ry[k + 1], 4, H - 4);
     }
-    // el resto del cuerpo se convierte en una nube de plancton que se dispersa
+    // el resto del cuerpo se deshace en una nube de gas que se dispersa
     const p = rec.paint;
     const stepJ = rec.n > 70 ? 3 : 2;
     for (let j = 11; j < rec.n && j < 160; j += stepJ) {
       const jx = rec.x[j] + (Math.random() - 0.5) * s, jy = rec.y[j] + (Math.random() - 0.5) * s;
-      setBurst(1, (j & 2) ? p.body : p.core, 12, 46, 450, 1100, 0.9, 2.2, 'dot', -24, 0.94);
+      setBurst(1, (j & 2) ? p.body : p.core, 12, 46, 450, 1100, 0.9, 2.2, 'dot', 0, 0.94);
       particles.burst(jx, jy, BO);
     }
     return true;
@@ -2804,7 +3084,7 @@
     cr.hatchT0 = now;
     const p = cr.rec.paint;
     fxRing(cr.x, cr.y, 0.3 * sIdle, 2.4 * sIdle, 700, p.core, 0.8, 1.5, 0);
-    setBurst(scaleCount(20), p.body, 20, 80, 500, 1000, 1, 2.2, 'dot', -10, 0.92);
+    setBurst(scaleCount(20), p.body, 20, 80, 500, 1000, 1, 2.2, 'dot', 0, 0.92);
     particles.burst(cr.x, cr.y, BO);
   }
 
@@ -2812,9 +3092,7 @@
     const rec = cr.rec, p = rec.paint;
     if (!p) return;
     for (let i = 0; i < rec.n; i++) {
-      setBurst(scaleCount(3), (i & 1) ? p.core : p.body, 10, 40, 700, 900, 1, 2.2, 'dot', -30, 0.95);
-      BO.angle = -Math.PI / 2;
-      BO.spread = 1.6;
+      setBurst(scaleCount(3), (i & 1) ? p.core : p.body, 10, 40, 700, 900, 1, 2.2, 'dot', 0, 0.95);
       particles.burst(rec.x[i], rec.y[i], BO);
     }
   }
@@ -2919,7 +3197,7 @@
       pushHead(rec.x[0], rec.y[0], 3 * sIdle, rec.paint);
     }
     if (meRec) visRecs[visCount++] = meRec;
-    // el puntero también enciende el plancton en la sala
+    // el puntero también enciende las estrellas en la sala
     if (!reducedMotion && now - pointerT < 900 && pointerSpeed > 40) {
       pushHead(pointerX, pointerY, 46, pointerPaint());
     }
@@ -2952,7 +3230,7 @@
   function drawCaption(text) {
     if (!text) return;
     if (!captionSprite || text !== captionText || captionEpoch !== textEpoch) {
-      captionSprite = textSprite(captionSprite, String(text), fontUi(500, 16), 16 / Math.max(0.5, arenaScale), '#A3C7D1', 'rgba(1,5,9,0.9)', 4);
+      captionSprite = textSprite(captionSprite, String(text), fontUi(500, 16), 16 / Math.max(0.5, arenaScale), '#ADAABB', 'rgba(3,3,7,0.9)', 4);
       captionText = text;
       captionEpoch = textEpoch;
     }
@@ -2984,11 +3262,11 @@
     updateFx(now);
     computeShake(now);
     prepareCreatures(now);
-    updateSnow(dt);
+    updateStars(dt);
 
     beginDraw();
     drawBase(dt, 0.7);
-    drawSnow();
+    drawStars();
     drawCreatures(now, ssIdle);
     particles.draw(ctx);
     drawFxLayer(1, now);
@@ -2997,7 +3275,7 @@
     ctx.setTransform(K, 0, 0, K, 0, 0);
     drawCaption(opts && opts.caption);
     drawFxLayer(3, now);
-    drawMembrane(now);
+    drawEdges(now);
     drawVignette(now);
     lastRenderMs = nowMs() - renderStart;
   }
@@ -3048,7 +3326,7 @@
     const v = clamp((e.score | 0) || 1, 1, 5);
     const col = FOOD_COL[v - 1];
     const cx = cellCenterX(e.x), cy = cellCenterY(e.y);
-    setBurst(scaleCount(6 + 4 * v), col, 30, 70 + 20 * v, 380, 700, 1.2, 2.4, 'dot', -10, 0.9);
+    setBurst(scaleCount(6 + 4 * v), col, 30, 70 + 20 * v, 380, 700, 1.2, 2.4, 'dot', 0, 0.9);
     burstNow(cx, cy);
     fxRing(cx, cy, 0.4 * s, 1.8 * s, 320, col, 0.7, 1.5, 0);
     const rec = snakeRecs.get(e.playerId);
@@ -3070,7 +3348,7 @@
     const now = nowMs();
     const cx = cellCenterX(e.x), cy = cellCenterY(e.y);
     const vp = paintFor(e.color || snakeColorById(e.targetId) || '#00ff41');
-    const ap = paintFor(e.attackerColor || snakeColorById(e.attackerId) || '#4FD8FF');
+    const ap = paintFor(e.attackerColor || snakeColorById(e.attackerId) || '#8FB2FF');
     // segmentsLost llega en 0 cuando el disparo da en la cabeza de una serpiente de 1 segmento
     // (index.js, moveProjectiles): hay impacto pero no daño, así que no se muestra "−1"
     const lost = e.segmentsLost === undefined ? 1 : Math.max(0, e.segmentsLost | 0);
@@ -3078,18 +3356,24 @@
     let total = Math.min(48, 10 + 5 * lost) + (head ? 12 : 0);
     total = scaleCount(total);
     const sparks = Math.round(total * 0.6);
-    setBurst(sparks, vp.body, 60, 200, 500, 1000, 1.5, 3.2, 'spark', -20, 0.9);
+    setBurst(sparks, vp.body, 60, 200, 500, 1000, 1.5, 3.2, 'spark', 0, 0.9);
     burstNow(cx, cy);
-    setBurst(total - sparks, vp.body, 60, 200, 500, 1000, 1.5, 3.2, 'dot', -20, 0.9);
+    setBurst(total - sparks, vp.body, 60, 200, 500, 1000, 1.5, 3.2, 'dot', 0, 0.9);
     burstNow(cx, cy);
     setBurst(scaleCount(6), ap.body, 80, 160, 250, 400, 1.2, 2.2, 'spark', 0, 0.9);
     burstNow(cx, cy);
     fxFlash(cx, cy, 2.5 * s, head ? 0.7 : 0.5, 160);
     if (head) {
       fxRing(cx, cy, 0.4 * s, 2.2 * s, 420, vp.body, 0.8, 2, 0);
-      fxRing(cx, cy, 0.4 * s, 3.0 * s, 480, '#E8FBFF', 0.5, 1.5, 90);
-      setBurst(scaleCount(10), vp.deep, 10, 40, 1200, 1800, 6, 14, 'ink', 0, 0.95);
-      BO.alpha = 0.45;
+      fxRing(cx, cy, 0.4 * s, 3.0 * s, 480, '#F6F3EE', 0.5, 1.5, 90);
+      // nube de polvo oscuro que se abre despacio y se apaga, con motas de polvo cálido
+      setBurst(scaleCount(12), '#1C1410', 8, 34, 1300, 2000, 5, 10, 'ink', 0, 0.96);
+      DUST_END[0] = 9 * s / 20; DUST_END[1] = 17 * s / 20;
+      BO.endSize = DUST_END;
+      BO.alpha = 0.55;
+      burstNow(cx, cy);
+      setBurst(scaleCount(8), '#8A5A3C', 10, 50, 900, 1500, 0.8, 1.6, 'dot', 0, 0.95);
+      BO.alpha = 0.5;
       burstNow(cx, cy);
     }
     // cola desprendida: los últimos puntos de la víctima (todavía en su posición previa)
@@ -3106,7 +3390,7 @@
     if (head) fxText(tx, ty - labelPx() * 1.25, 'cabeza', tp.text, Math.max(11, 10 / Math.max(0.1, arenaScale)), 22, 900);
     if (isMe(e.targetId)) {
       if (head) shake(10, 360); else shake(7, 280);
-      backdropPulse('#FF4D6D', 0.25);
+      backdropPulse('#EC4F5A', 0.25);
     } else if (isMe(e.attackerId)) {
       if (head) shake(4, 160); else shake(2.5, 120);
     }
@@ -3116,16 +3400,19 @@
     if (!e || !particles) return;
     const now = nowMs();
     const cx = cellCenterX(e.x), cy = cellCenterY(e.y);
-    setBurst(scaleCount(14), '#9FF4FF', 40, 120, 500, 900, 1.5, 3.5, 'bubble', -40, 0.9);
+    // la magnetosfera estalla en chispas de aurora: violeta y algo de verde oxígeno
+    setBurst(scaleCount(10), '#C7B8FF', 50, 150, 450, 850, 1.3, 2.8, 'spark', 0, 0.9);
     burstNow(cx, cy);
-    fxRing(cx, cy, 0.4 * s, 2.0 * s, 380, '#9FF4FF', 0.8, 1.5, 0);
-    fxRing(cx, cy, 0.4 * s, 2.8 * s, 420, '#9FF4FF', 0.5, 1.2, 80);
+    setBurst(scaleCount(6), '#A8EADF', 40, 120, 400, 750, 1.1, 2.4, 'spark', 0, 0.9);
+    burstNow(cx, cy);
+    fxRing(cx, cy, 0.4 * s, 2.0 * s, 380, '#C7B8FF', 0.8, 1.5, 0);
+    fxRing(cx, cy, 0.4 * s, 2.8 * s, 420, '#C7B8FF', 0.5, 1.2, 80);
     const rec = snakeRecs.get(e.playerId);
     if (rec) rec.popT0 = now;
-    if (isMe(e.playerId) || isMe(e.attackerId)) fxText(cx, cy - 0.8 * s, 'Bloqueado', '#9FF4FF', labelPx() * 1.05, 18, 900);
+    if (isMe(e.playerId) || isMe(e.attackerId)) fxText(cx, cy - 0.8 * s, 'Bloqueado', '#C7B8FF', labelPx() * 1.05, 18, 900);
     if (isMe(e.playerId)) {
       shake(3, 140);
-      backdropPulse('#9FF4FF', 0.15);
+      backdropPulse('#C7B8FF', 0.15);
     }
   }
 
@@ -3153,7 +3440,7 @@
   function onPortal(e) {
     if (!e || !particles) return;
     const color = snakeColorById(e.playerId);
-    const paint = paintFor(color || '#1FF2D2');
+    const paint = paintFor(color || '#5ED8C4');
     const fx = e.fromX, fy = e.fromY, tx = e.toX, ty = e.toY;
     if (fx === undefined || tx === undefined) return;
     let fromEdge, toEdge;
@@ -3171,7 +3458,7 @@
   function onProjectileFired(e) {
     if (!e || !particles) return;
     const now = nowMs();
-    const paint = paintFor(e.color || snakeColorById(e.playerId) || '#4FD8FF');
+    const paint = paintFor(e.color || snakeColorById(e.playerId) || '#8FB2FF');
     const dx = e.direction ? e.direction.x : 1, dy = e.direction ? e.direction.y : 0;
     const cx = cellCenterX(e.x), cy = cellCenterY(e.y);
     setBurst(scaleCount(6), paint.body, 80, 180, 180, 320, 1, 2, 'spark', 0, 0.88);
@@ -3185,7 +3472,7 @@
       const ti = rec.n - 1;
       const f = fxSpawn(FX_DROP, now, 500);
       f.x = rec.x[ti]; f.y = rec.y[ti]; f.r0 = 0.35 * s; f.paint = rec.paint;
-      setBurst(scaleCount(4), rec.paint.body, 10, 40, 300, 500, 0.8, 1.4, 'dot', 30, 0.92);
+      setBurst(scaleCount(4), rec.paint.body, 10, 40, 300, 500, 0.8, 1.4, 'dot', 0, 0.92);
       burstNow(f.x, f.y);
     }
     // recordar color por id (para el expirado)
@@ -3201,7 +3488,7 @@
     if (!e || !particles) return;
     const tr = e.id !== undefined ? trails.get(e.id) : null;
     const paint = tr && tr.paint ? tr.paint : null;
-    const col = paint ? paint.body : '#4FD8FF';
+    const col = paint ? paint.body : '#8FB2FF';
     const cx = cellCenterX(e.x), cy = cellCenterY(e.y);
     setBurst(scaleCount(7), col, 20, 60, 300, 500, 1, 2, 'dot', 0, 0.9);
     burstNow(cx, cy);
@@ -3222,9 +3509,9 @@
     const look = CONS_LOOK[e.consumableType] || CONS_LOOK.immunity;
     fxRing(cx, cy, 0.5 * s, 2.4 * s, 420, look.ring, 0.8, 1.8, 0);
     const half = scaleCount(18) >> 1;
-    setBurst(half, look.light, 40, 120, 500, 900, 1.2, 2.6, 'dot', -30, 0.92);
+    setBurst(half, look.light, 40, 120, 500, 900, 1.2, 2.6, 'dot', 0, 0.92);
     burstNow(cx, cy);
-    setBurst(half, look.sonar, 40, 120, 500, 900, 1.2, 2.6, 'dot', -30, 0.92);
+    setBurst(half, look.pulse, 40, 120, 500, 900, 1.2, 2.6, 'dot', 0, 0.92);
     burstNow(cx, cy);
     if (rec && look === CONS_LOOK.immunity) { rec.inflateT0 = now; rec.immune = true; }
     if (isMe(e.playerId)) backdropPulse(look.ring, 0.2);
@@ -3236,7 +3523,7 @@
     freezeWinner = undefined;
     roundStartT = now;
     haloBoostT0 = now;
-    sonarBase = now + 600;
+    pulseBase = now + 600;
     const f = fxSpawn(FX_WAVE, now, 800);
     f.x = W / 2; f.y = H / 2;
     // descartar colas desprendidas y estelas de la ronda anterior
@@ -3253,7 +3540,7 @@
     consSpawnN = 0;
     countNum = 0;
     tensionLevel = 0;
-    // el sonar triple del jugador propio lo dibuja passHead a partir de roundStartT
+    // el pulso triple del jugador propio lo dibuja passHead a partir de roundStartT
     // (en la primera ronda todavía no se conoce state.myId cuando llega este hook)
   }
   function releaseTrail(tr) { if (trailPool.length < 64) trailPool.push(tr); }
@@ -3270,7 +3557,7 @@
     col.id = winnerId; col.s = s;
     const fo = fxSpawn(FX_FOUNTAIN, now, 1300);
     fo.id = winnerId; fo.n = 0;
-    if (isMe(winnerId)) backdropPulse('#C8FF3C', 0.5);
+    if (isMe(winnerId)) backdropPulse('#EAC255', 0.5);
   }
 
   // ---------------------------------------------------------------------------
@@ -3294,15 +3581,14 @@
     if (!inited) {
       watchMedia('(prefers-reduced-motion: reduce)', function (m) { reducedMotion = m; });
       watchMedia('(prefers-contrast: more)', function (m) { highContrast = m; });
-      watchMedia('(pointer: coarse)', function (m) { coarsePointer = m; snowActive = snowCountFor(quality); });
+      watchMedia('(pointer: coarse)', function (m) { coarsePointer = m; starActive = starCountFor(quality); });
       quality = coarsePointer ? 1 : 2;
-      snowActive = snowCountFor(quality);
+      starActive = starCountFor(quality);
       particles = Particles.createSystem({ max: 600 });
       particles.setLimit(particleLimitFor(quality));
-      buildCaustics();
       buildVignettes();
       buildSprites();
-      initSnow();
+      initStars();
       loadFonts();
     }
     applySize(true);
@@ -3315,7 +3601,7 @@
       window.addEventListener('resize', scheduleResize);
     }
     inited = true;
-    // primer frame: nunca negro (fondo, nieve y viñeta; sin criaturas todavía)
+    // primer frame: nunca negro (fondo, estrellas y viñeta; sin criaturas todavía)
     drawRestFrame();
   }
 
@@ -3323,9 +3609,9 @@
     if (!ctx || !bgCanvas) return;
     beginDraw();
     drawBase(16, 0.7);
-    drawSnow();
+    drawStars();
     ctx.setTransform(K, 0, 0, K, 0, 0);
-    drawMembrane(nowMs());
+    drawEdges(nowMs());
     drawVignette(nowMs());
   }
 
@@ -3334,7 +3620,7 @@
     const nw = +cfg.width || W, nh = +cfg.height || H;
     if (nw !== W || nh !== H) {
       W = nw; H = nh; HALF_W = W / 2; HALF_H = H / 2;
-      for (let i = 0; i < SNOW_MAX; i++) { snowX[i] = Math.random() * W; snowY[i] = Math.random() * H; }
+      for (let i = 0; i < STAR_MAX; i++) { starX[i] = Math.random() * W; starY[i] = Math.random() * H; }
       if (canvas) applySize(true);
     }
     if (+cfg.bigMouthReach > 0) bigMouthReach = +cfg.bigMouthReach;

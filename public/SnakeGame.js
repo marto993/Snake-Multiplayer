@@ -205,7 +205,7 @@ document.addEventListener('DOMContentLoaded', function () {
       if (Arena && typeof Arena.bioColor === 'function') return Arena.bioColor(hex);
       if (typeof Scenes.bioColor === 'function') return Scenes.bioColor(hex);
     } catch (err) { reportOnce(err); }
-    return { body: hex || '#1FF2D2', text: '#E8FBFF' };
+    return { body: hex || '#5ED8C4', text: '#F6F3EE' };
   }
 
   function roundTime() { return (roomConfig && +roomConfig.roundTime) || 120; }
@@ -1206,7 +1206,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     if (t > 0 && t !== lastPulseSecond) {
       lastPulseSecond = t;
-      ui(function () { Backdrop.pulse('#FF4D6D', 0.15); });
+      ui(function () { Backdrop.pulse('#EC4F5A', 0.15); });
     }
   }
   function resetTension() {
@@ -1220,7 +1220,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!roundLive || frenzyOn || !gameState || !gameState.frenzy) return;
     frenzyOn = true;
     toast('Frenesí: más comida hasta el final', 'info', 3000);
-    ui(function () { Backdrop.pulse('#C8FF3C', 0.25); });
+    ui(function () { Backdrop.pulse('#EAC255', 0.25); });
   }
 
   // ===========================================================================

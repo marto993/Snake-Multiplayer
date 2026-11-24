@@ -143,7 +143,7 @@
   const colorInk = [];
 
   function registerColor(color) {
-    const key = color || '#1FF2D2';
+    const key = color || '#5ED8C4';
     let idx = colorIndex.get(key);
     if (idx !== undefined) return idx;
     if (colorStr.length >= COLOR_MAX) return 0;
@@ -274,7 +274,7 @@
       const spread = o.spread !== undefined ? o.spread : TAU;
       const base = o.angle !== undefined ? o.angle : 0;
       // registrar color una sola vez por ráfaga
-      const ci = registerColor(o.color || '#1FF2D2');
+      const ci = registerColor(o.color || '#5ED8C4');
       for (let k = 0; k < count; k++) {
         const a = spread >= TAU ? Math.random() * TAU : base + (Math.random() - 0.5) * spread;
         const sp = sample(o.speed, D_SPEED);
@@ -286,7 +286,7 @@
     function emit(o) {
       if (!o) return;
       const i = alloc();
-      setup(i, o.x || 0, o.y || 0, o.vx || 0, o.vy || 0, o, registerColor(o.color || '#1FF2D2'));
+      setup(i, o.x || 0, o.y || 0, o.vx || 0, o.vy || 0, o, registerColor(o.color || '#5ED8C4'));
     }
 
     function update(dtMs) {
@@ -380,7 +380,7 @@
           ctx.arc(x, y, s, 0, TAU);
           ctx.stroke();
           ctx.globalAlpha = (a > 1 ? 1 : a) * 0.9;
-          ctx.fillStyle = '#E8FBFF';
+          ctx.fillStyle = '#F6F3EE';
           ctx.fillRect(x - s * 0.55, y - s * 0.55, 1, 1);
         }
       }
