@@ -27,12 +27,12 @@ fly deploy     # deploy to Fly.io
 | `public/SnakeGame.js` | ~2350 | Client glue: socket handlers, game/UI state, controls (keys, touch, gamepad, click to fire), wiring events into the modules below. No drawing code. |
 | `public/snakeClass.js` | ~380 | Snake entity — runs on **both** client and server. Effects (`effects`) and shot cooldown (`tryShot`) take the server time as `now` |
 | `public/index.html` | ~340 | Scene markup only (no inline CSS) |
-| `public/css/theme.css` | ~2750 | Bioluminescent theme, `--bio-*` design tokens |
+| `public/css/theme.css` | ~2700 | Space theme ("creatures of the void", palette from real astronomy; no neon or synthwave), `--bio-*` design tokens (names kept from the former abyss theme: `abyss` = void layers, `turquoise` = oxygen teal, `lime` = sulfur gold) |
 | `public/js/net/motion.js` | ~250 | `window.Motion`: timeline of server frames, constant-speed interpolation (also loads in Node for tests) |
 | `public/js/input/pad.js` | ~75 | `window.PadInput`: turns Gamepad API pads into a heading and a fire flag (stick deadzone, d-pad, A / right trigger, non-standard pads); `snapAngle()` (also loads in Node for tests) |
 | `public/js/fx/particles.js` | ~450 | `window.Particles`: pooled particle systems |
-| `public/js/render/arena.js` | ~3450 | `window.Arena`: game canvas renderer (DPR, glow sprites, effects, consumables, crown, idle attract mode, last-10s counter) |
-| `public/js/ui/backdrop.js` | ~1150 | `window.Backdrop`: full-screen ambient canvas behind every scene, moods |
+| `public/js/render/arena.js` | ~3650 | `window.Arena`: game canvas renderer (DPR, glow sprites, nebula and stars, gas creatures, planets as food, consumables, effects, crown, idle attract mode, last-10s counter) |
+| `public/js/ui/backdrop.js` | ~1500 | `window.Backdrop`: full-screen ambient canvas behind every scene (planet that recedes scene by scene, Milky Way, stars, giant silhouettes), moods |
 | `public/js/ui/scenes.js` | ~2200 | `window.Scenes` / `Overlays` / `Toasts` / `HUD`: scene transitions, intro, countdown, final screen, toasts, DOM HUD |
 | `docs/VISUAL_SPEC.md` | ~1400 | Visual spec: palette, typography, motion, scene map, effects catalog. Read it before touching visuals. |
 | `docs/MOTION_SPEC.md` | ~160 | Design: fixed difficulty levels (implemented) and continuous 4000×4000 movement (not yet) |
