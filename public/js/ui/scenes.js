@@ -169,24 +169,24 @@
   // Colores de jugador (Arena.bioColor, con respaldo local idéntico a la tabla del spec 2.3)
   // =========================================================================================
   const BIO_FALLBACK = {
-    '#00ff41': { slot: 0, body: '#7DFF6A', core: '#E5FDE1', deep: '#0B4B01', text: '#ABECA1' },
-    '#ff0080': { slot: 1, body: '#FF5FC8', core: '#FEF1F8', deep: '#6E0051', text: '#FEC3E5' },
-    '#00ffff': { slot: 2, body: '#3FE9FF', core: '#E1FBFF', deep: '#00464E', text: '#6FEDFF' },
-    '#ffff00': { slot: 3, body: '#FFE45C', core: '#FDF6D4', deep: '#483D01', text: '#ECD877' },
-    '#ff4040': { slot: 4, body: '#FF5E5E', core: '#FEF2F1', deep: '#770213', text: '#FEC8C4' },
-    '#8040ff': { slot: 5, body: '#A884FF', core: '#F5F3FF', deep: '#442879', text: '#DAD0FE' },
-    '#40ff80': { slot: 6, body: '#3DFFB8', core: '#DCFFED', deep: '#004931', text: '#87F1C1' },
-    '#ff8040': { slot: 7, body: '#FF9A4D', core: '#FFF2EB', deep: '#5F2E01', text: '#FFCBA9' },
-    '#4080ff': { slot: 8, body: '#5C9DFF', core: '#F0F6FE', deep: '#0D3A7A', text: '#C1D9FE' },
-    '#ff40ff': { slot: 9, body: '#E36BFF', core: '#FCF1FE', deep: '#610173', text: '#F3C4FF' },
-    '#80ff40': { slot: 10, body: '#C3FF4A', core: '#EDFBDB', deep: '#314500', text: '#C3E68E' },
-    '#ff4080': { slot: 11, body: '#FF7A9C', core: '#FFF1F3', deep: '#6E1533', text: '#FFC6D1' },
-    '#4040ff': { slot: 12, body: '#7E7BFF', core: '#F3F4FE', deep: '#342C85', text: '#D0D4FE' },
-    '#ffff80': { slot: 13, body: '#FFF3A8', core: '#FCF7D4', deep: '#463E06', text: '#E6DA8F' },
-    '#80ffff': { slot: 14, body: '#A6FFF4', core: '#D7FFF9', deep: '#034742', text: '#92EBE0' },
-    '#ff8080': { slot: 15, body: '#FFB0A0', core: '#FEF2F0', deep: '#5D2D24', text: '#FFC9BD' }
+    '#00ff41': { slot: 0, body: '#75D87A', core: '#EBFAEB', deep: '#133D17', text: '#BFE8BF' },
+    '#ff0080': { slot: 1, body: '#FA89A5', core: '#FFEFF3', deep: '#531E2D', text: '#FFC8D4' },
+    '#00ffff': { slot: 2, body: '#6AE2D4', core: '#E4FBF7', deep: '#003F38', text: '#A6EAE1' },
+    '#ffff00': { slot: 3, body: '#FAD957', core: '#FAF5E3', deep: '#403100', text: '#E9DBA6' },
+    '#ff4040': { slot: 4, body: '#E76348', core: '#FFF0EA', deep: '#542016', text: '#FFCBBD' },
+    '#8040ff': { slot: 5, body: '#AC8FF8', core: '#F6F2FF', deep: '#362957', text: '#DDD2FF' },
+    '#40ff80': { slot: 6, body: '#A3FAD4', core: '#E7FBF1', deep: '#003F28', text: '#B0EACF' },
+    '#ff8040': { slot: 7, body: '#FFA04E', core: '#FFF1E5', deep: '#502600', text: '#FFD0AE' },
+    '#4080ff': { slot: 8, body: '#76ACFC', core: '#EBF6FF', deep: '#17325B', text: '#BFDDFF' },
+    '#ff40ff': { slot: 9, body: '#DB9FDE', core: '#FEF0FF', deep: '#472349', text: '#F3CBF5' },
+    '#80ff40': { slot: 10, body: '#C6E867', core: '#F2F8E6', deep: '#2C3900', text: '#D3E3AF' },
+    '#ff4080': { slot: 11, body: '#FFBCC1', core: '#FFEFF0', deep: '#541E25', text: '#FFC9CC' },
+    '#4040ff': { slot: 12, body: '#7E86EC', core: '#F1F4FF', deep: '#2A2D5B', text: '#CFD7FF' },
+    '#ffff80': { slot: 13, body: '#FCF1AA', core: '#F9F6E3', deep: '#3D3300', text: '#E5DDA7' },
+    '#80ffff': { slot: 14, body: '#C0FBFF', core: '#E3FAFD', deep: '#003D46', text: '#ACE7EE' },
+    '#ff8080': { slot: 15, body: '#FFCDA9', core: '#FFF1E6', deep: '#512500', text: '#FFCFAF' }
   };
-  const BIO_DEFAULT = { slot: 0, body: '#1FF2D2', core: '#E1FFF9', deep: '#03463F', text: '#8AF7E6' };
+  const BIO_DEFAULT = { slot: 0, body: '#5ED8C4', core: '#E1FFF9', deep: '#03463F', text: '#A8EADF' };
   const bioCache = {};
   function hslHex(h, s, l) {
     s /= 100; l /= 100;
@@ -240,10 +240,10 @@
     });
     if (cls) s.setAttribute('class', cls);
     if (kind === 'jelly') {
-      s.appendChild(svgEl('path', { d: 'M3.5 10.5a6.5 6.5 0 0 1 13 0c-1.1.6-2.1.6-3.2 0-1.1.6-2.2.6-3.3 0-1.1.6-2.2.6-3.3 0-1.1.6-2.1.6-3.2 0z' }));
-      s.appendChild(svgEl('path', { d: 'M6.6 12.2c0 1.6.9 2.2.9 3.8' }));
-      s.appendChild(svgEl('path', { d: 'M10 12.4v4.6' }));
-      s.appendChild(svgEl('path', { d: 'M13.4 12.2c0 1.6-.9 2.2-.9 3.8' }));
+      // escudo: magnetosfera (igual al símbolo i-medusa de index.html)
+      s.appendChild(svgEl('circle', { cx: '12.6', cy: '10', r: '2.4' }));
+      s.appendChild(svgEl('path', { d: 'M8.4 5.6a6.2 6.2 0 0 0 0 8.8' }));
+      s.appendChild(svgEl('path', { d: 'M5.2 3.2a10 10 0 0 0 0 13.6' }));
     } else if (kind === 'eye') {
       s.appendChild(svgEl('path', { d: 'M1.8 10S4.8 4.5 10 4.5 18.2 10 18.2 10 15.2 15.5 10 15.5 1.8 10 1.8 10z' }));
       s.appendChild(svgEl('circle', { cx: '10', cy: '10', r: '2.6' }));
@@ -404,7 +404,7 @@
       }
 
       if (type === 'invitation') {
-        bdPulse('#A98BFF', 0.4);
+        bdPulse('#A595F2', 0.4);
         Chrome.alertDock();
       }
       return it.handle;
@@ -1017,7 +1017,7 @@
   // OVERLAYS
   // =========================================================================================
   const Overlays = (function () {
-    const COLORS_BY_N = { 3: '#1FF2D2', 2: '#4FD8FF', 1: '#C8FF3C' };
+    const COLORS_BY_N = { 3: '#5ED8C4', 2: '#8FB2FF', 1: '#EAC255' };
     const st = {
       cdToken: 0, goToken: 0,
       finalTimer: 0, finalData: null, finalGlow: null, finalAnims: [], modal: null, modalOpener: null,
@@ -1064,7 +1064,7 @@
         anim(o, [{ opacity: 0 }, { opacity: 1 }], { duration: 300, easing: M.out });
       }
       parts.k.textContent = GOAL_TEXT;
-      const color = COLORS_BY_N[n] || '#1FF2D2';
+      const color = COLORS_BY_N[n] || '#5ED8C4';
       const num = parts.num;
       let prevCd = '';
       try { prevCd = global.getComputedStyle(num).getPropertyValue('--cd').trim() || global.getComputedStyle(num).color; } catch (e) { prevCd = ''; }
@@ -1115,7 +1115,7 @@
           { opacity: 0, transform: tf(rb, 'scale(1.6)') }
         ], { duration: 900, easing: M.out, fill: 'forwards' });
       }
-      bdPulse('#1FF2D2', 0.2);
+      bdPulse('#5ED8C4', 0.2);
       return token;
     }
 
@@ -1148,7 +1148,7 @@
     function roundStart() {
       hideCountdown(false);
       const o = $('overlay-round');
-      bdPulse('#C8FF3C', 0.35);
+      bdPulse('#EAC255', 0.35);
       if (!o) return;
       const parts = ensureRoundParts(o);
       const token = ++st.goToken;
@@ -1251,7 +1251,7 @@
           const it = fd.list[i];
           const li = mk('li', 'final-score-item' + (it.winner && !fd.reason ? ' is-champion' : ''));
           if (it.color) { const cb3 = bio(it.color); li.style.setProperty('--c', cb3.body); li.style.setProperty('--t', cb3.text); }
-          else li.style.setProperty('--c', '#7397A5');
+          else li.style.setProperty('--c', '#85829A');
           const dot = mk('i', 'final-dot'); dot.setAttribute('aria-hidden', 'true');
           li.appendChild(mk('span', 'final-rank', String(i + 1)));
           li.appendChild(dot);
@@ -1547,7 +1547,7 @@
     else if (to === 'game') bdMood('game');
     else if (to === 'final') {
       if (opts && opts.reason) bdMood('lobby');
-      else bdMood('celebration', { color: (opts && opts.color) || '#C8FF3C' });
+      else bdMood('celebration', { color: (opts && opts.color) || '#EAC255' });
     }
   }
 
@@ -1635,7 +1635,7 @@
     if (fromEl === toEl) fromEl = null;
     if (to === 'room' || to === 'game') setMode(to);
     const dir = (ORDER[to] || 0) >= (ORDER[from] || 0) ? 1 : -1;
-    bdPulse('#1FF2D2', 0.25);
+    bdPulse('#5ED8C4', 0.25);
     bdDescend(dir);
     let outA = null, inA = null;
     if (fromEl) {
@@ -1786,7 +1786,7 @@
     if (to === 'room' || to === 'game') setMode(to);
     if (!sc || !title || reduced) return immerse('intro', to, opts).then(introDone);
 
-    bdPulse('#1FF2D2', 0.25);
+    bdPulse('#5ED8C4', 0.25);
     bdDescend(1);
     // medir destino con la escena entrante visible pero sin transformar
     if (toEl) {
@@ -1927,7 +1927,7 @@
   }
   function defaultPromptNodes() {
     if (intro.promptNodes && intro.promptNodes.length) return intro.promptNodes.map(function (n) { return n.cloneNode(true); });
-    return [doc.createTextNode(coarse ? 'Toca la pantalla para sumergirte' : 'Pulsa cualquier tecla para sumergirte')];
+    return [doc.createTextNode(coarse ? 'Toca la pantalla para entrar en órbita' : 'Pulsa cualquier tecla para entrar en órbita')];
   }
   function setPrompt(text) {
     const p = intro.prompt;
@@ -1982,7 +1982,7 @@
       if (T) { setMask(T, -40); T.style.removeProperty('opacity'); }
       introTimer(1100, function () {
         if (!T) return;
-        introAnim(T, [{ fontWeight: 200, letterSpacing: '0.08em', textShadow: '0 0 0 rgba(31,242,210,0), 0 0 0 rgba(31,242,210,0)' }, {}],
+        introAnim(T, [{ fontWeight: 200, letterSpacing: '0.08em', textShadow: '0 0 0 rgba(94,216,196,0), 0 0 0 rgba(94,216,196,0)' }, {}],
           { duration: 1100, easing: M.out, fill: 'backwards' });
         startMaskLoop(T);
       });
