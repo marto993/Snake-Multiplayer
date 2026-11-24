@@ -37,13 +37,13 @@ La clase `Snake` deja de exponer `consumeConsumable`, `getActiveConsumable` y `u
 
 Los dos consumibles nuevos usan el sistema de temporizadores que ya existe. `initializeConsumableSystem` recorre todos los tipos habilitados de `room.config.consumables` en lugar de arrancar solo el escudo. Cada tipo nuevo aparece cada 12 s, con un máximo de uno en el mapa (dos con 5 jugadores o más), y dura 6 s una vez tomado. Los valores van en la tabla de dificultad, iguales en los tres niveles. Como el escudo, los dos aparecen en su máximo al empezar la partida.
 
-En el mapa, cada consumible tiene silueta y color propios. Los tres comparten el anillo de sonar que hoy tiene el escudo, cada uno en su color: es la seña de que algo se puede tomar. La boca grande es una anémona rosa (`#FF8FD0`), una corona de tentáculos alrededor de una boca abierta. El abanico es una estrella de mar coral (`#FF7A59`) de cinco brazos. La comida es redonda y va de verde a ámbar, y el escudo es una medusa violeta, así que ninguno se confunde por forma. Las medidas exactas se agregan a `docs/VISUAL_SPEC.md`, en la sección de consumibles.
+En el mapa, cada consumible tiene silueta y color propios. Los tres comparten un pulso de baliza, cada uno en su color: es la seña de que algo se puede tomar. La boca grande es un agujero negro rosa (`#F29BC9`) visto de frente, con un disco de acreción en espiral. El abanico es una estrella triple coral (`#F0875F`). La comida son planetas que van de verde a ámbar, y el escudo es una aurora violeta, así que ninguno se confunde por forma. Las medidas exactas se agregan a `docs/VISUAL_SPEC.md`, en la sección de consumibles.
 
 Al tomar uno, el jugador recibe un aviso como el del escudo: "Boca grande: comés desde más lejos" o "Abanico: disparás de a tres".
 
 ### Boca grande
 
-Mientras está activa, la serpiente come desde 2,55 celdas, el triple del alcance normal (`EAT_REACH`, `index.js:420`). Vale para la comida base y para los restos, no para los consumibles. En la arena, un anillo tenue del color de la anémona marca el alcance alrededor de la cabeza. Una comida tomada desde lejos viaja hacia la boca en una estela corta antes de la ráfaga de comer, para que se entienda quién la comió.
+Mientras está activa, la serpiente come desde 2,55 celdas, el triple del alcance normal (`EAT_REACH`, `index.js:420`). Vale para la comida base y para los restos, no para los consumibles. En la arena, un anillo tenue del color del agujero negro marca el alcance alrededor de la cabeza, con motas de polvo que caen en espiral hacia la boca. Una comida tomada desde lejos viaja hacia la boca en una estela corta antes de la ráfaga de comer, para que se entienda quién la comió.
 
 ### Abanico
 

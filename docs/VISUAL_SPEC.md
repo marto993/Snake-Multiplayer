@@ -1,4 +1,4 @@
-# Especificación visual: abismo bioluminiscente
+# Especificación visual: criaturas del vacío
 
 Referencia única del rediseño visual de Snake Multiplayer en la rama `feature/visual-overhaul`. Define el concepto, los tokens, el lenguaje de movimiento, las escenas, el arte de la arena, el HUD, las reglas de accesibilidad y rendimiento, y los textos de la interfaz. Si algo de este documento contradice al código actual, manda este documento. Si contradice al contrato de arquitectura (archivos, APIs, IDs), manda el contrato. Lo que este documento agrega al contrato está marcado como **extensión**.
 
@@ -16,91 +16,94 @@ Cada sección indica qué responsable la implementa. Los responsables son los du
 
 Convenciones que valen para todo el documento:
 
-- La arena mide 600 × 600 píxeles lógicos. En las fórmulas, `s` es `segmentSize` (8, 10, 15, 20 o 25), y una medida como `0,5·s` significa 0,5 × `segmentSize` (con `s` igual a 20, son 10 px lógicos).
+- La arena mide W × H píxeles lógicos, el tamaño del mundo que manda el servidor (`canvasWidth` y `canvasHeight`): hoy 768 × 432 (16:9). En las fórmulas, `s` es `segmentSize` (hoy 12), y una medida como `0,5·s` significa 0,5 × `segmentSize` (con `s` igual a 12, son 6 px lógicos).
 - Las coordenadas `x, y` de segmentos, comida, consumibles, proyectiles y eventos del servidor son la esquina superior izquierda de la celda. El centro es `(x + s/2, y + s/2)`.
 - Las duraciones van siempre en milisegundos (ms). En los textos de interfaz, "s" significa segundos.
-- "Escala de la arena" es `tamaño CSS del canvas / 600`. En un teléfono de 375 px de ancho vale 0,57.
+- "Escala de la arena" es `ancho CSS del canvas / W`. Con la arena de 600 px de ancho en pantalla vale 0,78.
 - Los colores que no figuran como token se escriben en hex o `rgba()` explícito.
 
 ## 1. Concepto
 
-La partida ocurre a cuatro mil metros de profundidad. Ahí no llega la luz del sol: todo lo que se ve lo emite algo vivo. Cada serpiente es una criatura abisal hecha de luz, con un núcleo casi blanco, un halo de su color, fotóforos que titilan a lo largo del cuerpo y un señuelo que se balancea delante de la cabeza, como el de un pez linterna. La comida es plancton que late, la inmunidad es una medusa que envuelve la cabeza, los disparos son pulsos de luz con estela. El agua tiene nieve marina en suspensión que se enciende cuando algo pasa cerca, igual que los dinoflagelados que iluminan las olas de noche.
+La partida ocurre en el espacio profundo, lejos de cualquier estrella cercana. Casi todo es negro, y lo poco que se ve es luz: estrellas lejanas, el gas de una nebulosa y las criaturas que viven en el vacío. Cada serpiente es una de esas criaturas, hecha de gas luminoso: un núcleo casi blanco, un halo de su color que respira, estrellitas de cuatro puntas que titilan dentro del cuerpo y dos ojos. De la cola se le desprende un polvo fino que deriva y se apaga. La comida son planetas chicos con sus lunas; el escudo es una aurora; la boca grande, un agujero negro; el abanico, una estrella triple; los disparos, pulsos de luz con estela. Detrás de todo, una nebulosa tenue deriva muy despacio y las estrellas titilan casi quietas.
 
-La interfaz cuenta un descenso. La intro empieza cerca de la superficie, con los últimos haces de luz; cada pantalla siguiente está más abajo y más oscura, hasta la partida, donde solo quedan las criaturas. Las superficies de la interfaz no brillan: son membranas oscuras y translúcidas. La luz se reserva para lo que está vivo o espera una acción (el botón principal de cada escena, el jugador propio, el temporizador, una invitación). En los menús el ritmo es lento e hipnótico; en la partida es nítido; en los últimos diez segundos el agua se enrojece y el pulso se acelera.
+La interfaz cuenta un viaje que se aleja de un planeta. La intro empieza sobre su borde, con la atmósfera iluminada de costado; cada pantalla siguiente queda más lejos, hasta la sala y la partida, que ocurren en espacio profundo, sin planeta a la vista. Las superficies de la interfaz no brillan: son paneles oscuros, mate y translúcidos. La luz se reserva para lo que está vivo o espera una acción (el botón principal de cada escena, el jugador propio, el temporizador, una invitación). En los menús el ritmo es lento; en la partida es nítido; en los últimos diez segundos la nebulosa vira al rojo del hidrógeno y el pulso se acelera.
 
-Referencias de la naturaleza: las floraciones de *Noctiluca scintillans* que vuelven azules las olas, los ctenóforos y sus bandas de cilios irisados, el señuelo del rape abisal, los sifonóforos coloniales filmados por MBARI y por el programa Okeanos de NOAA. Referencias de juegos: flOw (un organismo que crece comiendo en el océano, la referencia más cercana a esta mecánica), Abzû por la luz bajo el agua, Ori por el manejo de partículas y brillo. Queda afuera: neón urbano, scanlines, grillas de líneas, bordes duros de un píxel, mayúsculas sostenidas y paneles grises de tablero de control.
+Las referencias salen de la astronomía real, sobre todo de las imágenes de Hubble y JWST: las nebulosas de emisión con sus tres colores (el rojo del hidrógeno alfa, el verde azulado del oxígeno y el dorado del azufre, la llamada paleta Hubble), las nubes de polvo marrón y ámbar con bandas oscuras como la Gran Grieta de la Vía Láctea, las estrellas coloreadas por su temperatura (del blanco azulado al naranja), el arco de choque de una magnetosfera y las auroras. Queda afuera el neón y el synthwave: el par magenta y cian, las grillas en perspectiva o de líneas, el sol retro, el cromado, las scanlines, los colores al 100 % de saturación y los bordes duros de un píxel que brillan. También quedan afuera la estética de tablero de nave espacial, las estrellas que pasan como en un salto a la velocidad de la luz, las mayúsculas sostenidas y todo lo que recuerde al mar: nada sube como una burbuja, nada flota ni se hunde.
 
 Principios que ordenan todas las decisiones:
 
 - **La luz es vida.** Solo emite luz lo que está vivo o lo que espera una acción. Fondos, paneles y textos de soporte son oscuros y quietos.
-- **Profundidad es progreso.** Cada escena está más abajo que la anterior: menos luz ambiental, más contraste de las criaturas.
+- **La distancia es progreso.** Cada escena queda más lejos del planeta que la anterior: menos luz de atmósfera, más contraste de las criaturas.
+- **No hay gravedad.** Lo que se suelta (polvo, fragmentos, chispas) deriva y se apaga; nunca cae, sube ni se hunde.
 - **Nada aparece en seco.** Toda entrada y salida de escena, overlay y toast se anima. Los elementos chicos que el código alterna con `.hidden` tienen animación de entrada (sección 4.20).
 - **El movimiento responde.** La animación que no fue disparada por el usuario o por el juego se limita a la lista de la sección 3.5.
 
-El momento firma es uno solo: **el agua reacciona**. En intro, login, lobby y sala, el puntero (o el dedo) enciende el plancton a su paso y deja una estela que se apaga en un segundo. En la arena de espera, cada criatura enciende la nieve marina cerca de su cabeza. Durante la partida no: esos destellos del color de cada serpiente se confundían con la comida. Es la única "magia" ambiental; lo demás se mantiene sobrio para que esto se note.
+El momento firma es uno solo: **el vacío reacciona**. En intro, login, lobby y sala, el puntero (o el dedo) deja una estela de polvo estelar que se apaga en un segundo. En la arena de espera, cada criatura enciende las estrellas cerca de su cabeza. Durante la partida no: esos destellos del color de cada serpiente se confundían con la comida. Es la única "magia" ambiental; lo demás se mantiene sobrio para que esto se note.
 
 ## 2. Tokens de diseño
 
 Responsable de declararlos: LAYOUT, en `theme.css`, bajo `:root`. ARENA y ESCENAS usan los mismos valores en canvas (copiados como constantes, porque el canvas no lee variables CSS en cada frame).
 
+Varios nombres de token vienen del tema anterior, el abismo bioluminiscente, y se conservan para no tocar cada regla que los usa: `--bio-abyss-*` son las capas de vacío, `--bio-turquoise` es el verde azulado del oxígeno, `--bio-lime` es el dorado del azufre, `--bio-pearl` es la luz estelar y `--bio-deep-blue` es el azul de la atmósfera del planeta. Lo que vale es el valor y el uso de estas tablas, no el nombre.
+
 ### 2.1 Paleta
 
-Los fondos son capas de abismo, del más profundo al más elevado. El azul abismo se usa en degradados y en luces lejanas, nunca como relleno plano de un panel.
+Los fondos son capas de vacío, casi negras y neutras, del más profundo al más elevado. El azul de atmósfera se usa solo en degradados y en la luz del planeta, nunca como relleno plano de un panel.
 
 | Token | Hex | Uso |
 |---|---|---|
-| `--bio-abyss-950` | `#010509` | Viñeta, inicio de la intro, sombras |
-| `--bio-abyss-900` | `#020A12` | Fondo de página y de la arena (`body` lo declara explícito) |
-| `--bio-abyss-800` | `#04121D` | Listas y zonas hundidas dentro de paneles |
-| `--bio-abyss-700` | `#071B29` | Paneles (membranas), con alpha 0,86 |
-| `--bio-abyss-600` | `#0B2738` | Inputs, filas elevadas, hover de filas |
-| `--bio-abyss-500` | `#12384D` | Bordes fuertes, pips apagados, separadores |
-| `--bio-deep-blue` | `#0C3D73` | Azul abismo: degradados del fondo, cáusticas profundas |
-| `--bio-deep-blue-glow` | `#2A6FDB` | Brillo lejano: haces de luz, siluetas del fondo |
+| `--bio-abyss-950` | `#030307` | Viñeta, sombras, parte alta del cielo en la intro |
+| `--bio-abyss-900` | `#07070D` | Fondo de página y de la arena (`body` lo declara explícito) |
+| `--bio-abyss-800` | `#0C0C14` | Listas y zonas hundidas dentro de paneles |
+| `--bio-abyss-700` | `#13131D` | Paneles, con alpha 0,86 |
+| `--bio-abyss-600` | `#1C1C29` | Inputs, filas elevadas, hover de filas |
+| `--bio-abyss-500` | `#2B2B3C` | Bordes fuertes, pips apagados, separadores |
+| `--bio-deep-blue` | `#1D2A4F` | Atmósfera del planeta: degradados del fondo |
+| `--bio-deep-blue-glow` | `#5A82C8` | Dispersión azul en el borde del planeta |
 
-Las luces son los colores emitidos. Turquesa es la marca; lima es la acción.
+Las luces son los colores que emite una nebulosa. El verde azulado del oxígeno es la marca; el dorado del azufre es la acción; el rojo del hidrógeno, el peligro.
 
 | Token | Hex | Uso |
 |---|---|---|
-| `--bio-turquoise` | `#1FF2D2` | Marca, foco, bordes activos, temporizador en calma |
-| `--bio-turquoise-soft` | `#8AF7E6` | Texto de acento, botones secundarios |
-| `--bio-cyan` | `#4FD8FF` | Información, cáusticas, grilla |
-| `--bio-lime` | `#C8FF3C` | Botón principal, éxito, "¡Ya!", jugador propio en listas |
-| `--bio-lime-soft` | `#E4FF9A` | Texto con tono lima sobre oscuro |
-| `--bio-pearl` | `#E8FBFF` | Núcleos de luz, anillo de sonar del jugador propio |
-| `--bio-shield` | `#9FF4FF` | Inmunidad: medusa, burbujas, icono de escudo |
+| `--bio-turquoise` | `#5ED8C4` | Oxígeno: marca, foco, bordes activos, temporizador en calma |
+| `--bio-turquoise-soft` | `#A8EADF` | Texto de acento, botones secundarios |
+| `--bio-cyan` | `#8FB2FF` | Estrella azul: información |
+| `--bio-lime` | `#EAC255` | Azufre: botón principal, éxito, "¡Ya!", jugador propio en listas |
+| `--bio-lime-soft` | `#F6DC94` | Texto con tono dorado sobre oscuro |
+| `--bio-pearl` | `#F6F3EE` | Luz estelar: títulos display, núcleos de luz |
+| `--bio-shield` | `#C7B8FF` | Aurora: inmunidad, chispas del bloqueo, icono de escudo |
 
 Estados y texto:
 
 | Token | Hex | Uso |
 |---|---|---|
-| `--bio-warning` | `#FFB547` | Temporizador entre 20 y 11 segundos, avisos |
-| `--bio-danger` | `#FF4D6D` | Errores, tensión, temporizador desde 10 segundos |
-| `--bio-danger-soft` | `#FF8FA3` | Texto de error sobre `abyss-600` o más claro |
-| `--bio-invite` | `#A98BFF` | Invitaciones, modo espectador |
-| `--bio-ink` | `#E2F6FA` | Texto principal |
-| `--bio-ink-2` | `#A3C7D1` | Texto secundario |
-| `--bio-ink-3` | `#7397A5` | Metadatos; prohibido sobre `abyss-500` |
-| `--bio-ink-on-lime` | `#05230F` | Texto sobre botones lima |
-| `--bio-ink-on-turquoise` | `#012A26` | Texto sobre relleno turquesa |
-| `--bio-ink-on-invite` | `#14063A` | Texto sobre relleno violeta |
+| `--bio-warning` | `#F08A3C` | Temporizador entre 20 y 11 segundos, avisos |
+| `--bio-danger` | `#EC4F5A` | Hidrógeno alfa: errores, tensión, temporizador desde 10 segundos |
+| `--bio-danger-soft` | `#F59A9E` | Texto de error sobre `abyss-600` o más claro |
+| `--bio-invite` | `#A595F2` | Invitaciones, modo espectador |
+| `--bio-ink` | `#ECEAF1` | Texto principal |
+| `--bio-ink-2` | `#ADAABB` | Texto secundario |
+| `--bio-ink-3` | `#85829A` | Metadatos; prohibido sobre `abyss-500` |
+| `--bio-ink-on-lime` | `#2B1D04` | Texto sobre botones dorados |
+| `--bio-ink-on-turquoise` | `#082A25` | Texto sobre relleno verde azulado |
+| `--bio-ink-on-invite` | `#160E3A` | Texto sobre relleno violeta |
 
-`--bio-success` es un alias de `--bio-lime` y `--bio-info` es un alias de `--bio-cyan`.
+`--bio-success` es un alias de `--bio-lime` y `--bio-info` es un alias de `--bio-cyan`. El dorado de acción y el naranja de aviso están a 0,131 de distancia OKLab, así que el botón principal no se confunde con el temporizador en alerta.
 
 Contrastes medidos con la fórmula WCAG 2.1 (todos los pares de uso real superan 4,5:1):
 
 | Par | Contraste |
 |---|---|
-| `ink` sobre `abyss-700` | 15,7:1 |
-| `ink-2` sobre `abyss-700` | 9,7:1 |
-| `ink-3` sobre `abyss-700` / `abyss-600` | 5,6:1 / 4,9:1 |
-| `ink-3` sobre `abyss-500` | 3,9:1 (no usar) |
-| `danger` sobre `abyss-700` / `abyss-500` | 5,5:1 / 3,8:1 (sobre 500 usar `danger-soft`, 5,7:1) |
-| `invite` sobre `abyss-700` | 6,5:1 |
-| `ink-on-lime` sobre `lime` | 14,2:1 |
-| `ink-on-turquoise` sobre `turquoise` | 10,8:1 |
+| `ink` sobre `abyss-700` | 15,5:1 |
+| `ink-2` sobre `abyss-700` | 8,1:1 |
+| `ink-3` sobre `abyss-700` / `abyss-600` | 5,0:1 / 4,5:1 |
+| `ink-3` sobre `abyss-500` | 3,7:1 (no usar) |
+| `danger` sobre `abyss-700` / `abyss-500` | 5,1:1 / 3,9:1 (sobre 500 usar `danger-soft`, 6,6:1) |
+| `invite` sobre `abyss-700` | 7,2:1 |
+| `ink-on-lime` sobre `lime` | 9,6:1 |
+| `ink-on-turquoise` sobre `turquoise` | 8,8:1 |
 
-Los paneles son translúcidos sobre un fondo animado. Para que el contraste medido se sostenga, el alpha de un panel nunca baja de 0,86 y el fondo vivo no pone partículas de más de 2 px detrás de texto (las partículas "cercanas" del fondo son desenfocadas y de alpha ≤ 0,12).
+Los paneles son translúcidos sobre un fondo animado. Para que el contraste medido se sostenga, el alpha de un panel nunca baja de 0,86 y el fondo vivo no pone partículas de más de 2 px detrás de texto (las motas de polvo cercanas del fondo son desenfocadas y de alpha ≤ 0,12).
 
 ### 2.2 Glow
 
@@ -108,52 +111,52 @@ El brillo de la interfaz DOM se construye con `box-shadow` y `text-shadow`, nunc
 
 | Token | Valor |
 |---|---|
-| `--bio-glow-turquoise` | `rgba(31, 242, 210, 0.35)` |
-| `--bio-glow-lime` | `rgba(200, 255, 60, 0.30)` |
-| `--bio-glow-cyan` | `rgba(79, 216, 255, 0.30)` |
-| `--bio-glow-danger` | `rgba(255, 77, 109, 0.35)` |
-| `--bio-glow-invite` | `rgba(169, 139, 255, 0.35)` |
-| `--bio-glow-pearl` | `rgba(232, 251, 255, 0.30)` |
+| `--bio-glow-turquoise` | `rgba(94, 216, 196, 0.35)` |
+| `--bio-glow-lime` | `rgba(234, 194, 85, 0.30)` |
+| `--bio-glow-cyan` | `rgba(143, 178, 255, 0.30)` |
+| `--bio-glow-danger` | `rgba(236, 79, 90, 0.35)` |
+| `--bio-glow-invite` | `rgba(165, 149, 242, 0.35)` |
+| `--bio-glow-pearl` | `rgba(246, 243, 238, 0.30)` |
 
-Receta para un elemento que brilla: `box-shadow: 0 0 0 1px <color al 50 %>, 0 0 24px <glow>`. Receta para texto display (36 px o más): `text-shadow: 0 0 2px <color al 60 %>, 0 0 18px <glow>`. Prohibido `text-shadow` con glow en texto de menos de 36 px: ensucia la lectura. En canvas el glow se hace con sprites (sección 5.3).
+Receta para un elemento que brilla: `box-shadow: 0 0 0 1px <color al 50 %>, 0 0 24px <glow>`. Los títulos display (36 px o más) brillan como una estrella vista de lejos: un resplandor ancho y tenue de luz estelar, sin aro de color pegado a la letra, porque ese aro es justo lo que hace que un título parezca un cartel de neón. Títulos de escena y de overlay: `text-shadow: 0 0 20px rgba(246, 243, 238, 0.10)`. El título de la intro y el wordmark del login suman un segundo resplandor de oxígeno más ancho (`0 0 90px rgba(94, 216, 196, 0.10)` y `0 0 64px rgba(94, 216, 196, 0.08)`). Los momentos de juego (número de la cuenta regresiva, "¡Ya!", nombre del campeón) sí llevan aro, en su propio color: `text-shadow: 0 0 2px <color al 60 %>, 0 0 18px <glow>, 0 0 72px <color al 20 %>`. Prohibido `text-shadow` con glow en texto de menos de 36 px: ensucia la lectura. En canvas el glow se hace con sprites (sección 5.3).
 
 ### 2.3 Colores de jugador
 
 Responsable: ARENA implementa `Arena.bioColor(hex)` (**extensión**). ESCENAS e INTEGRADOR la usan para todo color de jugador en DOM. Nadie modifica el servidor.
 
-El servidor asigna 16 colores fijos en orden (`index.js:37-41`): verde, magenta, cian, amarillo, rojo, violeta, menta, naranja y ocho variantes más. Son neones saturados pensados para el estilo anterior. Sobre `#020A12` el azul `#4040ff` da 3,2:1 y el violeta `#8040ff` 3,9:1, y varios pares son casi iguales: la distancia OKLab mínima entre los 16 es 0,045 (`#ff0080` contra `#ff4080`). Aclararlos de forma uniforme empeora el problema, porque los pares rojo y rosa colapsan a casi el mismo tono.
+El servidor asigna 16 colores fijos en orden (`index.js:37-41`): verde, magenta, cian, amarillo, rojo, violeta, menta, naranja y ocho variantes más. Son neones saturados, y los dos primeros después del verde forman justo el par magenta y cian que este tema prohíbe. Además, sobre `#07070D` el azul `#4040ff` da 3,3:1 y el violeta `#8040ff` 3,9:1, y varios pares son casi iguales: la distancia OKLab mínima entre los 16 es 0,045 (`#ff0080` contra `#ff4080`).
 
-La decisión: el color del servidor es solo una clave. El cliente lo traduce a un equivalente bioluminiscente curado, y todas las superficies (arena, HUD, listas, overlays, final) usan la versión traducida, de modo que el punto del marcador coincide con la criatura. Con la tabla curada, la distancia mínima entre los primeros 8 colores (los que aparecen en partidas de hasta 8 jugadores) sube de 0,057 a 0,086, la mínima entre los 16 sube de 0,045 a 0,065, y el contraste mínimo contra el fondo de la arena sube de 3,2:1 a 5,8:1. Todos los `text` superan 11,8:1 sobre `abyss-700`.
+La decisión: el color del servidor es solo una clave. El cliente lo traduce a un equivalente curado, y todas las superficies (arena, HUD, listas, overlays, final) usan la versión traducida, de modo que el punto del marcador coincide con la criatura. Cada color de la tabla sale de un tono, una luminosidad y un croma en OKLCH, con croma entre 0,06 y 0,17 (ninguno al máximo): el magenta pasa a rosa y el cian a verde azulado. Con la tabla curada, la distancia mínima entre los primeros 8 colores (los que aparecen en partidas de hasta 8 jugadores) es 0,088 (`#00ffff` contra `#40ff80`), la mínima entre los 16 es 0,062 (`#ff4080` contra `#ff8080`), y el contraste mínimo contra el fondo de la arena es 6,0:1. Todos los `text` superan 12,7:1 sobre `abyss-700`.
 
 ```js
 // Clave: color exacto que envía el servidor (minúsculas). slot = posición en PLAYER_COLORS.
 const BIO_PLAYER = {
-  '#00ff41': { slot: 0,  body: '#7DFF6A', core: '#E5FDE1', deep: '#0B4B01', text: '#ABECA1' },
-  '#ff0080': { slot: 1,  body: '#FF5FC8', core: '#FEF1F8', deep: '#6E0051', text: '#FEC3E5' },
-  '#00ffff': { slot: 2,  body: '#3FE9FF', core: '#E1FBFF', deep: '#00464E', text: '#6FEDFF' },
-  '#ffff00': { slot: 3,  body: '#FFE45C', core: '#FDF6D4', deep: '#483D01', text: '#ECD877' },
-  '#ff4040': { slot: 4,  body: '#FF5E5E', core: '#FEF2F1', deep: '#770213', text: '#FEC8C4' },
-  '#8040ff': { slot: 5,  body: '#A884FF', core: '#F5F3FF', deep: '#442879', text: '#DAD0FE' },
-  '#40ff80': { slot: 6,  body: '#3DFFB8', core: '#DCFFED', deep: '#004931', text: '#87F1C1' },
-  '#ff8040': { slot: 7,  body: '#FF9A4D', core: '#FFF2EB', deep: '#5F2E01', text: '#FFCBA9' },
-  '#4080ff': { slot: 8,  body: '#5C9DFF', core: '#F0F6FE', deep: '#0D3A7A', text: '#C1D9FE' },
-  '#ff40ff': { slot: 9,  body: '#E36BFF', core: '#FCF1FE', deep: '#610173', text: '#F3C4FF' },
-  '#80ff40': { slot: 10, body: '#C3FF4A', core: '#EDFBDB', deep: '#314500', text: '#C3E68E' },
-  '#ff4080': { slot: 11, body: '#FF7A9C', core: '#FFF1F3', deep: '#6E1533', text: '#FFC6D1' },
-  '#4040ff': { slot: 12, body: '#7E7BFF', core: '#F3F4FE', deep: '#342C85', text: '#D0D4FE' },
-  '#ffff80': { slot: 13, body: '#FFF3A8', core: '#FCF7D4', deep: '#463E06', text: '#E6DA8F' },
-  '#80ffff': { slot: 14, body: '#A6FFF4', core: '#D7FFF9', deep: '#034742', text: '#92EBE0' },
-  '#ff8080': { slot: 15, body: '#FFB0A0', core: '#FEF2F0', deep: '#5D2D24', text: '#FFC9BD' },
+  '#00ff41': { slot: 0,  body: '#75D87A', core: '#EBFAEB', deep: '#133D17', text: '#BFE8BF' },
+  '#ff0080': { slot: 1,  body: '#FA89A5', core: '#FFEFF3', deep: '#531E2D', text: '#FFC8D4' },
+  '#00ffff': { slot: 2,  body: '#6AE2D4', core: '#E4FBF7', deep: '#003F38', text: '#A6EAE1' },
+  '#ffff00': { slot: 3,  body: '#FAD957', core: '#FAF5E3', deep: '#403100', text: '#E9DBA6' },
+  '#ff4040': { slot: 4,  body: '#E76348', core: '#FFF0EA', deep: '#542016', text: '#FFCBBD' },
+  '#8040ff': { slot: 5,  body: '#AC8FF8', core: '#F6F2FF', deep: '#362957', text: '#DDD2FF' },
+  '#40ff80': { slot: 6,  body: '#A3FAD4', core: '#E7FBF1', deep: '#003F28', text: '#B0EACF' },
+  '#ff8040': { slot: 7,  body: '#FFA04E', core: '#FFF1E5', deep: '#502600', text: '#FFD0AE' },
+  '#4080ff': { slot: 8,  body: '#76ACFC', core: '#EBF6FF', deep: '#17325B', text: '#BFDDFF' },
+  '#ff40ff': { slot: 9,  body: '#DB9FDE', core: '#FEF0FF', deep: '#472349', text: '#F3CBF5' },
+  '#80ff40': { slot: 10, body: '#C6E867', core: '#F2F8E6', deep: '#2C3900', text: '#D3E3AF' },
+  '#ff4080': { slot: 11, body: '#FFBCC1', core: '#FFEFF0', deep: '#541E25', text: '#FFC9CC' },
+  '#4040ff': { slot: 12, body: '#7E86EC', core: '#F1F4FF', deep: '#2A2D5B', text: '#CFD7FF' },
+  '#ffff80': { slot: 13, body: '#FCF1AA', core: '#F9F6E3', deep: '#3D3300', text: '#E5DDA7' },
+  '#80ffff': { slot: 14, body: '#C0FBFF', core: '#E3FAFD', deep: '#003D46', text: '#ACE7EE' },
+  '#ff8080': { slot: 15, body: '#FFCDA9', core: '#FFF1E6', deep: '#512500', text: '#FFCFAF' },
 };
 ```
 
-Significado de cada campo:
+La copia de respaldo de `scenes.js` (la que usa si `Arena` no cargó) tiene los mismos valores. Significado de cada campo:
 
-- **body**: color del cuerpo, del halo y del punto en listas.
-- **core**: núcleo casi blanco teñido; filamento central, ojos, bulbo del señuelo.
-- **deep**: tono oscuro; final de la cola, tinta del impacto en la cabeza.
+- **body**: color del gas del cuerpo, del halo y del punto en listas.
+- **core**: núcleo casi blanco teñido; filamento central, ojos, estrellitas del cuerpo.
+- **deep**: tono oscuro; final de la cola y trazo de la cola desprendida.
 - **text**: nombres sobre fondo oscuro (etiquetas en la arena, filas del HUD).
-- **slot**: elige el patrón de fotóforos (sección 5.4), para que dos jugadores de color parecido se distingan también por forma.
+- **slot**: elige el patrón de estrellitas del cuerpo (sección 5.4), para que dos jugadores de color parecido se distingan también por forma.
 
 `Arena.bioColor(hex)` normaliza a minúsculas y devuelve el objeto de la tabla (siempre el mismo objeto, sin crear uno nuevo por llamada). Para un color desconocido (el servidor hoy no puede enviarlo, ver `index.js:43-52`) calcula en HSL conservando el tono: body con saturación 100 % y luminosidad 68 %, core con luminosidad 95 %, deep con 22 %, text con 84 %, y slot igual a la suma de los códigos de caracteres del hex módulo 4. El resultado se cachea por hex.
 
@@ -161,7 +164,7 @@ Significado de cada campo:
 
 Dos familias de Google Fonts cubren los tres roles pedidos (display, interfaz y cifras):
 
-- **Display: Fraunces, solo itálica.** Es una serif variable con eje `SOFT` (redondea terminales) y `WONK` (inclina letras de forma irregular). Con SOFT 100 y WONK 1 las letras parecen blandas, gelatinosas, como tejido de medusa; la itálica sugiere nado. Con peso 200 a 340 los trazos son finos y el halo de `text-shadow` se lee como filamento luminoso. Uso: título de la intro, wordmark, títulos de overlays, número de la cuenta regresiva, nombre del campeón, contador gigante de la arena. Nunca por debajo de 32 px (el corte cargado es el óptico de 144, que a tamaños chicos se vuelve frágil).
+- **Display: Fraunces, solo itálica.** Es una serif variable con eje `SOFT` (redondea terminales) y `WONK` (inclina letras de forma irregular). Con SOFT 100 y WONK 1 las letras parecen blandas y orgánicas, como el cuerpo de gas de las criaturas; la itálica sugiere deriva. Con peso 200 a 340 los trazos son finos, y el resplandor de luz estelar (sección 2.2) los rodea sin cerrarlos con un contorno. Uso: título de la intro, wordmark, títulos de overlays, número de la cuenta regresiva, nombre del campeón, contador gigante de la arena. Nunca por debajo de 32 px (el corte cargado es el óptico de 144, que a tamaños chicos se vuelve frágil).
 - **Interfaz: Recursive, con eje MONO en 0.** Sans humanista de lectura clara, con tildes y signos de apertura completos en el subset latino. Uso: todo el texto de interfaz, botones, listas, toasts, etiquetas de nombre en la arena.
 - **Cifras: Recursive con `font-variation-settings: "MONO" 1`.** La misma familia en su variante monoespaciada. Así el temporizador, los puntajes y los códigos de sala no bailan al cambiar de dígito, y no hace falta una tercera descarga. Se usa solo para cifras que cambian en vivo y para el código de sala. Nunca para etiquetas de texto.
 
@@ -198,7 +201,7 @@ Largo de línea máximo 64 caracteres en textos de ayuda.
 
 ### 2.6 Radios
 
-Las formas son orgánicas: los paneles principales usan radios asimétricos, como una membrana. La jerarquía se lee en el radio; no todo lleva el mismo.
+Las formas son orgánicas, como las criaturas: los paneles principales usan radios asimétricos (el token conserva el nombre `membrane` del tema anterior). La jerarquía se lee en el radio; no todo lleva el mismo.
 
 | Token | Valor | Uso |
 |---|---|---|
@@ -238,25 +241,25 @@ Este bloque es la base de `theme.css`. Las curvas y duraciones se explican en la
 ```css
 :root {
   color-scheme: dark;
-  /* abismo */
-  --bio-abyss-950:#010509; --bio-abyss-900:#020A12; --bio-abyss-800:#04121D;
-  --bio-abyss-700:#071B29; --bio-abyss-600:#0B2738; --bio-abyss-500:#12384D;
-  --bio-deep-blue:#0C3D73; --bio-deep-blue-glow:#2A6FDB;
-  --bio-panel: rgba(7, 27, 41, 0.86);
-  --bio-panel-border: rgba(31, 242, 210, 0.16);
+  /* vacío (los nombres --bio-abyss-* quedan del tema anterior) */
+  --bio-abyss-950:#030307; --bio-abyss-900:#07070D; --bio-abyss-800:#0C0C14;
+  --bio-abyss-700:#13131D; --bio-abyss-600:#1C1C29; --bio-abyss-500:#2B2B3C;
+  --bio-deep-blue:#1D2A4F; --bio-deep-blue-glow:#5A82C8;
+  --bio-panel: rgba(19, 19, 29, 0.86);
+  --bio-panel-border: rgba(94, 216, 196, 0.16);
   /* luz */
-  --bio-turquoise:#1FF2D2; --bio-turquoise-soft:#8AF7E6; --bio-cyan:#4FD8FF;
-  --bio-lime:#C8FF3C; --bio-lime-soft:#E4FF9A; --bio-pearl:#E8FBFF; --bio-shield:#9FF4FF;
+  --bio-turquoise:#5ED8C4; --bio-turquoise-soft:#A8EADF; --bio-cyan:#8FB2FF;
+  --bio-lime:#EAC255; --bio-lime-soft:#F6DC94; --bio-pearl:#F6F3EE; --bio-shield:#C7B8FF;
   /* estado */
   --bio-success:var(--bio-lime); --bio-info:var(--bio-cyan);
-  --bio-warning:#FFB547; --bio-danger:#FF4D6D; --bio-danger-soft:#FF8FA3; --bio-invite:#A98BFF;
+  --bio-warning:#F08A3C; --bio-danger:#EC4F5A; --bio-danger-soft:#F59A9E; --bio-invite:#A595F2;
   /* texto */
-  --bio-ink:#E2F6FA; --bio-ink-2:#A3C7D1; --bio-ink-3:#7397A5;
-  --bio-ink-on-lime:#05230F; --bio-ink-on-turquoise:#012A26; --bio-ink-on-invite:#14063A;
+  --bio-ink:#ECEAF1; --bio-ink-2:#ADAABB; --bio-ink-3:#85829A;
+  --bio-ink-on-lime:#2B1D04; --bio-ink-on-turquoise:#082A25; --bio-ink-on-invite:#160E3A;
   /* glow */
-  --bio-glow-turquoise:rgba(31,242,210,.35); --bio-glow-lime:rgba(200,255,60,.30);
-  --bio-glow-cyan:rgba(79,216,255,.30); --bio-glow-danger:rgba(255,77,109,.35);
-  --bio-glow-invite:rgba(169,139,255,.35); --bio-glow-pearl:rgba(232,251,255,.30);
+  --bio-glow-turquoise:rgba(94,216,196,.35); --bio-glow-lime:rgba(234,194,85,.30);
+  --bio-glow-cyan:rgba(143,178,255,.30); --bio-glow-danger:rgba(236,79,90,.35);
+  --bio-glow-invite:rgba(165,149,242,.35); --bio-glow-pearl:rgba(246,243,238,.30);
   /* tipografía */
   --bio-font-display:"Fraunces","Iowan Old Style",Georgia,serif;
   --bio-font-ui:"Recursive","Segoe UI",system-ui,sans-serif;
@@ -296,7 +299,7 @@ Responsables: ESCENAS (transiciones, overlays, toasts, HUD), ARENA (canvas), LAY
 
 ### 3.1 Principios
 
-Todo se mueve como en el agua: acelera rápido y frena largo, sin rebotes secos. Las entradas usan `--bio-ease-out` (frenado largo, como algo que deriva hasta detenerse); las salidas usan `--bio-ease-in` (se hunde y se va); los cambios cíclicos usan `--bio-ease-in-out`. El rebote (`--bio-ease-jelly`) se reserva para cosas que "laten" una vez: números de cuenta regresiva, "¡Ya!", pips del HUD. Una salida dura entre la mitad y dos tercios de la entrada correspondiente. Las animaciones de entrada combinan opacidad, desplazamiento corto (12 a 36 px) y, en piezas grandes, un desenfoque que se aclara (de 6 a 10 px a 0), como algo que sube desde aguas turbias.
+Todo se mueve como en el vacío: acelera rápido y frena largo, sin rebotes secos ni caídas. Las entradas usan `--bio-ease-out` (frenado largo, como algo que deriva hasta detenerse); las salidas usan `--bio-ease-in` (se aleja y se va); los cambios cíclicos usan `--bio-ease-in-out`. El rebote (`--bio-ease-jelly`) se reserva para cosas que "laten" una vez: números de cuenta regresiva, "¡Ya!", pips del HUD. Una salida dura entre la mitad y dos tercios de la entrada correspondiente. Las animaciones de entrada combinan opacidad, desplazamiento corto (12 a 36 px) y, en piezas grandes, un desenfoque que se aclara (de 6 a 10 px a 0), como algo que sube desde aguas turbias.
 
 ### 3.2 Curvas
 
@@ -337,11 +340,11 @@ const smoothstep    = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) /
 
 ### 3.4 Interacción
 
-- **Botón principal** (relleno lima): hover sube 1 px y aumenta el glow de 0,25 a 0,40 en 180 ms; presionado escala a 0,97 en 90 ms; al soltar vuelve con `--bio-ease-jelly` en 240 ms.
-- **Botón secundario** (borde turquesa): hover rellena con `rgba(31,242,210,0.08)` y el borde pasa de alpha 0,45 a 0,8.
-- **Foco visible** en todo elemento interactivo: `outline: 2px solid var(--bio-turquoise); outline-offset: 3px; box-shadow: 0 0 0 6px rgba(31,242,210,0.18)`. Solo con `:focus-visible`.
+- **Botón principal** (relleno dorado): hover sube 1 px y aumenta el glow de 0,25 a 0,40 en 180 ms; presionado escala a 0,97 en 90 ms; al soltar vuelve con `--bio-ease-jelly` en 240 ms.
+- **Botón secundario** (borde verde azulado): hover rellena con `rgba(94,216,196,0.08)` y el borde pasa de alpha 0,45 a 0,8.
+- **Foco visible** en todo elemento interactivo: `outline: 2px solid var(--bio-turquoise); outline-offset: 3px; box-shadow: 0 0 0 6px rgba(94,216,196,0.18)`. Solo con `:focus-visible`.
 - **Filas de lista** (salas, jugadores en línea): hover cambia el fondo a `abyss-600` y enciende el punto de la fila (alpha 0,6 a 1) en 180 ms. Las filas no se desplazan ni escalan en hover.
-- **Inputs**: foco cambia el borde a turquesa y suma el anillo de foco. Error de validación: el borde pasa a `danger` y el input hace una ondulación horizontal de 3 px, 2 ciclos en 320 ms (omitida con movimiento reducido).
+- **Inputs**: foco cambia el borde a verde azulado y suma el anillo de foco. Error de validación: el borde pasa a `danger` y el input hace una ondulación horizontal de 3 px, 2 ciclos en 320 ms (omitida con movimiento reducido).
 
 ### 3.5 Animaciones en reposo permitidas
 
@@ -351,7 +354,7 @@ Solo estas animaciones corren sin que nadie las dispare. Todo lo demás está qu
 - La respiración del botón principal de la escena activa (un solo botón por escena): glow entre 0,18 y 0,32 en `--bio-dur-breath`, `--bio-ease-in-out`, alternado e infinito. Botones principales por escena: login `#joinButton`, lobby `#createRoomButton`, sala `#startGameButton` (solo cuando está visible), final `#backToMenuButton`.
 - El título de la intro: peso entre 260 y 340 en `--bio-dur-breath-slow`.
 - Los puntos de estado de jugadores en línea disponibles: opacidad entre 0,55 y 1, ciclo de 2400 a 4000 ms con desfase aleatorio por fila.
-- El borde de la arena: alpha de la membrana entre 0,08 y 0,12 en `--bio-dur-breath-slow`.
+- El borde de la arena: alpha de las franjas de portal entre 0,08 y 0,12 en `--bio-dur-breath-slow`.
 - El indicador de escudo del HUD mientras dura la inmunidad y el temporizador desde los 10 segundos.
 
 ### 3.6 Movimiento reducido
@@ -360,7 +363,7 @@ Con `prefers-reduced-motion: reduce` cada módulo aplica esta tabla. ESCENAS y A
 
 | Elemento | Normal | Reducido |
 |---|---|---|
-| Transición de escena | Inmersión de 900 ms con desplazamiento y desenfoque | Fundido de opacidad de 200 ms |
+| Transición de escena | Transición estándar de 900 ms con desplazamiento y desenfoque | Fundido de opacidad de 200 ms |
 | Intro | Secuencia de 2800 ms | Título y aviso con fundido de 400 ms |
 | Sacudidas (`Arena.shake`) | Según el catálogo | Desactivadas |
 | Destellos en la arena | Hasta alpha 0,7 | Alpha máximo 0,25 |
@@ -431,14 +434,14 @@ Visibilidad del chrome persistente según la escena (CSS de LAYOUT sobre `body[d
 | `#dock` y `#dockToggle` | oculto | visible | oculto |
 | `#gameFooter` | solo en login | visible | oculto |
 
-### 4.3 Transición estándar: inmersión
+### 4.3 Transición estándar: viaje
 
-Toda transición entre escenas distintas usa esta coreografía, salvo las indicadas en 4.6 (salida de la intro), 4.11 (sala y partida) y 4.17 (entrada y salida del final).
+Toda transición entre escenas distintas usa esta coreografía, salvo las indicadas en 4.6 (salida de la intro), 4.11 (sala y partida) y 4.17 (entrada y salida del final). Cada cambio de escena es un tramo del viaje que se aleja del planeta (4.4). En `scenes.js` la hace `immerse()`, un nombre que viene del tema anterior.
 
 1. La escena saliente pasa de opacidad 1 a 0, `translateY(0)` a `translateY(-28px)`, `scale(1)` a `scale(0.985)` y `blur(0)` a `blur(6px)`, en 420 ms con `--bio-ease-in`. Recibe `pointer-events: none` al empezar.
 2. A los 180 ms de iniciada la salida, la escena entrante pasa de opacidad 0 a 1, `translateY(36px)` a 0, `scale(1.015)` a 1 y `blur(8px)` a 0, en 720 ms con `--bio-ease-out`.
-3. Los hijos con `[data-stagger]` de la escena entrante entran escalonados: cada uno 60 ms después del anterior, desde `translateY(14px)` y opacidad 0, 560 ms con `--bio-ease-out`, empezando 120 ms después que la escena.
-4. En el mismo instante del paso 1, el fondo vivo cambia de ambiente y recibe `Backdrop.pulse('#1FF2D2', 0.25)`. Si el destino está "más abajo" (orden: intro, login, lobby, room, game), el plancton del fondo recibe un empuje hacia arriba de 60 px/s que decae en 900 ms con `easeOutExpo`: se siente el descenso. Si el destino está más arriba (de final a lobby), el empuje es hacia abajo.
+3. Los hijos con `[data-stagger]` de la escena entrante entran escalonados: cada uno 60 ms después del anterior (del noveno en adelante, todos con el mismo retardo), desde `translateY(14px)` y opacidad 0, 560 ms con `--bio-ease-out`, empezando 120 ms después que la escena.
+4. En el mismo instante del paso 1, el fondo vivo cambia de ambiente y recibe `Backdrop.pulse('#5ED8C4', 0.25)` (el `--bio-turquoise` de la marca) y `Backdrop.descend(dir)` (**extensión**; el nombre también viene del tema anterior: hoy empuja las estrellas). El orden del viaje es intro, login, lobby, room, game, final (`ORDER` en `scenes.js`). Si el destino está más adelante, `dir` vale 1 y las estrellas reciben un empuje hacia abajo: se siente que la cámara se aleja del planeta. Si está más atrás (de room a lobby, de lobby a login o del final a lobby), `dir` vale -1 y el empuje es hacia arriba: se vuelve hacia el planeta. El empuje arranca en 60 px/s, decae a 0 en 900 ms con `easeOutExpo` y se reparte por profundidad: × 0,35 en las estrellas lejanas, × 0,7 en las medias y × 1,6 en el polvo cercano (21, 42 y 96 px/s al empezar). Las estrellas solo se desplazan, sin estelas. Con movimiento reducido no hay empuje.
 
 Duración total: 900 ms. El desenfoque se aplica solo a los contenedores de escena (no a la página entera) y con `will-change: transform, opacity, filter` puesto durante la transición y quitado al terminar.
 
@@ -446,29 +449,61 @@ Duración total: 900 ms. El desenfoque se aplica solo a los contenedores de esce
 
 Responsable: ESCENAS (`backdrop.js`). Canvas `#backdrop` con `position: fixed; inset: 0`, `pointer-events: none`, detrás de todo.
 
+El fondo cuenta un viaje que se aleja de un planeta. En la intro se ve grande el borde de su cara nocturna, con la atmósfera encendida; cada escena lo deja más lejos, más chico y más abajo, y en la sala y la partida ya no está: espacio profundo. Sobre el vacío hay una nebulosa tenue, la Vía Láctea y estrellas en tres profundidades.
+
 Capas, de atrás hacia adelante:
 
-1. **Degradado vertical**: del color superior del ambiente (tabla siguiente) a `#010509` abajo, con el 60 % inferior ya casi negro.
-2. **Haces de luz**: 3 haces verticales inclinados 12°, sprite prerenderizado (degradado lineal de `--bio-deep-blue-glow` al 100 % arriba a 0 % al 70 % del alto, con borde horizontal suave), de 18 a 30 % del ancho de la pantalla, oscilando ±2 % de ancho en ciclos de 9 a 14 segundos. Alpha según ambiente.
-3. **Plancton en tres profundidades**. Lejano: 90 partículas, 0,6 a 1,2 px, alpha 0,15 a 0,30, sube a 3 a 6 px/s. Medio: 50 partículas, 1,2 a 2,2 px, alpha 0,25 a 0,50, sube a 6 a 12 px/s. Cercano: 12 sprites desenfocados de 6 a 16 px, alpha 0,06 a 0,12, sube a 10 a 18 px/s. Las cantidades se multiplican por la densidad del ambiente. Color: 70 % turquesa o cian, 20 % lima, 10 % violeta. Cada partícula tiene un vaivén horizontal de ±6 px con período propio de 6 a 11 segundos.
-4. **Destellos**: cada partícula lejana o media tiene una probabilidad de 0,03 por segundo de encenderse: sube a alpha 1 en 120 ms y vuelve a su valor en 600 ms.
-5. **Siluetas lejanas** (solo intro, calm y lobby): 1 o 2 medusas prerenderizadas de 120 a 220 px, color `#0E3A52` con alpha 0,35, campana que late (escala vertical entre 0,92 y 1,04, ciclo de 4 segundos), cruzando la pantalla hacia arriba en unos 60 segundos.
-6. **Estela del puntero** (el momento firma): con `pointermove` y `touchmove`, se emiten hasta 4 partículas por cada 16 ms a lo largo del recorrido (tope de 160 activas), turquesa con 20 % lima, vida de 900 a 1400 ms, 1 a 2,4 px, deriva lenta. Además, el plancton a menos de 90 px del puntero recibe un encendido proporcional a la velocidad del puntero (velocidad / 1200 px/s, tope 1), que decae en 900 ms. Activa solo en intro, calm, lobby y room; apagada con movimiento reducido.
-7. **Pulsos**: `Backdrop.pulse(color, strength)` dibuja un degradado radial desde el centro de la pantalla que crece de radio 0 a 0,9 × el lado mayor en 900 ms, con alpha `strength × 0,35` que baja a 0, en modo `'lighter'`. Máximo 3 pulsos simultáneos (el más viejo se descarta).
+1. **Vacío y cielo**: tres capas de color a pantalla completa. Primero, el color base del ambiente (tabla siguiente). Encima, el oscurecimiento hacia arriba: un degradado vertical de `#030307` con alpha 0,88 arriba, 0,6 al 30 % del alto, 0,15 al 62 % y 0 desde el 80 %, multiplicado por el factor de oscurecimiento del ambiente (`sky` en el código). Por último, el resplandor de la atmósfera: un degradado de `#2A3D6E` que sube desde el horizonte del planeta hasta 0,62 × el alto por encima de él, con alpha 0,42 en el horizonte, 0,32 al 88 % del tramo, 0,15 al 65 %, 0,04 al 35 % y 0 arriba; debajo del horizonte queda sólido al 0,42. Sigue la altura del planeta y se apaga con su alpha: en room y game el cielo queda casi parejo.
+2. **Nebulosa**: textura de 200 × 125 generada al iniciar con ruido fractal: oxígeno verde azulado con filamentos arriba a la izquierda (centro en el 30 % del ancho y el 20 % del alto), polvo cálido con algo de H-alfa a la derecha (86 % y 42 %) y un velo índigo muy leve en todo el cielo. Es opaca (negro es nada) y se suma en modo `'lighter'` con el alpha de nebulosa del ambiente. Se escala hasta cubrir la pantalla sin deformarse, con un margen de × 1,24 (en un celular vertical se recorta a los lados), y deriva ±7 % del ancho y del alto en ciclos de 258 y 333 segundos.
+3. **Vía Láctea**: banda diagonal que sube hacia la derecha con el 80 % del ángulo de la diagonal de la pantalla (unos 23° en 16:9), centrada en el 50 % del ancho y el 44 % del alto, con media anchura del 12 % de la diagonal y el bulbo más brillante arriba a la derecha del centro. Se prerenderiza en un canvas de la mitad del tamaño de la pantalla y no se estira: la banda y las estrellas mantienen su forma.
+   - Brillo, polvo y bandas oscuras salen de ruido fractal estirado a lo largo de la banda, calculado en una grilla de 1/8 de la pantalla (mínimo 40 × 26) y escalado con suavizado. El brillo va de `rgb(146,158,204)` en los bordes a `rgb(218,184,138)` en el núcleo, con alpha hasta 0,34. Alrededor de las bandas oscuras hay polvo cálido `#8A5A3C` (alpha hasta 0,32), y las bandas oscuras son `rgb(4,4,9)` con alpha hasta 0,8.
+   - Estrellas: una cada 1400 px² en toda la pantalla (tope de 1600, alpha 0,14 a 0,55) y una candidata cada 420 px² sobre la banda (tope de 3600, repartidas en gaussiana a lo ancho; cada una queda con probabilidad 0,25 más el brillo de la banda en ese punto, alpha 0,16 a 0,7). En 1920 × 1080 son unas 3100 (1480 de fondo y unas 1600 de la banda). Se escriben píxel a píxel con reparto bilineal; detrás de una banda oscura pierden hasta el 90 % (fondo) o el 95 % (banda) de su alpha. El 1,2 % son brillantes y se dibujan encima como sprite de estrella de 7 px con alpha × 1,6 (tope 0,85). Están infinitamente lejos: no derivan, no titilan y no tienen parallax.
+   - Se dibuja con el alpha de Vía Láctea del ambiente.
+4. **Estrellas en tres profundidades**. Lejanas y medias son un sprite con núcleo blanco y halo corto del color de su temperatura, dibujado a 7 × su tamaño. Colores por temperatura: 38 % blanco `#F4F3FF`, 26 % blanco azulado `#CFDBFF`, 14 % dorado pálido `#FFF2D6`, 9 % ámbar `#FFD9A8`, 4 % naranja `#FFB98A`, 4,5 % verde azulado `#A3D8CF` y 4,5 % rosa `#E8B6C8`.
+   - **Lejanas**: 130 × la densidad del ambiente (tope 140), tamaño 0,55 a 1,0, alpha 0,3 a 0,7, titilan con amplitud 0,25 a 0,6 y período de 0,9 a 3,2 segundos, derivan hacia abajo a 0,8 a 1,6 px/s.
+   - **Medias**: 46 × la densidad (tope 50), tamaño 1,0 a 1,8, alpha 0,35 a 0,75, titilan poco (0,1 a 0,25, de 2,5 a 6 segundos), derivan a 2,5 a 4,5 px/s. Las tres primeras son brillantes, con difracción de cuatro puntas cortas (sprite de 64 px dibujado a 13 × su tamaño con alpha × 0,55): tamaño 1,6 a 2,0, alpha 0,55 a 0,75, 60 % blanco azulado y el resto blanco.
+   - **Polvo cercano** (se dibuja en la capa 7): 10 × la densidad (tope 12), motas desenfocadas de 5 a 14 px de radio, alpha 0,04 a 0,11 (siempre tenues, porque pasan detrás del texto), derivan a 7 a 12 px/s con un vaivén horizontal de ±4 px y período de 6 a 11 segundos. Color: 40 % dorado pálido, 30 % blanco azulado, 20 % ámbar y 10 % blanco.
 
-Ambientes de `Backdrop.setMood(name, opts)`. `opts` es **extensión**: `opts.color` solo se usa en `celebration`. El cambio interpola todos los parámetros en 1200 ms con `easeInOutSine` (colores interpolados en RGB).
+   No suben: derivan despacio hacia abajo, más rápido cuanto más cerca, porque nos alejamos del planeta. La deriva se multiplica por la velocidad del ambiente; al salir por abajo, cada estrella reaparece arriba en una x al azar. Con `pointer: coarse` las cantidades se multiplican por 0,6 y los topes bajan a 80, 28 y 6. Las que sobran al bajar la densidad se apagan por orden, sin saltos. Las tres capas siguen al puntero con un parallax suave: de un borde de la pantalla al otro se corren 3, 9 y 26 px (en vertical, × 0,6). Lejanas y medias se dibujan detrás del planeta.
+5. **Planeta**: abajo, con cara nocturna `#05060C`, una línea de atmósfera en el borde y la dispersión azul encima. El centro está en el 60 % del ancho (la curva cae más hacia la izquierda) y el radio es un factor del ambiente × el mayor entre el ancho y 1,25 × el alto.
+   - La atmósfera es un degradado radial en unidades del radio, así que se afina al alejarse: nace sobre la cara al 0,99 del radio, en el borde es una línea clara `rgba(168,194,238,0.62)` y hacia afuera se desvanece en azul, de `rgb(90,130,200)` a `rgb(29,42,79)`, hasta 1,09 radios.
+   - La estrella está detrás, a la derecha: una máscara horizontal deja el borde al 30 % de su brillo en el lado izquierdo de la pantalla, al 65 % en el centro y completo desde el 85 % del ancho.
+   - Sobre la cara, junto al borde, nubes apenas visibles (textura de 256 × 48 en `rgb(30,38,58)`, alpha hasta 0,44) estiradas en horizontal, como vistas de canto.
+   - Por ambiente, el planeta baja y se achica. En `intro`, el horizonte (su punto más alto) queda al 76 % del alto con radio 2,1; en `calm`, al 88,5 % con radio 1,3; en `lobby` es un arco al 95,5 % con radio 0,85 y alpha 0,95. En room, game, tension y celebration baja al 112 % con radio 0,6 y alpha 0, y deja de dibujarse.
+   - Vive en un canvas propio del tamaño de la pantalla a media resolución, que se redibuja solo cuando cambia su geometría: durante las transiciones de ambiente (si el horizonte se movió más de 0,3 px o el radio más de 0,5 px) y después de un cambio de tamaño. El resto del tiempo es un `drawImage` con el alpha del ambiente.
+6. **Siluetas lejanas** (dos en intro y calm, una en lobby): serpientes gigantes de gas oscuro, parientes de las del juego.
+   - Forma: lomo de 36 puntos con el perfil de las serpientes de la arena (cabeza apenas redondeada, cuerpo casi parejo que se afina en la segunda mitad hasta una cola fina), de largo 50 a 72 % del ancho de la pantalla (300 a 1400 px) y grosor de 5,5 a 7 % del largo (20 a 84 px).
+   - Cuerpo `rgb(5,5,11)` en tres capas cada vez más angostas (ancho × 1, × 0,74 y × 0,46 con alpha 0,2, 0,24 y 0,3): el borde es blando y lo de atrás se ve a medias.
+   - Sobre el lado que mira al planeta, abajo, un borde de luz estelar `rgb(196,210,255)` en modo `'lighter'`: un trazo de 9 px y otro de 3,5 px, con alpha 0,04 y 0,05 en el primer tercio que bajan hacia la cola. Un ojo pálido cerca de la cabeza (alpha 0,6) y 13 estrellas adentro que titilan (alpha 0,5 ± 0,38, ciclo de unos 3,7 segundos).
+   - Movimiento: cruzan la pantalla de lado a lado en 60 a 90 segundos, inclinadas hasta ±7°, una en la franja alta (8 a 22 % del alto, arriba del título de la intro) y otra en la baja (63 a 69 %, entre la bajada y el horizonte del planeta), al iniciar en sentidos opuestos. Ondulan con una onda fija a lo largo del cuerpo (amplitud de 2,5 a 5 % del lado menor de la pantalla más 10 px en la alta, hasta 3,5 % en la baja) y otra lenta que lo recorre (5 a 11 px, período de 14 a 22 segundos). Siguen el parallax de las estrellas lejanas al 60 %. Al terminar de cruzar, la siguiente espera fuera de pantalla entre el 5 y el 45 % de su recorrido.
+7. **Polvo cercano**: la tercera profundidad de la capa 4, delante del planeta y de las siluetas.
+8. **Criatura de la intro** (4.6), solo durante la secuencia completa.
+9. **Estela del puntero** (el momento firma): con `pointermove` y `touchmove` (un `pointerdown` de toque o lápiz arranca el trazo en ese punto) se emite una partícula de polvo estelar cada 7 px de recorrido, hasta 4 por frame, con un desvío de ±5 px a los lados. Vida de 0,9 a 1,4 segundos, tamaño 0,9 a 2,0 (el 12 % son más grandes, de 2,2 a 3,0, con alpha 0,5), dibujadas como punto con halo a 6 × su tamaño que se achica un 35 % al morir. Colores: 60 % verde azulado `#5ED8C4`, 25 % dorado suave `#F6DC94` y 15 % dorado `#EAC255`. Sin gravedad: lo suelto deriva (arrastre de 0,95 por cada 16,7 ms) y se apaga (aparece en el primer 10 % de su vida y se desvanece con `easeInQuart`). Activa solo en intro, calm, lobby y room; apagada con movimiento reducido. Las partículas salen de un pool fijo de 100 (60 con `pointer: coarse`) que comparten la estela, el polvo de la criatura de la intro y las ráfagas de celebración; con el pool lleno, la nueva reemplaza a la más vieja.
+10. **Pulsos**: `Backdrop.pulse(color, strength)` dibuja desde el centro de la pantalla un anillo de luz (sprite de degradado radial con alpha 0,22 en el centro, 0,5 al 55 %, pleno al 82 % y 0 en el borde) que crece de radio 0 a 0,9 × el lado mayor en 900 ms con `easeOutCubic`, con alpha `strength × 0,35` que baja a 0 con la curva `(1 - t)^1,3`, en modo `'lighter'`. `strength` se limita a 1,5. Máximo 3 pulsos simultáneos (el más viejo se descarta).
+11. **Tensión** (solo en `tension`): nubes de hidrógeno H-alfa, una textura de 160 × 100 de ruido fractal en `rgb(226,62,78)` más densa hacia los bordes, sumada en modo `'lighter'` con alpha entre 0,18 y 0,42 que late a 1 Hz (`0,42 × (0,72 + 0,28 sen)`). Con movimiento reducido no late: queda en 0,85 del máximo.
 
-| Ambiente | Color superior | Densidad / velocidad | Extras |
+Ambientes de `Backdrop.setMood(name, opts)`. `opts` es **extensión**: `opts.color` solo se usa en `celebration` (por defecto `#EAC255`). El cambio interpola todos los parámetros en 1200 ms con `easeInOutSine` (400 ms con movimiento reducido; colores interpolados en RGB), incluida la posición del planeta, que así baja y se achica a la vista. La frecuencia de cuadros y la resolución cambian en el acto. Pedir el ambiente actual no hace nada, salvo `celebration` con un color. En la tabla, Vía Láctea, nebulosa y oscurecimiento son los alphas de esas capas (0 cuando no se nombran) y la velocidad multiplica la deriva de las estrellas.
+
+| Ambiente | Color base | Densidad / velocidad | Extras |
 |---|---|---|---|
-| `intro` | `#06304A` | 0,6 / 1,0 | Haces 0,16, siluetas, estela |
-| `calm` (login) | `#052538` | 0,8 / 0,8 | Haces 0,10, siluetas, estela |
-| `lobby` | `#041D2E` | 1,0 / 1,0 | Haces 0,07, una silueta, estela |
-| `room` | `#03141F` | 0,8 / 0,9 | Haces 0,04, estela |
-| `game` | `#020C14` | 0,45 / 0,7 | Sin haces ni estela; 30 fps; resolución 0,35 |
-| `tension` | `#1A0710` | 0,45 / 1,6 | Capa coral `rgba(255,77,109,0.12)` que late a 1 Hz; 30 fps |
-| `celebration` | `#04283A` | 1,4 / 2,5 | 60 % del plancton en el color del campeón; 6 ráfagas de 40 partículas en puntos al azar durante 3 segundos; a los 6 segundos baja a densidad 1,0 y velocidad 1,0 |
+| `intro` | `#090B16` | 0,8 / 1,0 | Vía Láctea 0,75, nebulosa 0,55, oscurecimiento 1; planeta cercano; dos siluetas; estela |
+| `calm` (login) | `#080A14` | 0,9 / 0,9 | Vía Láctea 0,62, nebulosa 0,6, oscurecimiento 0,9; planeta a media distancia; dos siluetas; estela |
+| `lobby` | `#080912` | 1,0 / 1,0 | Vía Láctea 0,75, nebulosa 0,65, oscurecimiento 0,75; arco del planeta; una silueta; estela |
+| `room` | `#07080F` | 0,85 / 0,9 | Vía Láctea 0,3, nebulosa 0,7, oscurecimiento 0,15; sin planeta; estela |
+| `game` | `#06070D` | 0,5 / 0,7 | Vía Láctea 0,06, nebulosa 0,35; sin planeta, siluetas ni estela; 30 fps; resolución 0,35 |
+| `tension` | `#10060A` | 0,5 / 1,3 | Vía Láctea 0,05, nebulosa 0,3; nubes H-alfa que laten a 1 Hz; 30 fps; resolución 0,35 |
+| `celebration` | `#0A0C18` | 1,3 / 2,0 | Vía Láctea 0,5, nebulosa 0,75, oscurecimiento 0,2; 60 % de las estrellas medias y del polvo cercano en el color del campeón; 6 ráfagas en 3 segundos; a los 6 segundos baja a densidad 1,0 y velocidad 1,0 |
 
-Rendimiento del fondo vivo: el backing store mide la mitad del tamaño CSS (ignora `devicePixelRatio`; todo es suave y el escalado no se nota), 0,35 en `game` y `tension`. Tope de 260 partículas en total (150 con `pointer: coarse`). Con `document.hidden` se cancela el `requestAnimationFrame`; al volver se reinicia el delta de tiempo para que nada salte. Puede usar `Particles.createSystem({ max: 160 })` para la estela y las ráfagas de celebración.
+Ráfagas de `celebration`: una cada 500 ms desde los 250 ms, cada una en un punto al azar entre el 12 y el 88 % del ancho y el 16 y el 72 % del alto. Cada ráfaga es un destello local (tamaño 26, alpha 0,32, 750 ms) y 40 partículas en el color del campeón y perla `#F6F3EE` (una de cada tres), a 50 a 210 px/s, con vida de 1,1 a 2,0 segundos, tamaño 1,6 a 3,8 y sin gravedad.
+
+Rendimiento del fondo vivo: el backing store mide la mitad del tamaño CSS (ignora `devicePixelRatio`; todo es suave y el escalado no se nota), 0,35 en `game` y `tension`, que además dibujan a 30 fps. El contexto se pide con `alpha: false`. Tope de 202 estrellas y motas en total (114 con `pointer: coarse`), más el pool de 100 partículas de efecto (60). No hay allocations por frame:
+
+- La nebulosa, la capa H-alfa, las nubes del planeta, el sprite de difracción y los degradados del cielo y de la atmósfera se generan una vez al iniciar.
+- La Vía Láctea se genera al iniciar y al cambiar de tamaño, pero solo si cambia el ancho o el alto cambia más de un 25 %: la barra de direcciones del celular, que aparece y se esconde, apenas la estira. Al regenerarla, las siluetas vuelven a empezar.
+- El caché del planeta se ajusta en cada cambio de tamaño (es barato) y se redibuja solo cuando se mueve.
+- El cambio de tamaño espera 100 ms sin eventos y reescala las posiciones de las estrellas.
+
+Con `document.hidden` se cancela el `requestAnimationFrame`; al volver se reinicia el delta de tiempo (que además se limita a 50 ms) para que nada salte. Con movimiento reducido, la deriva de estrellas y nebulosa va al 15 %, las siluetas al 20 % y el titilar al 30 %; no hay estela ni empuje, las ráfagas tienen la mitad de partículas y los pulsos el 60 % del alpha. `Backdrop.stats()` (diagnóstico) devuelve `{ mood, fps, costMs, stars, fx, res, running, buildMs }`: `stars` son las estrellas y motas visibles de las tres profundidades (no cuenta la Vía Láctea), `fx` las partículas de efecto vivas, `costMs` el costo medio por frame y `buildMs` los milisegundos que tardaron en generarse las texturas fijas (`caches`) y la última Vía Láctea (`sky`).
 
 ### 4.5 Estructura del DOM
 
@@ -535,25 +570,27 @@ Notas para LAYOUT:
 - Se conservan los atributos que el JS actual usa: `#resetProfileButton` (sin `onclick` en línea: el listener lo pone SnakeGame.js, para que la CSP no tenga que permitir manejadores en línea), `maxlength` de `#username` (20) y `#roomId` (6), y los `value` de los radios de `#difficultyPicker` (`easy`, `medium` y `hard`, con `medium` marcado).
 - `#roomId` usa cifras MONO, interletrado 0,12em y `text-transform: uppercase` (es un dato, no una etiqueta).
 - `body` tiene `overflow-x: hidden` y fondo `--bio-abyss-900`.
-- Iconos: SVG en línea, trazo de 1,75 px, extremos redondeados, `currentColor`, retícula de 20 px. Se necesitan: medusa (escudo), ojo (espectador), actualizar, cerrar, chevron, corazón (pie), y los tres logos del pie que ya existen. Sin emojis en ningún lugar.
+- Iconos: SVG en línea, trazo de 1,75 px, extremos redondeados, `currentColor`, retícula de 20 px. Se necesitan: magnetosfera (escudo, símbolo `#i-medusa`), agujero negro (boca grande, `#i-anemona`), estrella triple (abanico, `#i-estrella`), planeta (comida, `#i-plankton`), ojo (espectador), actualizar, cerrar, chevron, corazón (pie), y los tres logos del pie que ya existen. Sin emojis en ningún lugar.
 
 ### 4.6 Intro
 
-Propósito: abrir en la oscuridad y mostrar en tres segundos de qué se trata. Layout: pantalla completa, todo centrado. Título `h1.intro-title` en Fraunces itálica a `--bio-fs-display`, color `--bio-turquoise-soft` con glow turquesa. Debajo, a 16 px, `p.intro-tagline` en Recursive 18 px `--bio-ink-2`. `p.intro-prompt` a 18vh del borde inferior, Recursive 16 px `--bio-ink`.
+Propósito: abrir en órbita, junto al borde de un planeta, y mostrar en tres segundos de qué se trata. Layout: pantalla completa, todo centrado. Título `h1.intro-title` en Fraunces itálica a `--bio-fs-display`, color `--bio-pearl` con luz estelar: un resplandor ancho y tenue (`0 0 28px` perla al 16 % y `0 0 90px` verde azulado al 10 %), sin aro de color pegado a la letra. Debajo, a 16 px, `p.intro-tagline` en Recursive 18 px `--bio-ink-2`. `p.intro-prompt` a 18vh del borde inferior, Recursive 16 px `--bio-ink`, con el aviso "Pulsa cualquier tecla para entrar en órbita" (o "Toca la pantalla para entrar en órbita" con `pointer: coarse`).
 
 Secuencia completa (2800 ms), coordinada por ESCENAS entre `scenes.js` y `backdrop.js`:
 
-1. **0 ms.** Pantalla `#010509`. Fondo vivo con densidad 0. Sin título.
-2. **150 ms.** Un único punto de plancton se enciende al 40 % del ancho y 55 % del alto: sube en 120 ms, decae lento. Es el primer destello.
-3. **400 a 1300 ms.** Cascada: 48 puntos se encienden en una espiral que se abre desde ese punto (retardo de cada uno = distancia / 0,45 px por ms, más un azar de ±60 ms). Colores: 70 % turquesa, 20 % lima, 10 % violeta. El degradado del fondo pasa de negro al color del ambiente `intro` en 1200 ms.
-4. **900 a 2100 ms.** Una criatura de luz de 12 segmentos (cuerpo `#1FF2D2`, señuelo lima) entra por la izquierda al 35 % del alto, nada en una senoide (amplitud 40 px, longitud de onda 420 px) y sale por la derecha. Deja estela de plancton encendido. Se dibuja en `#backdrop`.
-5. **1100 a 2200 ms.** El título se revela siguiendo a la criatura: `mask-image` con un degradado lineal de borde suave (30 % del ancho) cuya posición avanza de izquierda a derecha acompañando la x de la criatura. A la vez, el peso pasa de 200 a 300, el interletrado de 0,08em a -0,01em y el glow de 0 a pleno, todo con `--bio-ease-out`.
+1. **0 ms.** Pantalla `#030307`. Fondo vivo sin estrellas, nebulosa ni Vía Láctea, con el planeta invisible en su posición de la intro. La estela del puntero ya funciona. Sin título.
+2. **150 ms.** Un único punto perla `#F6F3EE` se enciende al 40 % del ancho y 55 % del alto: sube en 120 ms con el tamaño a × 1,8 (vuelve a × 1 en 300 ms), baja al 35 % en 900 ms y se apaga en 1600 ms más. Es el primer destello.
+3. **400 a 1300 ms.** Una galaxia se enciende desde ese punto: 48 puntos en dos brazos espirales de 24 que dan 1,25 vueltas, de radio 18 a 400 px por la escala de la pantalla (`min(ancho, alto) / 900`, entre 0,45 y 1,3), achatados al 82 % en vertical y con ±10 px de azar. Cada punto se enciende con la misma curva del primero; el encendido avanza desde el centro a 0,45 × escala px por ms, más un azar de ±60 ms. El tercio interior de cada brazo es el núcleo cálido (60 % dorado pálido `#FFF2D6`, 40 % ámbar `#FFD9A8`); el resto toma los colores de temperatura de las estrellas (4.4). La galaxia queda detrás del planeta. A la vez, desde los 400 ms, el fondo pasa en 1200 ms al ambiente `intro` sin estrellas, Vía Láctea ni siluetas y con la nebulosa en 0,15: aparecen el color del vacío, el borde del planeta con su atmósfera y el resplandor que sube desde el horizonte.
+4. **900 a 2100 ms.** Una criatura de gas de 12 segmentos (separados 16 px, de 18 px de ancho en la cabeza a 10 px en la cola) entra por la izquierda al 35 % del alto, avanza ondulando en una senoide (amplitud 40 px, longitud de onda 420 px) y sale por la derecha. Es pariente de las serpientes de la arena: halo verde azulado, tres capas de gas `rgba(94,216,196,0.30)` cada vez más angostas y densas con un núcleo más claro `rgba(214,246,240,0.20)`, estrellitas blancas que titilan adentro (una cada dos segmentos) y dos ojos perla `#F6F3EE` con pupila `#030307`. Deja polvo estelar sin gravedad detrás de la cola (60 % verde azulado `#5ED8C4`, 25 % dorado suave `#F6DC94`, 15 % perla) y del medio del cuerpo (verde azulado), que deriva y se apaga en 0,8 a 1,7 segundos. Se dibuja en `#backdrop`, delante del polvo cercano.
+5. **1100 a 2200 ms.** El título se revela siguiendo a la criatura: `mask-image` con un degradado lineal de borde suave (30 % del ancho) cuya posición sigue la x de la cabeza menos 30 px (`Backdrop.introCreatureX()`, **extensión**) y nunca va más lento que el reloj: a los 1100 ms del revelado queda completo. A la vez, el peso pasa de 200 a 300, el interletrado de 0,08em a -0,01em y el resplandor de 0 a pleno, todo en 1100 ms con `--bio-ease-out`.
 6. **2000 a 2500 ms.** La línea `p.intro-tagline` sube 10 px y aparece en 500 ms.
-7. **2500 a 2800 ms.** Aparece `p.intro-prompt` y desde ahí respira (opacidad entre 0,55 y 1, ciclo de 2400 ms). El fondo llega a la densidad completa del ambiente y aparecen los haces de luz. Si hay saludo (`opts.greeting`), en lugar del aviso se muestra "Hola de nuevo, {nombre}" y se avanza solo a lobby a los 700 ms.
+7. **2500 a 2800 ms.** Aparece `p.intro-prompt` con un fundido de 300 ms y, al terminar la secuencia, respira (opacidad entre 1 y 0,55, ciclo de 2400 ms con `--bio-ease-in-out`). Desde los 2400 ms, el fondo llega en 900 ms al ambiente `intro` completo: estrellas, Vía Láctea, nebulosa y las dos siluetas. Si hay saludo (`opts.greeting`), en lugar del aviso se muestra "Hola de nuevo, {nombre}" y se avanza solo a lobby a los 700 ms.
 
-Versión corta: si `sessionStorage` tiene `bio.introSeen = "1"` (se escribe al terminar la primera intro; leer y escribir dentro de `try/catch`), la intro dura 900 ms: fondo de negro a `intro` y título con fundido y desenfoque de 8 px a 0 en 600 ms, sin cascada ni criatura. Con movimiento reducido: título y aviso con fundido de 400 ms.
+Una tecla, un clic o un toque durante la secuencia la salta: las animaciones terminan en su estado final y el fondo llega al ambiente `intro` completo en 500 ms.
 
-Salida de la intro: el wordmark viaja. Scenes mide el destino `[data-wordmark-target]` de la escena siguiente (`.login-wordmark` en login, `#topbar .wordmark` en lobby) y anima el título de la intro con FLIP (traslación y escala) hasta ese rectángulo en 800 ms con `--bio-ease-in-out`; en los últimos 200 ms el título se desvanece y el destino aparece. El resto de la intro (tagline, aviso) sale con la inmersión estándar. El efecto de descenso del fondo se aplica igual.
+Versión corta: si `sessionStorage` tiene `bio.introSeen = "1"` (se escribe al terminar la primera intro; leer y escribir dentro de `try/catch`), la intro dura 900 ms. El fondo pasa de negro al ambiente `intro` completo en 900 ms, planeta incluido; el título aparece con fundido y desenfoque de 8 px a 0 en 600 ms, `p.intro-tagline` sube a los 300 ms y el aviso aparece a los 600 ms, sin galaxia ni criatura. Con movimiento reducido: título, `p.intro-tagline` y aviso con fundido de 400 ms, y el fondo llega a `intro` en el mismo tiempo.
+
+Salida de la intro: el wordmark viaja. Scenes mide el destino `[data-wordmark-target]` de la escena siguiente (`.login-wordmark` en login, `#topbar .wordmark` en lobby) y anima el título de la intro con FLIP (traslación y escala) hasta ese rectángulo en 800 ms con `--bio-ease-in-out`; en los últimos 200 ms el título se desvanece y el destino aparece. El resto de la intro (`p.intro-tagline` y el aviso) sale con la transición estándar (4.3). El fondo recibe el mismo pulso y el empuje hacia abajo: el viaje empieza a alejarse del planeta. Con movimiento reducido, la intro sale entera con la transición estándar.
 
 ### 4.7 Login
 
@@ -566,7 +603,7 @@ Propósito: pedir un nombre y nada más. Layout desktop y móvil: columna centra
 - `#loginLeaderboardButton`: botón silencioso (texto `--bio-ink-2`, subrayado en hover), centrado debajo.
 - Enter dentro de `#username` dispara `#joinButton` (INTEGRADOR).
 
-Entrada: inmersión estándar con `[data-stagger]` en wordmark, tarjeta y botón secundario.
+Entrada: transición estándar (4.3) con `[data-stagger]` en wordmark, tarjeta y botón secundario.
 
 ### 4.8 Lobby
 
@@ -602,18 +639,18 @@ Responsables: LAYOUT (marcado y estilos), INTEGRADOR (contenido), ESCENAS (anima
 
 El panel de jugadores en línea y el perfil se ven en lobby y en sala, porque invitar se hace desde la sala.
 
-**Chip de perfil (`#profileView` dentro de `#topbar`).** `#topbar` es una barra fija de 64 px (56 en móvil) sin fondo propio: el wordmark a la izquierda (Fraunces itálica 300, 32 px, turquesa suave) y el chip a la derecha. El chip es un `button.profile-chip` en forma de píldora de 44 px de alto con un orbe de 32 px (degradado radial de `--bio-turquoise` a `--bio-deep-blue`, inicial del nombre en Fraunces 18 px `--bio-ink-on-turquoise`), el nombre en Recursive 600 16 px y, en desktop, "{n} victorias" en 14 px `--bio-ink-3`. Clic o Enter abre `.profile-popover` (membrana `--bio-radius-lg`, 300 px, anclada debajo del chip): aparece con opacidad, `translateY(-8px)` a 0 y escala 0,98 a 1 en 360 ms con `--bio-ease-out`; Escape o clic afuera lo cierra en 240 ms. Contiene `#profileInfo` (estadísticas, ver 4.21) y `.profile-actions` con `#leaderboardButton` (secundario) y `#resetProfileButton` (silencioso, texto coral suave en hover). `aria-expanded` y `aria-controls` en el chip.
+**Chip de perfil (`#profileView` dentro de `#topbar`).** `#topbar` es una barra fija de 64 px (56 en móvil) sin fondo propio: el wordmark a la izquierda (Fraunces itálica 300, 32 px, luz estelar `--bio-pearl`) y el chip a la derecha. El chip es un `button.profile-chip` en forma de píldora de 44 px de alto con un orbe de 32 px (degradado radial de `--bio-turquoise` a `--bio-deep-blue`, inicial del nombre en Fraunces 18 px `--bio-ink-on-turquoise`), el nombre en Recursive 600 16 px y, en desktop, "{n} victorias" en 14 px `--bio-ink-3`. Clic o Enter abre `.profile-popover` (membrana `--bio-radius-lg`, 300 px, anclada debajo del chip): aparece con opacidad, `translateY(-8px)` a 0 y escala 0,98 a 1 en 360 ms con `--bio-ease-out`; Escape o clic afuera lo cierra en 240 ms. Contiene `#profileInfo` (estadísticas, ver 4.21) y `.profile-actions` con `#leaderboardButton` (secundario) y `#resetProfileButton` (silencioso, texto coral suave en hover). `aria-expanded` y `aria-controls` en el chip.
 
 **Dock (`#dock` con `#onlinePlayersPanel`).**
 
 - Desde 1280 px: columna fija a la derecha (`top: 80px; right: var(--bio-gutter); width: 280px; max-height: calc(100vh - 140px)`), membrana con scroll interno. `#dockToggle` oculto.
-- Entre 769 y 1279 px: el dock se oculta y aparece `#dockToggle`, botón flotante abajo a la derecha (por encima del pie): píldora "En línea" con `#dockCount` (cantidad de filas de la lista, que INTEGRADOR actualiza). Al tocarlo, el dock entra como panel lateral derecho de 320 px desde `translateX(24px)` y opacidad 0 en 520 ms con `--bio-ease-out`, con una capa de fondo `rgba(1,5,9,0.5)` que cierra al tocarla.
+- Entre 769 y 1279 px: el dock se oculta y aparece `#dockToggle`, botón flotante abajo a la derecha (por encima del pie): píldora "En línea" con `#dockCount` (cantidad de filas de la lista, que INTEGRADOR actualiza). Al tocarlo, el dock entra como panel lateral derecho de 320 px desde `translateX(24px)` y opacidad 0 en 520 ms con `--bio-ease-out`, con una capa de fondo `rgba(3,3,7,0.5)` que cierra al tocarla.
 - Hasta 768 px: igual, pero el dock es una hoja inferior de 60vh de alto, radio superior de 24 px, con una barra de agarre visual de 36 × 4 px, que entra desde `translateY(40px)`.
 - Cuando llega una invitación con el dock cerrado, `#dockToggle` late una vez (escala 1,08 con `--bio-ease-jelly`) y su borde pasa a violeta durante 3 segundos.
 
 ### 4.10 Sala (room)
 
-Propósito: esperar jugadores, configurar e invitar, con la arena ya viva. La arena muestra el modo atracción (5.15): cada jugador de la sala nada como criatura con su nombre. Cuando alguien entra, su criatura eclosiona; cuando sale, se disuelve.
+Propósito: esperar jugadores, configurar e invitar, con la arena ya viva. La arena muestra el modo atracción (5.15): cada jugador de la sala recorre la arena como criatura, con su nombre. Cuando alguien entra, su criatura eclosiona; cuando sale, se disuelve.
 
 Layout desde 1280 px. La grilla `.arena-layout` tiene tres columnas: izquierda de 300 px, centro flexible y derecha de 280 px. En sala, la derecha queda vacía porque la ocupa el dock fijo.
 
@@ -633,10 +670,10 @@ Layout desde 1280 px. La grilla `.arena-layout` tiene tres columnas: izquierda d
 ```
 
 - `#gameInterface` es una membrana con este orden: `#spectatorBanner` (oculto en sala), `#roomInfo`, título "Jugadores" con contador, `#playerList`, `#waitingSpan`, `#startGameButton`, `#leaveRoomButton` ("Salir de la sala", botón silencioso de ancho completo, visible en la sala fuera de la cuenta regresiva y oculto en modo game), `#configPanel`, `.controls-hint`.
-- `#roomInfo`: código de sala en MONO 21 px turquesa suave y, debajo, el rol ("Eres el anfitrión" o "Anfitrión: {nombre}") en 14 px `--bio-ink-2`.
+- `#roomInfo`: código de sala en MONO 21 px verde azulado suave y, debajo, el rol ("Eres el anfitrión" o "Anfitrión: {nombre}") en 14 px `--bio-ink-2`.
 - `#playerList`: filas de 40 px con rango, punto del color bio del jugador (10 px con glow de su color), nombre, etiqueta "Anfitrión" si corresponde y, durante la partida, el largo actual (en la sala, la columna de puntaje queda vacía). Fila propia (`.current-player`): borde izquierdo de 3 px lima y nombre en `--bio-lime-soft`.
 - `#startGameButton`: principal, ancho completo, respira solo cuando está visible.
-- `#configPanel`: acordeón. `#toggleConfigButton` es la fila cabecera (texto y chevron que rota 180° en 240 ms, con `aria-expanded`); `#configSettings` se despliega con el revelado de 4.20. Adentro, `#difficultyPicker` (leyenda "Nivel") apila tres opciones de al menos 48 px de alto: nombre en `--bio-ink` y una pista en `--bio-ink-2` a 14 px, con `--bio-radius-md` y fondo `rgba(4, 18, 29, 0.6)`. El radio nativo queda oculto pero recibe el foco, que se ve como el anillo turquesa de los campos. La opción marcada lleva borde turquesa y glow suave. El anfitrión cambia de nivel con un toque, sin botón de guardar: el servidor reparte el nivel a toda la sala. Los invitados ven las opciones deshabilitadas, con opacidad 0,6 y cursor `not-allowed`.
+- `#configPanel`: acordeón. `#toggleConfigButton` es la fila cabecera (texto y chevron que rota 180° en 240 ms, con `aria-expanded`); `#configSettings` se despliega con el revelado de 4.20. Adentro, `#difficultyPicker` (leyenda "Nivel") apila tres opciones de al menos 48 px de alto: nombre en `--bio-ink` y una pista en `--bio-ink-2` a 14 px, con `--bio-radius-md` y fondo `rgba(12, 12, 20, 0.6)`. El radio nativo queda oculto pero recibe el foco, que se ve como el anillo turquesa de los campos. La opción marcada lleva borde turquesa y glow suave. El anfitrión cambia de nivel con un toque, sin botón de guardar: el servidor reparte el nivel a toda la sala. Los invitados ven las opciones deshabilitadas, con opacidad 0,6 y cursor `not-allowed`.
 - `.controls-hint`: tres variantes por `data-variant` (`player`, `spectator`, `touch`), cada una un párrafo que LAYOUT muestra u oculta por CSS. Las teclas van en `<kbd>` (fondo `abyss-600`, borde inferior de 2 px `abyss-500`, `--bio-radius-sm`, cifras MONO). INTEGRADOR elige la variante: `spectator` si mira, `touch` si `matchMedia('(pointer: coarse)')` y no hay teclado conocido, `player` en el resto.
 
 Entre 1024 y 1279 px: dos columnas (izquierda de 260 px y centro); dock como botón flotante. Entre 769 y 1023 px: una columna centrada de hasta 640 px, con la arena arriba y `#gameInterface` debajo en dos columnas internas (jugadores a la izquierda, configuración a la derecha). Hasta 768 px: una columna; arena arriba a ancho completo; debajo, `#gameInterface`. `#startGameButton` queda `position: sticky; bottom: 12px` para que el anfitrión lo alcance sin scroll.
@@ -650,7 +687,7 @@ Tamaño de la arena (`--arena-size`), igual en sala y en partida para no redimen
 | 1024 a 1279 px | `clamp(320px, min(calc(100vw - 340px), calc(100svh - 200px)), 680px)` |
 | Desde 1280 px | `clamp(320px, min(calc(100vw - 680px), calc(100svh - 200px)), 760px)` |
 
-`.arena-frame` mide `--arena-size` de lado, tiene `--bio-radius-arena`, `overflow: hidden` y sombra `0 0 0 1px rgba(31,242,210,0.18), 0 0 48px rgba(31,242,210,0.10), 0 30px 80px rgba(0,0,0,0.6)`. El canvas ocupa el 100 % del marco; su backing store lo maneja ARENA. En partida, el glow sube a 0,16; con `#scene-arena[data-phase="tension"]` el borde pasa a `rgba(255,77,109,0.35)` en 600 ms.
+`.arena-frame` mide `--arena-size` de lado, tiene `--bio-radius-arena`, `overflow: hidden` y sombra `0 0 0 1px rgba(94,216,196,0.18), 0 0 48px rgba(94,216,196,0.10), 0 30px 80px rgba(0,0,0,0.6)`. El canvas ocupa el 100 % del marco; su backing store lo maneja ARENA. En partida, el glow sube a 0,16; con `#scene-arena[data-phase="tension"]` el borde pasa a `rgba(236,79,90,0.35)` en 600 ms.
 
 ### 4.11 De sala a partida
 
@@ -704,28 +741,28 @@ En partida y con `pointer: coarse` la página no debe hacer scroll al tocar la a
 
 Responsable: ESCENAS (`Overlays.countdown(n)`). `#overlay-countdown` cubre `.arena-frame` (`position: absolute; inset: 0`), `pointer-events: none`.
 
-- Al primer número aparece un velo radial (`radial-gradient` de `rgba(1,5,9,0.55)` en el centro a `rgba(1,5,9,0.2)` en los bordes) con fundido de 300 ms. Arriba del número, la meta de la partida, "Gana la serpiente más larga", en Recursive 600 18 px `--bio-ink-2`.
+- Al primer número aparece un velo radial (`radial-gradient` de `rgba(3,3,7,0.55)` en el centro a `rgba(3,3,7,0.2)` en los bordes) con fundido de 300 ms. Arriba del número, la meta de la partida, "Gana la serpiente más larga", en Recursive 600 18 px `--bio-ink-2`.
 - El número va en Fraunces itálica 300, tamaño `calc(var(--arena-size) * 0.42)`. Colores: 3 en `--bio-turquoise`, 2 en `--bio-cyan`, 1 en `--bio-lime`, con el glow de texto display.
 - Cada número entra con escala 1,5 a 1, opacidad 0 a 1 y `blur(14px)` a 0 en 480 ms con `--bio-ease-out`. Detrás, un anillo (`span.countdown-ring`, borde de 2 px del mismo color) crece de 0,4 a 1,6 veces el tamaño del número mientras su opacidad baja de 0,6 a 0, en 900 ms.
 - Cuando llega el número siguiente, el anterior sale con escala 1 a 0,7, opacidad a 0 y `blur(8px)` en 260 ms con `--bio-ease-in`, y el nuevo entra a la vez.
-- Con cada número: `Backdrop.pulse('#1FF2D2', 0.2)`.
+- Con cada número: `Backdrop.pulse('#5ED8C4', 0.2)`.
 
 ### 4.14 Inicio de la partida
 
 Responsable: ESCENAS (`Overlays.roundStart()`) y ARENA (`Arena.onRoundStart()`), en el mismo instante (`gameStart`).
 
-`#overlay-round` muestra "¡Ya!" en Fraunces itálica 400, `--bio-lime`, tamaño `calc(var(--arena-size) * 0.28)` (mínimo 72 px), y encima "Gana la serpiente más larga" en Recursive 600 18 px. El velo de la cuenta regresiva se va en 400 ms. "¡Ya!" entra con escala 0,8 a 1 con `--bio-ease-jelly` en 420 ms, se sostiene 380 ms y sale con opacidad a 0, escala 1,15 y `blur(10px)` en 380 ms. Total: 1180 ms. En la arena, la ola de inicio (5.12). `Backdrop.pulse('#C8FF3C', 0.35)`.
+`#overlay-round` muestra "¡Ya!" en Fraunces itálica 400, `--bio-lime`, tamaño `calc(var(--arena-size) * 0.28)` (mínimo 72 px), y encima "Gana la serpiente más larga" en Recursive 600 18 px. El velo de la cuenta regresiva se va en 400 ms. "¡Ya!" entra con escala 0,8 a 1 con `--bio-ease-jelly` en 420 ms, se sostiene 380 ms y sale con opacidad a 0, escala 1,15 y `blur(10px)` en 380 ms. Total: 1180 ms. En la arena, la ola de inicio (5.12). `Backdrop.pulse('#EAC255', 0.35)`.
 
 ### 4.15 Últimos 10 segundos
 
-Antes, a los 20 segundos, empieza el frenesí (`gameState.frenzy`, `docs/GAMEPLAY_SPEC.md`): la comida base sube un 50 % y aparece con la animación de 5.11, de a una por paso. INTEGRADOR muestra una vez el toast "Frenesí: más comida hasta el final" (info, 3 s) y llama a `Backdrop.pulse('#C8FF3C', 0.25)`; el temporizador ya está en la fase `warn`.
+Antes, a los 20 segundos, empieza el frenesí (`gameState.frenzy`, `docs/GAMEPLAY_SPEC.md`): la comida base sube un 50 % y aparece con la animación de 5.11, de a una por paso. INTEGRADOR muestra una vez el toast "Frenesí: más comida hasta el final" (info, 3 s) y llama a `Backdrop.pulse('#EAC255', 0.25)`; el temporizador ya está en la fase `warn`.
 
 Disparador: `roundTimeLeft` llega a 10. Lo pinta cada responsable en lo suyo:
 
-- **ARENA**: contador gigante (5.13) y viñeta coral creciente.
+- **ARENA**: contador gigante (5.13), viñeta roja creciente y nebulosa que vira al rojo del hidrógeno.
 - **ESCENAS (HUD)**: temporizador en `danger` con latido por segundo; `#scene-arena[data-phase="tension"]`.
-- **ESCENAS (Backdrop)**: ambiente `tension` (INTEGRADOR llama a `Backdrop.setMood('tension')` al llegar a 10 y `Backdrop.pulse('#FF4D6D', 0.15)` en cada segundo).
-- **LAYOUT**: borde coral del marco de la arena con `[data-phase="tension"]`.
+- **ESCENAS (Backdrop)**: ambiente `tension` (INTEGRADOR llama a `Backdrop.setMood('tension')` al llegar a 10 y `Backdrop.pulse('#EC4F5A', 0.15)` en cada segundo).
+- **LAYOUT**: borde rojo del marco de la arena con `[data-phase="tension"]`.
 
 ### 4.16 Fin de la partida
 
@@ -738,7 +775,7 @@ No hay panel intermedio: la partida es una sola.
 
 ### 4.17 Final
 
-Responsable: ESCENAS (`Overlays.final(data)`, con los datos de `gameEnd`; los colores salen de `ranking`). `#finalScreen` cubre la pantalla (`position: fixed; inset: 0`), fondo `rgba(1,5,9,0.6)`. Llama a `Scenes.go('final', { color })`, que pone el fondo vivo en `celebration` con el color `body` del campeón. `#finalScreen` no es un contenedor `.scene`: se muestra encima de `#scene-arena`, que queda debajo sin animarse.
+Responsable: ESCENAS (`Overlays.final(data)`, con los datos de `gameEnd`; los colores salen de `ranking`). `#finalScreen` cubre la pantalla (`position: fixed; inset: 0`), fondo `rgba(3,3,7,0.6)`. Llama a `Scenes.go('final', { color })`, que pone el fondo vivo en `celebration` con el color `body` del campeón. `#finalScreen` no es un contenedor `.scene`: se muestra encima de `#scene-arena`, que queda debajo sin animarse.
 
 - **0 ms.** El fondo de `#finalScreen` aparece en 600 ms.
 - **300 ms.** `#finalTitle` muestra el nombre del ganador (si hay empate, "Empate", sin animación por letra) en Fraunces itálica 300, `clamp(48px, 9vw, 112px)`, color `body` de su color bio con glow, `text-wrap: balance`. Cada letra es un `span.final-letter` (creado con `textContent`) que sube 30 px desde `blur(10px)` y opacidad 0, 700 ms con `--bio-ease-out`, escalonadas a 40 ms. Después, el glow del nombre respira.
@@ -751,15 +788,15 @@ Responsable: ESCENAS (`Overlays.final(data)`, con los datos de `gameEnd`; los co
 
 Con `reason` (sala cerrada): `#finalTitle` es "Sala cerrada" en `--bio-ink`, sin animación por letra, el fondo vivo pasa a `lobby` (no `celebration`). Con movimiento reducido: todo con fundido de 300 ms. `#finalScreen` admite `backdrop-filter: blur(6px)` solo desde 769 px y sin `pointer: coarse`.
 
-Salida del final a la sala o a la partida: `#finalScreen` se va con el mismo fundido y la arena queda activa. Salida a las salas (`Scenes.go('lobby')`): `#finalScreen` baja a opacidad 0 con `blur(6px)` en 420 ms con `--bio-ease-in` y luego recibe `.hidden`; `#scene-arena` pasa a `hidden` en ese mismo momento (está tapada y no necesita animación); el lobby entra con la inmersión estándar y el empuje del fondo hacia abajo.
+Salida del final a la sala o a la partida: `#finalScreen` se va con el mismo fundido y la arena queda activa. Salida a las salas (`Scenes.go('lobby')`): `#finalScreen` baja a opacidad 0 con `blur(6px)` en 420 ms con `--bio-ease-in` y luego recibe `.hidden`; `#scene-arena` pasa a `hidden` en ese mismo momento (está tapada y no necesita animación); el lobby entra con la transición estándar y el empuje del fondo hacia arriba, de vuelta hacia el planeta.
 
 ### 4.18 Modal de ranking
 
 Responsables: LAYOUT (marcado), ESCENAS (`Overlays.open(el)` y `Overlays.close(el)`, **extensión**), INTEGRADOR (contenido).
 
-`#leaderboardModal` cubre la pantalla con `rgba(1,5,9,0.72)`; `.modal-content` es una membrana de hasta 560 px y máximo 80vh con scroll interno. Apertura: fondo en 280 ms; tarjeta desde escala 0,96, `translateY(16px)` y opacidad 0 en 420 ms con `--bio-ease-out`; filas escalonadas a 40 ms (máximo 10). Cierre: tarjeta y fondo a opacidad 0 en 240 ms, luego `.hidden`. Cierran: `#closeLeaderboardModal` (botón de icono de 44 px con `aria-label="Cerrar"`), Escape y clic en el fondo. Foco atrapado dentro mientras está abierto; al cerrar vuelve al botón que lo abrió.
+`#leaderboardModal` cubre la pantalla con `rgba(3,3,7,0.72)`; `.modal-content` es una membrana de hasta 560 px y máximo 80vh con scroll interno. Apertura: fondo en 280 ms; tarjeta desde escala 0,96, `translateY(16px)` y opacidad 0 en 420 ms con `--bio-ease-out`; filas escalonadas a 40 ms (máximo 10). Cierre: tarjeta y fondo a opacidad 0 en 240 ms, luego `.hidden`. Cierran: `#closeLeaderboardModal` (botón de icono de 44 px con `aria-label="Cerrar"`), Escape y clic en el fondo. Foco atrapado dentro mientras está abierto; al cerrar vuelve al botón que lo abrió.
 
-`.leaderboard-head` es una fila estática con las cabeceras de columna. Las tres primeras filas usan color de rango: primero `#E9FF70`, segundo `#BFE9F2`, tercero `#FFB38A` (rango y borde izquierdo de 3 px). `p.leaderboard-note` explica el orden.
+`.leaderboard-head` es una fila estática con las cabeceras de columna. Las tres primeras filas usan color de rango: primero `#F7D879`, segundo `#CFCCDA`, tercero `#FFB38A` (rango y borde izquierdo de 3 px). `p.leaderboard-note` explica el orden.
 
 `Overlays.open(el)` y `Overlays.close(el)` sirven para cualquier elemento con clase `.modal`: quitan o ponen `.hidden` antes o después de animar.
 
@@ -771,11 +808,11 @@ Responsable: ESCENAS (`Toasts.show(message, type, durationMs, opts)`). Contenedo
 - Máximo 3 visibles; si llega un cuarto, el más viejo sale antes de tiempo. El más nuevo queda arriba.
 - Mensaje idéntico (mismo texto y tipo) dentro de 2000 ms: no se crea otro, se reinicia el tiempo del existente.
 - Duración por defecto: 3000 ms; `error` 4500 ms; `invitation` 9000 ms. El parámetro explícito manda.
-- Pieza: `.toast` con membrana (`rgba(4,18,29,0.92)`, borde de 1 px del color del tipo al 35 %, `--bio-radius-toast`, padding 12 px 14 px), un punto de 10 px del color del tipo con glow, el texto en Recursive 16 px (14 px en móvil) y, si hay `opts.actionLabel`, un botón píldora pequeño. Abajo, una barra de 2 px que se vacía durante la duración (color del tipo al 60 %) y se pausa con hover o foco.
-- Colores: `info` cian, `success` lima, `error` coral, `invitation` violeta (botón de acción con relleno violeta y texto `--bio-ink-on-invite`).
+- Pieza: `.toast` con membrana (`rgba(12,12,20,0.92)`, borde de 1 px del color del tipo al 35 %, `--bio-radius-toast`, padding 12 px 14 px), un punto de 10 px del color del tipo con glow, el texto en Recursive 16 px (14 px en móvil) y, si hay `opts.actionLabel`, un botón píldora pequeño. Abajo, una barra de 2 px que se vacía durante la duración (color del tipo al 60 %) y se pausa con hover o foco.
+- Colores: `info` azul estelar, `success` dorado, `error` rojo, `invitation` violeta (botón de acción con relleno violeta y texto `--bio-ink-on-invite`).
 - Entrada: desde `translateY(-12px)`, escala 0,97, opacidad 0 y `blur(4px)` en 360 ms con `--bio-ease-jelly-soft`. Salida: opacidad 0, `translateX(16px)` (o `translateY(-8px)` en móvil) y `blur(4px)` en 240 ms con `--bio-ease-in`; después la altura colapsa en 200 ms con `--bio-ease-standard` para que los demás se acomoden sin salto.
 - Accesibilidad: cada toast tiene `role="status"`, salvo `error`, que tiene `role="alert"`. El texto se pone con `textContent`; nunca `innerHTML`.
-- Tipo `invitation`: además del toast, `Backdrop.pulse('#A98BFF', 0.4)` y el latido de `#dockToggle` (4.9).
+- Tipo `invitation`: además del toast, `Backdrop.pulse('#A595F2', 0.4)` y el latido de `#dockToggle` (4.9).
 
 ### 4.20 Elementos que alternan `.hidden`
 
@@ -859,7 +896,7 @@ LAYOUT estiliza estas estructuras; quien las genera (indicado en cada una) las c
 
 Estado vacío: `li.empty-room` con el texto de la sección 8.
 
-**Jugadores de la sala** (INTEGRADOR) en `#playerList`: `li.player-item` (más `.current-player`, `.eliminated`) con `--c`, y dentro `span.player-rank`, `i.player-dot`, `span.player-name`, `span.player-host` (solo el anfitrión), `span.player-score` (el largo durante la partida; vacío en la sala) y `span.player-status` (icono de medusa con `aria-label="Con escudo"` si tiene inmunidad; vacío si no).
+**Jugadores de la sala** (INTEGRADOR) en `#playerList`: `li.player-item` (más `.current-player`, `.eliminated`) con `--c`, y dentro `span.player-rank`, `i.player-dot`, `span.player-name`, `span.player-host` (solo el anfitrión), `span.player-score` (el largo durante la partida; vacío en la sala) y `span.player-status` (icono de escudo `#i-medusa` con `aria-label="Con escudo"` si tiene inmunidad; vacío si no).
 
 **Jugadores en línea** (INTEGRADOR) en `#onlinePlayersList`: la estructura actual (`li.online-player-item` > `div.online-player-info` > `div.online-player-name` y `div.online-player-status` con `.available` o `.in-game`; `button.invite-button`) más un `i.online-dot` al principio del `li`. Tras invitar, el botón queda deshabilitado con el texto "Enviada" durante 8 segundos. Vacío: `li.online-players-empty`.
 
@@ -881,130 +918,172 @@ Los `dd` usan cifras MONO 21 px; los `dt`, 14 px `--bio-ink-3`.
 
 ## 5. Arte de la arena
 
-Responsable: ARENA. Todo lo de esta sección se dibuja en `canvas#game` con coordenadas lógicas de 600 × 600.
+Responsable: ARENA. Todo lo de esta sección se dibuja en `canvas#game` con coordenadas lógicas de W × H, el tamaño del mundo que manda el servidor (`canvasWidth` y `canvasHeight`, por `Arena.setConfig`): hoy 768 × 432 (16:9), con `s` igual a 12. La arena es un pedazo de espacio profundo: nebulosa tenue, estrellas que titilan, criaturas del vacío con cuerpo de gas y planetas con lunas como comida. Ningún efecto tiene gravedad: nada flota ni se hunde.
 
 ### 5.1 Orden de capas
 
 Cada frame de `Arena.render` dibuja, en este orden:
 
-1. Sacudida: `ctx.translate(dx, dy)` si hay una activa (5.12).
-2. Fondo abisal (caché).
-3. Cáusticas (2 capas de patrón).
-4. Grilla de puntos (caché).
-5. Nieve marina (partículas ambientales propias de la arena).
-6. Contador gigante, solo en los últimos 10 segundos (va debajo de todo lo jugable para no taparlo).
-7. Comida.
+1. Sacudida: si hay una activa (5.12), se rellena el canvas con `#07070D` y las capas 2 a 12 se dibujan desplazadas.
+2. Fondo del vacío y banda galáctica (caché).
+3. Polvo de estrellas lejanas, en la misma caché. En calidad Q0 la caché también lleva la nebulosa quieta, entre la banda y el polvo.
+4. Nebulosa (dos capas de patrón, aditivas).
+5. Estrellas cercanas (campo propio de la arena).
+6. Contador gigante, solo en los últimos 10 segundos (va debajo de todo lo jugable para no taparlo). Justo encima, y todavía debajo de lo jugable, la nova del ganador (5.14).
+7. Comida (planetas).
 8. Consumibles.
-9. Estelas de proyectiles y proyectiles.
-10. Serpientes, en pasadas: halos de todas, cuerpos de todas, filamentos, fotóforos, cabezas. La serpiente propia va última en cada pasada.
-11. Partículas de efectos (`Particles`).
+9. Estelas de proyectiles y proyectiles, y encima las colas desprendidas por los impactos.
+10. Criaturas, en pasadas: halos de todas, velo de inmunidad, alcance de la boca grande, cuerpos, gas, estrellas internas, cabezas (5.4). La serpiente propia va última en cada pasada. Encima, la corona (5.6).
+11. Partículas (`Particles`), y encima los efectos propios de la arena: anillos, destellos, la ola de inicio, la bocanada del disparo y la estela de la boca grande.
 12. Etiquetas de nombre y textos flotantes.
-13. Membrana de bordes y destellos de portal.
-14. Viñeta, y viñeta coral de tensión encima.
+13. Ya sin sacudida: destellos de portal y resplandor de los bordes.
+14. Viñeta, y viñeta roja de tensión encima.
 
-### 5.2 Fondo, cáusticas, grilla, nieve marina y viñeta
+### 5.2 Fondo, nebulosa, estrellas, viñeta y bordes
 
-- **Fondo abisal** (caché a resolución del backing store, se regenera solo al cambiar el tamaño): relleno `#020A12`; degradado radial centrado en (300, 120) con radio 520, de `rgba(7,37,54,0.55)` a transparente (luz difusa desde arriba); degradado lineal en el 35 % inferior hacia `rgba(1,5,9,0.6)`.
-- **Cáusticas**: al iniciar se genera una textura de 256 × 256 una sola vez. Es un diagrama de Voronoi de 12 puntos al azar con distancia envolvente (para que la textura sea repetible sin costura); el valor de cada píxel es `1 - smoothstep(0, 0.06, F2 - F1)` (dibuja las venas entre celdas), elevado a 1,5 y usado como alpha (máximo 0,9). Se guardan dos copias teñidas: cian `#4FD8FF` y coral `#FF4D6D`. Cada frame se dibujan dos capas como `createPattern` en modo `'lighter'`: capa A con escala 2,4, deriva de (6, 3) px/s y alpha 0,055; capa B con escala 3,4, deriva de (-4, 5) px/s y alpha 0,035. En tensión, la copia coral se mezcla con alpha `0,6 × nivel de tensión` y la deriva se multiplica por 1,6. En renderIdle el alpha baja al 70 %.
-- **Grilla**: un punto de 0,6 px de radio en cada esquina de celda, color `#4FD8FF` con alpha 0,07. Con `s` igual a 8, un punto cada dos celdas. Se prerenderiza en un canvas fuera de pantalla al llamar a `setConfig` o al cambiar el tamaño; cada frame es un solo `drawImage`.
-- **Nieve marina**: 70 partículas (45 en calidad Q1, 25 en Q0; ×0,6 con `pointer: coarse`). Cada una tiene profundidad `z` entre 0,3 y 1 que define tamaño (0,6 a 1,8 px) y alpha (0,08 a 0,35); deriva horizontal de ±3 px/s, sube a 2 a 6 px/s, vaivén de ±4 px con período de 6 a 11 segundos, y reaparece por el borde opuesto. **Durante la partida** (`Arena.render`), la nieve se dibuja al 70 % de tamaño y al 55 % de alpha y no se enciende: es fondo, y no tiene que competir con la comida ni con el escudo. **Estela de dinoflagelados**, solo en la arena de espera (`renderIdle`): si una partícula está a menos de `3·s` de la cabeza de una criatura (o del puntero), su encendido sube a 1 y toma el color `body` de esa criatura; el encendido decae en 900 ms. Con encendido, el alpha llega a 0,8 y se dibuja con sprite de glow. El costo es de 70 × 8 comparaciones de distancia por frame.
-- **Viñeta**: degradado radial cacheado, transparente hasta el 55 % de la diagonal y `rgba(1,5,9,0.75)` en las esquinas. **Viñeta de tensión**: segunda caché igual con `rgba(255,77,109,0.18)`, dibujada con alpha igual al nivel de tensión (`(10 - roundTimeLeft) / 10` cuando quedan 10 segundos o menos), más un golpe de +0,25 en cada cambio de segundo que decae en 400 ms.
-- **Membrana de bordes**: los bordes de la arena son portales. Cuatro franjas cacheadas de 14 px con degradado de `#1FF2D2` hacia adentro, alpha entre 0,08 y 0,12 en `--bio-dur-breath-slow`. Cuando una serpiente cruza, la franja se enciende en su color en un tramo de `6·s` centrado en el cruce durante 600 ms.
+El fondo tiene tres planos: una caché quieta con la banda galáctica y el polvo de estrellas, la nebulosa que deriva y un campo de estrellas cercanas que titilan.
+
+- **Fondo del vacío** (caché a resolución del backing store; se regenera al cambiar el tamaño, al cambiar `s` y, en Q0, cuando termina de generarse la nebulosa): relleno `#07070D` (`--bio-abyss-900`). **Banda galáctica**: un degradado radial centrado en (0,52·W, 0,46·H), girado -0,38 rad y aplastado a 0,26 en vertical, de radio 0,62·W, con paradas `rgba(34,30,48,0.55)` en 0, `rgba(24,22,36,0.32)` en 0,5 y transparente en 1. Apenas se distingue del negro.
+- **Polvo de estrellas lejanas** (misma caché): `W × H / 2300` puntos (144 en 768 × 432), de radio 0,3 a 0,75 px y alpha 0,18 a 0,56, fijos y sin brillo propio. Salen de un generador con semilla fija, así que no cambian al redimensionar. El 35 % se reparte cerca de la banda (hasta ±0,55·W a lo largo y una suma de tres sorteos por 0,16·H a lo ancho); los que caen afuera de la arena se descartan.
+- **Nebulosa** (`drawNebula`): una textura de 256 × 256 de ruido fBm de valor, periódico para que se repita sin costura (red de período 3 en la primera octava, que se duplica en cada una), con el dominio deformado ±0,12 por dos fBm de 4 octavas para que las nubes tengan hebras y huecos oscuros. Por píxel: la densidad `d` es un fBm de 5 octavas sobre el dominio deformado; la nube es `smoothstep(0,46, 0,78, d)`; las hebras son la cresta de otro fBm (`1 - |2·fBm - 1|`) a la sexta, solo donde `d` pasa de 0,34 a 0,6; el alpha es `0,85 × nube^1,5 + 0,55 × hebras`, con tope 1. Tono: polvo cálido `#C98A4B` de base, oxígeno `#5ED8C4` en las regiones que marca un tercer ruido, núcleos dorados `#EAC255` (mezcla del 55 %) donde `d` pasa de 0,66 a 0,84, y hebras que tiran un 30 % al blanco estelar `#F6F3EE`. Se guardan dos copias: calma y tensión, la misma nube en rojo H-alfa `#EC4F5A` con bordes que tiran a `#F08A3C`.
+- **Generación de la nebulosa**: no traba la carga. Se calcula de a 16 filas por frame (16 frames en total) y, al terminar, aparece con un fundido de 1500 ms.
+- **Nebulosa por frame**: dos capas de `createPattern` con matriz, en `'lighter'`. Capa A: escala 3 (la textura cubre 768 px, el ancho de la arena), sin giro, alpha 0,17 y deriva de (0,8; 0,3) px/s. Capa B: escala 4,4, girada 2,2 rad para esconder que es la misma textura, alpha 0,11 y deriva de (0,45; 0,2) px/s. Las dos van a menos de 1 px/s y su cruce hace que la forma cambie despacio. **En tensión**, la copia roja entra con peso `0,9 × nivel de tensión` (y alpha × 1,3) y la de calma baja en la misma medida; la deriva se multiplica por `1 + 0,5 × tensión`. En renderIdle el alpha baja al 70 %. Con movimiento reducido no deriva. En Q1 se dibuja solo la capa A. En Q0 no se dibuja por frame: una copia quieta de la capa A en calma queda horneada en el fondo, sin deriva ni tinte rojo. Con `prefers-contrast: more` no hay nebulosa.
+- **Estrellas cercanas** (`updateStars`, `drawStars`): 80 estrellas (50 en Q1, 28 en Q0; × 0,6 con `pointer: coarse`). Cada una tiene profundidad `z = 0,3 + 0,7 × azar²` (pocas cercanas y brillantes), color de la tabla de temperaturas y un titileo propio con período de 1,8 a 6 segundos que baja su brillo entre un 25 y un 75 %. Derivan hacia la derecha y apenas hacia abajo, más rápido las cercanas (paralaje): `0,5 + 1,8·z²` px/s en x (hasta 2,3) y `0,2 + 0,7·z²` px/s en y. Reaparecen por el borde opuesto. No suben ni flotan. Con `zz = (z - 0,3) / 0,7`, el tamaño base es `0,55 + 1,1·zz` px y el alpha `0,24 + 0,6·zz`, por el titileo. Las de `zz` mayor a 0,8 llevan rayos de difracción (sprite de estrella de radio `tamaño × (3,6 + 1,4 × titileo)`); las demás son un punto de glow de radio `2,4 × tamaño`. Todo en `'lighter'`. **Durante la partida** (`Arena.render`) se dibujan al 75 % de tamaño y al 60 % de alpha, y no se encienden: son fondo y no compiten con la comida ni con los consumibles. Con movimiento reducido no derivan y el titileo baja al 30 %.
+- **Encendido**, solo en la arena de espera (`renderIdle`): si una estrella está a menos de `3·s_idle` de la cabeza de una criatura, o a menos de 46 px del puntero (si se movió en los últimos 900 ms a más de 40 px/s; nunca con movimiento reducido), su encendido sube a 1 y toma el color de esa criatura (el puntero usa el del slot cian, `#6AE2D4`). El encendido decae en 900 ms. Encendida, suma un glow `body` de radio `6 × tamaño` (alpha 0,7) y una estrella `core` de radio `3,4 × tamaño` (alpha 0,8), y su punto propio baja un 40 %. En partida las cabezas no encienden estrellas: esos destellos de color se confundían con comida. El costo es de 80 × criaturas comparaciones de distancia por frame.
+- **Viñeta**: un cuadrado cacheado de 300 px estirado a la arena, transparente hasta el 55 % de la semidiagonal y `rgba(3,3,7,0.75)` en las esquinas. **Viñeta de tensión**: otra caché igual con `rgba(236,79,90,0.16)`, dibujada con alpha igual al nivel de tensión (`(10 - roundTimeLeft) / 10` cuando quedan 10 segundos o menos, suavizado en unos 300 ms), más un golpe de +0,25 en cada cambio de segundo que decae en 400 ms.
+- **Bordes**: los bordes de la arena son portales. Cuatro franjas cacheadas de 14 px con un degradado de `#5ED8C4` hacia adentro (alpha 1, 0,35 al 35 % y 0 al final), dibujadas en `'lighter'` con alpha entre 0,08 y 0,12 en `--bio-dur-breath-slow` (0,10 fijo con movimiento reducido). Cuando una serpiente cruza, el borde se enciende en su color en un tramo de `6·s` centrado en el cruce, con un glow de 28 px de alto sobre la línea del borde, durante 600 ms.
+
+Las estrellas, lejanas y cercanas, toman el color de esta tabla (`STAR_COLORS`), sorteado con estos pesos:
+
+| Color | Tipo | Peso |
+|---|---|---|
+| `#CFDBFF` | Azulada | 16 % |
+| `#F4F3FF` | Blanca | 34 % |
+| `#FFF2D6` | Amarilla | 27 % |
+| `#FFD9A8` | Naranja clara | 15 % |
+| `#FFB98A` | Naranja | 8 % |
 
 ### 5.3 Sprites y cachés
 
 No se usa `shadowBlur` en ningún dibujo por frame. Todo brillo sale de sprites prerenderizados dibujados con `globalCompositeOperation = 'lighter'`.
 
-- **Sprite de glow**: canvas fuera de pantalla de 64 × 64 (o 128 × 128 para radios mayores a 24 px lógicos) con un degradado radial: color al 100 % en 0, al 45 % en 0,25, al 12 % en 0,55 y 0 en 1. Clave de caché: `color + '|' + tamaño`. Máximo 64 entradas (la más vieja se descarta). Se crean bajo demanda, nunca dentro de un bucle de dibujo por segmento (se piden una vez por serpiente por frame).
-- **Rampa de cuerpo**: por cada color de jugador, 32 strings `rgba()` precalculadas de cabeza a cola: color `mix(body, deep, smoothstep(0.15, 1, t) * 0.85)` y alpha 1 hasta `t = 0,7`, que baja linealmente a 0,35 en `t = 1`. Se indexa con `Math.round(t * 31)`.
-- **Etiquetas de nombre**: un sprite por par nombre y color, con el nombre truncado a 12 caracteres más "…", dibujado con contorno `rgba(2,10,18,0.85)` de 3 px y relleno `text`. Se regenera solo si cambia el nombre, el color o la escala de la arena.
-- **Dígitos del contador gigante**: 10 dígitos × 3 colores, prerenderizados al cargar la fuente.
-- **Sin allocations por frame**: buffers reutilizados (`Float32Array` para puntos de cuerpo y estelas), sin `map`, `filter`, spread ni creación de objetos dentro del bucle de render. Las cajas de `Map` por id se crean al aparecer una entidad, no por frame.
+- **Sprite de glow** (`Particles.glowSprite`): canvas fuera de pantalla de 64 × 64 (o 128 × 128 para radios mayores a 24 px lógicos) con un degradado radial: color al 100 % en 0, al 45 % en 0,25, al 12 % en 0,55 y 0 en 1. Clave de caché: `color + '|' + tamaño`. Máximo 64 entradas (la más vieja se descarta).
+- **Mancha de gas** (`softSprite`): 64 × 64, con un perfil ancho y sin pico (100 % en 0, 85 % en 0,3, 40 % en 0,6, 8 % en 0,85 y 0 en 1), para que una cadena de manchas a lo largo del cuerpo se vea continua y no como cuentas. Una por color.
+- **Estrella de 4 puntas** (`starSprite`): 64 × 64, con un halo radial hasta la mitad del radio (90 %, 40 % en 0,2, 8 % en 0,55 y 0), dos rayos de difracción en cruz que se afinan desde 2,2 px de semiancho en el centro hasta los bordes del sprite y se apagan (100 %, 45 % en 0,25, 6 % en 0,7 y 0), y un núcleo blanco de 5 px de radio. Una por color. La usan las estrellas internas de las criaturas, las estrellas cercanas más brillantes, la corona, el abanico y la nova del ganador.
+- **Pintura por color** (`paintFor`): la primera vez que aparece un color de jugador se crean sus sprites de glow, de estrella y de gas, y se guardan con él. Nunca se piden sprites dentro de un bucle por segmento.
+- **Rampas del cuerpo** (`rampFor`): por cada color y cada uno de 8 niveles de atenuado (alpha de 1 a 0,3, para el fin de la partida), tres rampas de 32 colores de cabeza a cola, una por capa de gas (5.4). El color es `mix(body, deep, smoothstep(0,2, 1, t) × 0,4)` y el alpha vale 1 hasta `t = 0,5` y baja linealmente a 0,45 en `t = 1`. Se precalculan opacas, mezclando contra `mix(fondo, body, 0,08)` con peso `0,5 × alpha` (borde), `0,68 × alpha` (cuerpo) y `0,84 × alpha` (centro). La cabeza tiene su color aparte: `body` con un 12 % de `core`, mezclado igual. Se indexa con `Math.round(t * 31)`.
+- **Planetas** (5.8): un sprite por valor, con contorno, superficie, sombra, borde de atmósfera, dígito y anillo horneados. Se regeneran al cambiar `s`, la resolución del backing store, la escala de la arena o al cargar las fuentes.
+- **Rayo de aurora** (5.9): un canvas de 16 × 96 con el degradado vertical del rayo y una máscara horizontal que lo afina a los costados.
+- **Etiquetas de nombre**: un sprite por serpiente, con el nombre truncado a 12 caracteres más "…", dibujado con contorno `rgba(7,7,13,0.85)` de 3 px y relleno `text`. Se regenera solo si cambia el nombre, el color, la escala de la arena o al cargar las fuentes.
+- **Dígitos del contador gigante**: un sprite por número (10 a 1), cada uno con su color y el glow horneado una sola vez (`shadowBlur` de 36 y 12 px, a resolución reducida). Se generan de a uno por frame cuando a la partida le quedan 16 segundos o menos, así no hay tirones en el momento tenso.
+- **Sin allocations por frame**: buffers reutilizados (`Float32Array` para puntos de cuerpo, estelas, estrellas y lunas), sin `map`, `filter`, spread ni creación de objetos dentro del bucle de render. Las opciones de ráfaga son objetos fijos que se reescriben. Los registros por id (`Map`) se crean al aparecer una entidad, no por frame.
 
 ### 5.4 Serpiente
 
-Cada serpiente se dibuja como un cuerpo continuo de criatura, a partir de `snake.getRenderSegments()` (posiciones interpoladas por `js/net/motion.js`).
+Cada serpiente se dibuja como una criatura del vacío, con un cuerpo continuo de gas translúcido, a partir de `snake.getRenderSegments()` (posiciones interpoladas por `js/net/motion.js`).
 
 **Geometría.** `P_i` es el centro del segmento `i`, con `n` segmentos. `t_i = i / max(n - 1, 1)` va de 0 (cabeza) a 1 (cola). El radio del cuerpo es `r(t) = s × (0,46 - 0,22 × t^1,4)`: 0,46·s junto a la cabeza y 0,24·s en la punta de la cola.
 
 **Ondulación.** Cada punto, salvo la cabeza, se desplaza sobre la normal local (perpendicular a `P_{i-1} - P_{i+1}`, normalizada, usando solo vecinos del mismo tramo) una distancia `A(t) × sin(now × 0,006 - i × 0,9)`, con `A(t) = s × 0,09 × smoothstep(0, 0,25, t)`. Es poca amplitud a propósito: la posición jugable no cambia de celda. Desactivada con movimiento reducido y en calidad Q0.
 
+**Trazo.** El cuerpo sigue una curva suave por puntos medios (cuadráticas con control en cada `P_i`), que empalma sin quiebres. Se dibuja en trozos con extremos `'butt'` (el último, `'round'`): un punto por trozo hasta 24 segmentos, 2 hasta 48 y `ceil(n / 24)` desde ahí. Cada trozo toma el grosor y el color de su punto medio y se solapa 0,7 px con el siguiente para que el antialias no deje costura.
+
 **Pasadas.**
 
-1. **Halo** (`'lighter'`): sprite de glow del color `body` en cada `P_i` (cada 2 en Q1 y Q0, con alpha × 1,5), de radio `3,2 × r(t)` y alpha `0,22 × (1 - 0,6t)`. La serpiente propia multiplica el alpha por 1,25.
-2. **Cuerpo** (`'source-over'`): por cada par consecutivo del mismo tramo, una línea de `P_i` a `P_{i+1}` con `lineWidth = 2 × r(t_i)`, `lineCap = 'round'` y color de la rampa. Los extremos redondeados encadenados forman un tubo sin costuras.
-3. **Filamento** (`'lighter'`): un solo trazo por tramo que recorre todos los puntos, `lineWidth = 0,22·s`, color `core` con alpha 0,75. Es la línea de luz interna.
-4. **Fotóforos** (`'lighter'`): puntos de radio `0,09·s` (mínimo 1 px) con sprite `core`, alpha `0,5 + 0,5 × sin(now × 0,004 + i × 1,7)`. El patrón depende de `slot % 4`:
-   - **0**: pares laterales (±0,6r sobre la normal) cada 3 segmentos.
-   - **1**: un punto dorsal (sobre la línea central) cada 2 segmentos.
-   - **2**: zigzag lateral, alternando lado, cada 2 segmentos.
-   - **3**: grupos de 3 puntos en línea cada 5 segmentos.
-   Con `s` menor a 12 se duplica la separación.
-5. **Cabeza**: elipse centrada en `P_0 + dir × 0,08·s`, radio 0,56·s a lo largo de la dirección y 0,48·s a lo ancho, relleno `body`, más un sprite `core` de radio `1,0·s` y alpha 0,6. Ojos: dos círculos en `P_0 + dir × 0,18·s ± normal × 0,22·s`, esclerótica de radio `0,12·s` en `#E8FBFF` y pupila de `0,07·s` en `#01060A` desplazada `0,03·s` hacia adelante. Señuelo: curva cuadrática desde `P_0 + dir × 0,3·s` con control en `P_0 + dir × 0,7·s + normal × 0,25·s × sin(now × 0,003)` y fin en `P_0 + dir × 0,85·s + normal × 0,15·s × sin(now × 0,004 + 1)`, trazo de 1 px en `body` al 80 %; en el extremo, sprite `core` de radio `0,35·s` y un punto `#E8FBFF` de `0,08·s`.
+1. **Halo** (`'lighter'`): sprite de glow `body` cada 2 puntos en Q2 (alpha × 1,5) y cada 3 en Q1 y Q0 (alpha × 1,95), de radio `4,2 × r(t)` y alpha `0,16 × (1 - 0,5t)`, con tope 1. El halo respira de a trechos: el radio varía ±14 % con `sin(now × 0,0021 - i × 0,7)`, fijo con movimiento reducido. Usa el sprite grande cuando `4,2 × 0,46·s` pasa de 24 px. La serpiente propia multiplica el alpha por 1,25.
+2. **Velo de inmunidad y alcance de la boca grande**, cuando están activos (5.7 y 5.9).
+3. **Cuerpo** (`'source-over'`): tres capas de gas, cada una más angosta, densa y clara: borde tenue (ancho completo, `2 × r(t)`), cuerpo (76 %) y centro (48 %), cada una con su rampa (5.3). No hay contorno luminoso: el volumen sale del salto chico entre capas.
+4. **Gas** (`'lighter'`, sin bordes): un **núcleo** de manchas de gas `core` sobre el eje, desde el segundo punto: en Q2, una por punto en la mitad de adelante (radio `1,75 × r`) y cada 2 hacia la cola; en Q1 y Q0, cada 2 puntos. Donde van espaciadas, el radio sube a `2,3 × r` y el alpha × 1,25. Alpha `0,2 × (1 - 0,7t)`, con un radio que late ±12 % con `sin(now × 0,0023 - i × 0,8)`. Encima, solo en Q2, **bocanadas**: manchas `body` cada 3 puntos, corridas a un lado hasta `0,4r`, de radio `r × (1,8 ± 0,5)` y alpha `0,25 × (1 - 0,6t) × (0,6 ± 0,4)`, en una ola que viaja de la cabeza a la cola (fase `now × 0,0016 - i × 0,55`). Le dan al cuerpo textura de nube en movimiento sin perder la silueta.
+5. **Estrellas internas** (`'lighter'`, `passStars`): estrellitas de 4 puntas (estrella `core`) que titilan dentro del gas. Con `titileo = 0,5 + 0,5 × sin(now × 0,0035 + i × 1,7)` y `chispa = titileo²`, el radio es `r × k × (0,7 + 0,45 × chispa)` y el alpha `(0,3 + 0,7 × chispa) × (1 - 0,35t)`. El patrón depende de `slot % 4`:
+   - **0**: pares laterales (±0,5r sobre la normal) cada 3 segmentos, con `k` = 0,8.
+   - **1**: una sobre la línea central cada 2 segmentos, con `k` = 1,05.
+   - **2**: alternadas a un lado y al otro (±0,5r) cada 2 segmentos, con `k` = 1,05.
+   - **3**: tríos en línea a lo largo del cuerpo (el punto y ±0,32·s sobre la tangente) cada 5 segmentos desde el punto 2, con `k` = 0,8.
+   Con `s` menor a 12 se duplica la separación. Con movimiento reducido el titileo queda en un 35 % de su recorrido. En la misma pasada, cada 7 segmentos corre un **pulso de luz** tenue de la cabeza a la cola a 8 segmentos por segundo (glow `core` de radio `1,6 × r` y alpha `0,26 × (1 - t)`), y la **digestión** de 5.12.
+6. **Cabeza**: primero un glow `core` de radio `1,1·s` y alpha 0,55, el núcleo denso del gas; después una elipse centrada en `P_0 + dir × 0,08·s`, de radio 0,56·s a lo largo de la dirección y 0,48·s a lo ancho, rellena con el color de cabeza de la rampa; encima, otro glow `core` de radio `0,55·s` y alpha 0,4 en `P_0 + dir × 0,05·s`. Ojos: dos círculos en `P_0 + dir × 0,18·s ± normal × 0,22·s`, esclerótica de radio `0,12·s` en `#F6F3EE` y pupila de `0,07·s` en `#030307` desplazada `0,03·s` hacia adelante.
+
+**Polvo de la cola.** Cada criatura de 4 segmentos o más suelta motas finas desde uno de sus últimos 3 puntos: una cada 110 ms en Q2 y cada 220 ms en Q1, ninguna en Q0 ni con movimiento reducido. Cada mota (`Particles.emit`) sale corrida hasta medio radio, deriva hacia atrás a 4 a 12 px/s con hasta ±4,5 px/s de costado, vive de 700 a 1300 ms, mide de 0,35 a 0,7 px y termina en 0,15, con alpha 0,45 y `drag` 0,985; el 30 % es del color `core` y el resto `body`. Siempre es más chica y tenue que la comida. Si las partículas activas pasan del 60 % del tope, no se emite: el polvo no les quita lugar a los efectos.
 
 **Dirección visual**: `normalizar(P_0 - P_1)` si los dos están en el mismo tramo y a más de `0,2·s`; si no, `snake.direction`.
 
-**Nivel de detalle.** Con `s` menor a 12: ojos como dos puntos oscuros de 1 px y sin señuelo; los fotóforos se mantienen con la separación duplicada, porque son la segunda señal para distinguir jugadores. Con un solo segmento: solo cabeza y halo.
+**Nivel de detalle.** Con `s` menor a 12: ojos como dos puntos oscuros de 1 px; las estrellas internas se mantienen con la separación duplicada, porque son la segunda señal para distinguir jugadores. Con un solo segmento: solo cabeza y halo.
 
-**Serpientes con `gameover`**: no se dibujan (igual que hoy).
+**Serpientes con `gameover`**: no se dibujan.
 
 ### 5.5 Corte en portales
 
 Cuando una serpiente cruza un borde, dos puntos consecutivos quedan a más de media arena de distancia. El cuerpo se corta ahí: nunca se dibuja una línea que cruce la arena.
 
-- Al recorrer los puntos, si `|P_{i+1}.x - P_i.x| > 300` o `|P_{i+1}.y - P_i.y| > 300`, se cierra el tramo actual en `P_i` y se abre otro en `P_{i+1}`. Cada tramo se dibuja por separado en todas las pasadas (halo, cuerpo, filamento, fotóforos), y la ondulación usa solo vecinos del mismo tramo.
+- Al recorrer los puntos, si `|P_{i+1}.x - P_i.x| > W/2` (384) o `|P_{i+1}.y - P_i.y| > H/2` (216), se cierra el tramo actual en `P_i` y se abre otro en `P_{i+1}`, hasta 32 tramos. El halo y el cuerpo se dibujan por tramo, y la ondulación y las normales usan solo vecinos del mismo tramo. El gas y las estrellas internas son sprites por punto, así que nunca cruzan; los pulsos de luz y la digestión no interpolan a través de un corte.
 - `t` sigue siendo el índice global del segmento, para que el grosor y el color sean continuos de un lado al otro.
-- En cada extremo de tramo que toca un borde, se dibuja un sprite de glow del color `body` con alpha 0,35 sobre el borde (x o y fijada en 0 o 600), para que la criatura parezca atravesar una membrana.
+- En cada extremo de tramo que toca un borde, las tres capas del cuerpo siguen en línea recta, con extremo `'butt'`, hasta 2 px afuera del borde, y un glow `body` grande de radio `1,8·s` y alpha 0,35 se dibuja sobre el borde (x o y fijada en 0, W o H), para que la criatura parezca atravesarlo.
 - Esto se suma a la interpolación de `js/net/motion.js`, que lleva cada segmento por el lado corto de la arena: sale por un borde y, cuando su centro lo cruza, pasa al borde opuesto. Nunca viaja de un borde al otro por adentro.
 
 ### 5.6 Jugador propio y etiquetas
 
+La serpiente propia tiene señas que no dependen del color, y las demás llevan su nombre.
+
 - La serpiente con `id === state.myId` se dibuja última en cada pasada, con halo × 1,25.
-- **Sonar**: cada 2400 ms, un anillo `#E8FBFF` de 1,5 px crece de radio `0,8·s` a `2,2·s` alrededor de su cabeza con alpha de 0,35 a 0, en 900 ms. Es la forma de encontrarse sin depender del color.
-- **Etiqueta "Tú"** en `--bio-lime` sobre la cabeza propia durante los primeros 2500 ms de la partida; después, la propia no lleva etiqueta.
-- **Etiquetas de otros**: el nombre sobre la cabeza, centrado en `P_0.y - (0,9·s + 8)`; si queda a menos de 16 px del borde superior, va debajo. Alpha 0,8. Tamaño lógico `max(11, 10 / escala)` para que nunca baje de 10 px CSS. Recursive 600.
-- **Espectador** (`state.spectating`): no hay serpiente propia; ninguna lleva "Tú" ni sonar.
-- **Corona**: la serpiente de `state.leaderId` (la más larga, decidida por el servidor: `gameState.leaderId`, `docs/GAMEPLAY_SPEC.md`) lleva una corona de luz justo encima de la cabeza, siempre derecha en la pantalla y debajo de la etiqueta: base de `1,4·s` de ancho a `0,75·s` sobre el centro de la cabeza, tres puntas (las de los lados a `0,42·s`, la del medio a `0,62·s`), relleno `rgba(255, 224, 138, 0.28)` y trazo `#FFE08A` de 1,4 px, una perla de radio `0,22·s` en cada punta y un glow dorado de radio `1,3·s`. Sube y baja ±0,6 px. Se dibuja con la partida en curso y durante el congelado final; en el modo atracción, no.
+- **Pulso**: cada 2400 ms (contados desde 600 ms después del inicio de la partida), un anillo `#F6F3EE` de 1,5 px crece de radio `0,8·s` a `2,2·s` con `easeOutCubic` alrededor de su cabeza, con alpha de 0,35 a 0, en 900 ms. Es la forma de encontrarse sin depender del color. También corre en la arena de espera.
+- **Etiqueta "Tú"** en `#EAC255` (el token `--bio-lime`), Recursive 700 a 1,08 veces el tamaño de etiqueta, sobre la cabeza propia durante los primeros 2500 ms de la partida (entra en 200 ms y se va entre los 2100 y los 2500 ms) y durante el congelamiento final si ganó. El resto del tiempo, la propia no lleva etiqueta.
+- **Etiquetas de otros**: el nombre sobre la cabeza, centrado en `P_0.y - (0,9·s + 8)`; si queda a menos de 16 px del borde superior, va debajo. Nunca se sale de la arena por los costados. Alpha `0,8 × (0,4 + 0,6 × atenuado)`; la del ganador, 1. Tamaño lógico `max(11, 10 / escala)` para que nunca baje de 10 px CSS. Recursive 600.
+- **Desolapado**: cada etiqueta dibujada reserva su rectángulo, con 2 px de margen. Si la siguiente lo pisa, prueba del otro lado de la cabeza; si tampoco entra, se omite en ese frame. Se dibujan en orden de prioridad (propia, ganador, las más largas), así las que se omiten son las menos relevantes.
+- **Espectador** (`state.spectating`): no hay serpiente propia; ninguna lleva "Tú" ni pulso.
+- **Corona**: la serpiente de `state.leaderId` (la más larga, decidida por el servidor: `gameState.leaderId`, `docs/GAMEPLAY_SPEC.md`) lleva una corona de luz justo encima de la cabeza, siempre derecha en la pantalla y debajo de la etiqueta: base de `1,4·s` de ancho a `0,75·s` sobre el centro de la cabeza, tres puntas (las de los lados a `0,42·s`, la del medio a `0,62·s`), relleno `rgba(255, 224, 138, 0.28)` y trazo `#FFE08A` de 1,4 px con alpha 0,95, una estrellita de 4 puntas `#FFE08A` de radio `0,42·s` en cada punta y un glow dorado de radio `1,3·s` con alpha 0,55. Sube y baja ±0,6 px. Se dibuja con la partida en curso y durante el congelado final; en el modo atracción, no.
 
 ### 5.7 Inmunidad
 
-La inmunidad se ve como una medusa que envuelve la cabeza. Está activa si `snake.activeConsumable` existe y su `type` es `'immunity'` (el servidor lo anula al vencer, `snakeClass.js:247-257`). `endTime` se usa solo para el aviso de vencimiento, porque puede haber desfase de reloj entre servidor y cliente.
+La inmunidad se ve como una magnetosfera: un arco de choque delante de la cabeza, violeta afuera y verde oxígeno adentro, con brillo de aurora que ondula, y un velo tenue sobre todo el cuerpo. Está activa si existe `snake.effects.immunity`, la hora del servidor en que vence (el servidor solo manda los efectos activos). Ese valor se usa solo para el aviso de vencimiento, comparado con `Date.now()`, porque puede haber desfase entre los relojes del servidor y del cliente.
 
-- **Campana**: media elipse orientada hacia la dirección de avance sobre la cabeza, radio `0,95·s`, relleno `#9FF4FF` con alpha 0,18, borde de 1,5 px `#E8FBFF` con alpha 0,7. Late a 1,6 Hz: escala horizontal `1 + 0,08 × sin` y vertical `1 - 0,08 × sin`.
-- **Membrana del cuerpo**: un trazo por tramo de ancho `2r + 0,5·s`, `#9FF4FF` con alpha 0,10 en `'lighter'`, que late ±0,05 con la campana.
-- **Aviso de vencimiento**: cuando faltan menos de 1500 ms según `endTime`, la campana parpadea a 4 Hz entre alpha 1 y 0,25.
-- **Al activarse** (`onConsumablePicked`): la campana se infla de escala 0 a 1 en 360 ms con `easeOutBack`. **Al bloquear** (`onBlock`): la campana crece a 1,35 y se desvanece en 280 ms.
+- **Arco**: 12 tramos que cubren ±1,3 rad alrededor del rumbo, centrados en `P_0 + dir × 0,12·s`, de radio `0,8·s` que crece hacia los costados (`× (1 + 0,3θ²)`), así el arco se abre hacia atrás como una onda de choque. Dos capas en `'lighter'`: afuera `#D9CFFF` de 1,5 px con alpha 0,8; adentro, al 80 % del radio, `#A8EADF` de 1,1 px con alpha 0,45. Cada tramo es más ancho y claro al frente que en las puntas (alpha y grosor por `1 - |2u - 1|`), ondula ±0,05·s y titila entre el 72 y el 100 %, como una cortina.
+- **Brillo**: un glow `#C7B8FF` (`--bio-shield`) de radio `1,5·s` y alpha 0,38, `0,6·s` delante de la cabeza, y cinco manchas blandas sobre el arco, violeta `#BDAEFF` y verde `#A8EADF` alternadas, de radio `0,5·s` ± 20 % y alpha `0,32 - 0,12 × |θ|`.
+- **Velo del cuerpo**: a lo largo de todo el cuerpo, cada 2 puntos (cada 3 en Q1 y Q0, con alpha × 1,3), manchas violetas y verdes alternadas de radio `2,6 × r(t) + 0,3·s` y alpha `0,2 × (0,6 + 0,4 × sin(now × 0,004 - i × 0,6)) × (1 - 0,4t)`: una onda de brillo que corre hacia la cola. Dice que todo el cuerpo está protegido; la seña fuerte es el arco.
+- **Aviso de vencimiento**: cuando faltan menos de 1500 ms, el arco y el velo parpadean a 4 Hz entre alpha 1 y 0,25.
+- **Al activarse** (`onConsumablePicked`, o cuando el efecto aparece en el estado si el evento no llegó): el arco se infla de escala 0 a 1 en 360 ms con `easeOutBack`. **Al bloquear** (`onBlock`): el arco estalla, se abre hacia adelante hasta escala 1,7 con `easeOutCubic`, con el trazo a la mitad, y se apaga en 320 ms.
+- Con movimiento reducido el arco no ondula ni titila.
 
 ### 5.8 Comida
 
-La comida es plancton: un orbe que late, de tamaño y brillo según su valor (1 a 5). El valor siempre se puede leer por la cantidad de satélites que orbitan; el dígito se agrega cuando hay espacio. Los tamaños están en px de la arena (600) y no dependen de la celda: con celdas de 12 px, un orbe proporcional quedaba del tamaño de un copo de nieve marina. Los colores van de verde menta a ámbar y evitan el celeste, que es de la nieve y del escudo.
+La comida son planetas chicos, de tamaño y color según su valor (1 a 5). El valor siempre se puede leer por la cantidad de lunas que orbitan; el dígito se agrega cuando hay espacio. Los radios están en px de la arena y no dependen de la celda, para que la comida se lea a cualquier escala. Los colores van de verde a ámbar y evitan el violeta del escudo.
 
-| Valor | Radio del orbe | Color | Satélites |
+| Valor | Radio del planeta | Color | Lunas y superficie |
 |---|---|---|---|
-| 1 | 4,0 px | `#7CFFB2` | 1 |
-| 2 | 4,4 px | `#B8FF5A` | 2 |
-| 3 | 4,8 px | `#E8F24A` | 3 |
-| 4 | 5,2 px | `#FFD447` | 4 |
-| 5 | 5,6 px | `#FFA347` | 5, más un anillo exterior |
+| 1 | 4,0 px | `#8FE3B4` | 1, rocoso |
+| 2 | 4,4 px | `#BEE07A` | 2, rocoso |
+| 3 | 4,8 px | `#E6DC6A` | 3, gaseoso |
+| 4 | 5,2 px | `#F2C35A` | 4, gaseoso |
+| 5 | 5,6 px | `#EE9A52` | 5, gaseoso con anillo |
 
-- Orbe: sprite de glow del color con radio `1,9 × r × (1 + 0,1 × valor)` en `'lighter'`, y encima un disco de radio `r` con degradado radial de `#E8FBFF` en el centro al color en el borde, rodeado por un contorno oscuro (`rgba(2, 19, 28, 0.85)`, 1,3 px). El contorno es lo que lo separa del glow y lo hace leer como objeto: la nieve marina nunca lo tiene.
-- Respiración: escala `1 ± 0,06` a 0,8 Hz y vaivén vertical de `±0,06·s`, con fase propia derivada de la posición: `((x × 73856093) ^ (y × 19349663)) & 1023`, normalizado a 0 a 2π. Sin números al azar por frame.
-- Satélites: puntos de radio `0,06·s` (mínimo 1 px) que orbitan a `1,6r + 1,5` a 1,6 rad/s, espaciados de forma pareja.
-- Dígito: si `1,15·r × escala ≥ 7` px CSS, el valor en Recursive MONO 700 de tamaño `1,15·r`, color `#02131C` sobre el centro del orbe.
+- **Planeta** (sprite de 5.3): contorno oscuro `rgba(10, 9, 16, 0.88)` de 1,3 px alrededor del disco, que lo separa de su halo y de las estrellas (ninguna estrella lo tiene); disco del color plano; superficie en el color mezclado un 35 % con la noche `#09080F`, alpha 0,45: los rocosos con dos manchas (de radio `0,26r` y `0,18r`), los gaseosos con tres bandas apenas inclinadas (-0,22 rad). Encima, la sombra con terminador suave: un degradado radial desde la luz, arriba a la izquierda en `(-0,45r, -0,45r)`, de radio `1,95r`, que pasa de transparente a alpha 0,5 en 0,68, 0,86 en 0,82 y 0,95 en el borde. Un brillo `rgba(246,243,238,0.6)` de radio `0,85r` en el punto de luz y un borde de atmósfera del lado iluminado (arco de 0,8π a 1,7π) en el color mezclado un 45 % con `#F6F3EE`, alpha 0,5.
+- **Anillo del 5**: elipse inclinada -0,42 rad, de radios `2,05r` y `0,6r`, en el color mezclado un 30 % con `#F6F3EE`, con un anillo interior al 80 %. La mitad de atrás va debajo del planeta, más apagada (alpha 0,5 y 0,3); la de adelante va encima, con un contorno oscuro de 2,6 px y alpha 0,95 y 0,55.
+- **Halo**: sprite de glow del color con radio `1,9 × r × (1 + 0,1 × valor)` y alpha 0,8, en `'lighter'`.
+- **Lunas**: discos nítidos `#E9E3D8` que orbitan en una elipse de radio `1,7r + 1,6` px achatada al 60 % e inclinada `0,38 + 0,3 × sin(3 × fase)` rad (cada planeta tiene la suya), a 1,1 rad/s, espaciadas de forma pareja. Las de la mitad de adelante de la órbita miden 1,1 px de radio y llevan un glow `#F6F3EE` de radio 2,9 px con alpha 0,45; las de atrás miden 0,85 px, van al 60 % y se dibujan antes que el planeta, que las tapa. Con movimiento reducido quedan quietas.
+- **Quietos**: los planetas no laten ni flotan; lo único que se mueve son las lunas. La fase de cada planeta sale de su posición: `((x × 73856093) ^ (y × 19349663)) & 1023`, normalizado a 0 a 2π. Sin números al azar por frame.
+- **Dígito**: si `1,15·r × escala ≥ 7` px CSS, el valor en Recursive 700 de tamaño `1,15·r`, color `#0A0910`, horneado sobre el centro del planeta.
+- **Orden de dibujo**: primero, en `'lighter'`, los halos y los glows de las lunas de adelante de todos los planetas; después, en `'source-over'` y por planeta, las lunas de atrás, el planeta y las lunas de adelante.
 - **Restos** (comida con `remains`, ver `docs/MOTION_SPEC.md`): se dibujan igual que la comida de su valor y aparecen con el mismo crecimiento de 450 ms. En sus últimos 2 s se desvanecen: `fade = (expiresAt - rt) / 2000`, con `rt` la hora del servidor del instante dibujado, que `SnakeGame.js` calcula al aplicar cada muestra de la línea de tiempo.
 
 ### 5.9 Consumibles
 
-Hay tres consumibles: escudo, boca grande y abanico (`docs/GAMEPLAY_SPEC.md`). Cada uno tiene su silueta y su color, de tamaño fijo en px de la arena, y los tres comparten el anillo de sonar en su color: es la seña de que algo se puede tomar. Los colores (`CONS_LOOK` en `arena.js`) son violeta `#B9A6FF` para el escudo, rosa `#FF8FD0` para la boca grande y coral `#FF7A59` para el abanico. Ninguno es redondo como la comida.
+Hay tres consumibles: escudo, boca grande y abanico (`docs/GAMEPLAY_SPEC.md`). Cada uno tiene su silueta y su color, de tamaño fijo en px de la arena, y los tres comparten el pulso de baliza en su color: es la seña de que algo se puede tomar. No flotan: quedan quietos donde aparecieron. Los colores salen de `CONS_LOOK` en `arena.js`:
 
-**Escudo.** Una medusa que flota en su celda, de tamaño fijo en px de la arena y violeta, para que no se confunda con la comida ni con la nieve. Campana de 15 px de ancho y 9 px de alto con degradado de `#D9CCFF` a `#9C82FF` (alpha 0,75) y borde `#F3EEFF` al 90 %; tres tentáculos `#D6CCFF` de 1,2 px como curvas cuadráticas de 8 px que se mecen con `sin(now × 0,004 + k)`; núcleo perla de radio 4 px. Glow `#B9A6FF` de radio 20 px con alpha 0,5 que late a 0,7 Hz, y un glow `#9FF4FF` de radio 12 px con alpha 0,35. La campana late a 1,4 Hz y la medusa sube y baja ±1,2 px.
+| Tipo | Baliza | Anillo al tomarlo | Partículas claras |
+|---|---|---|---|
+| Escudo | `#BDAEFF` | `#C7B8FF` | `#E4DDFF` |
+| Boca grande | `#F29BC9` | `#F29BC9` | `#FFD6EC` |
+| Abanico | `#F0875F` | `#F0875F` | `#FFE3D9` |
 
-- **Sonar**: cada 2000 ms (con fase propia), un anillo de 1,5 px en el color del consumible se abre de radio 9 a 26 px con `easeOutCubic` mientras su alpha baja de 0,6 a 0 (al cuadrado). Es lo que lo hace visible de lejos. Se distingue del sonar de la cabeza propia por el color y porque el consumible no se mueve.
-- Puesta, la inmunidad sigue siendo la campana celeste de 5.7 sobre la cabeza.
+**Baliza.** Cada 2000 ms (con fase propia), un anillo de 1,5 px en el color de la baliza se abre de radio 9 a 26 px con `easeOutCubic` mientras su alpha baja de 0,5 a 0 (al cuadrado), en `'lighter'`. Es lo que lo hace visible de lejos. Se distingue del pulso de la cabeza propia por el color y porque el consumible no se mueve.
 
-**Boca grande.** Una anémona rosa: ocho tentáculos `#FF8FD0` de 1,4 px con punta redondeada, curvas cuadráticas que van del radio 3 al 8,5 px y se mecen ±0,14 rad (±0,22 en la punta, así no se cruzan), con una perla `#FFD6EC` de radio 1,1 px en cada punta. En el centro, una boca de radio 2,6 px (`rgba(58, 8, 40, 0.9)` con borde `#FFD6EC` de 1,2 px) que se abre y se cierra ±12 % con el latido de 1,4 Hz. Glow rosa de radio 18 px con alpha 0,5. Mientras está activa, un anillo punteado `#FF8FD0` (3 px de trazo y 4 de hueco, que gira despacio) marca el alcance alrededor de la cabeza: radio `bigMouthReach × s`, alpha 0,34 ± 0,08, en `'lighter'`.
+**Escudo.** Una aurora, más ancha que alta: un velo de 13 rayos finos colgados de una cinta que ondula en S. Glow `#BDAEFF` de radio 18 px con alpha 0,45. Los rayos (sprite de 5.3) se reparten en ±10,5 px, miden 2,6 px de ancho y hasta 10 px de alto, más altos al centro, y cada uno cambia de alto entre el 56 y el 100 % con su propia fase. Su base sigue la cinta, `cy + 3,2 - 1,6·x0 + 2,6 × sin(4,6u + now × 0,0015)` (con `x0` de -1 a 1 y `u` de 0 a 1), que se desliza despacio. Cada rayo va del borde claro verde oxígeno de abajo (`rgba(206,242,234,0.95)`) al violeta (`rgba(199,184,255,0.75)` al 22 %) y se apaga hacia arriba; alpha 0,85, en `'lighter'`. Puesta, la inmunidad es la magnetosfera de 5.7.
 
-**Abanico.** Una estrella de mar coral de cinco brazos (radio exterior 8,5 px, interior 3,6 px) que gira a 0,4 rad/s: relleno `#FF7A59` al 90 %, borde `#FFD2C4` de 1,2 px con uniones redondeadas, dos poros `#FFE3D9` de radio 0,8 px por brazo y un núcleo perla de radio 3 px. Glow coral de radio 18 px con alpha 0,5.
+**Boca grande.** Un agujero negro visto de frente: disco de acreción rosa con brazos en espiral que giran y caen hacia el centro (atrae la comida), horizonte negro y un anillo de fotones fino y claro. Glow `#F29BC9` de radio 17 px con alpha 0,42. Disco: trazo `#F29BC9` de 4,4 px a radio 6 px, con alpha 0,32. Brazos: tres espirales de 9 tramos de 1,2 px que van del radio 9,8 al 4 px mientras avanzan 2,4 rad, cada tramo más claro hacia adentro (alpha `0,9 × u`, en `#FFD6EC` desde `u` = 0,55 y en `#F29BC9` antes), que giran a 1,9 rad/s. Horizonte: disco `#030307` de radio 3,4 px. Anillo de fotones: `#FFE3F0` de 0,9 px a radio 3,85 px, con alpha 0,85. Va de frente, y no de canto, para que no se confunda con el planeta anillado del valor 5.
+
+- **Alcance activo**: mientras dura el efecto, un anillo `#F29BC9` de 1 px y alpha 0,18 marca el alcance alrededor de la cabeza (radio `bigMouthReach × s`, 30,6 px con los valores de hoy), y 14 motas de polvo rosa (glow `#F29BC9` de radio `max(1,6, 0,2·s)`) caen en espiral desde ese borde hacia la boca: cada una baja del radio completo al 40 % en unos 2,2 s mientras gira, con alpha `0,8 × (1 - u)` (`u` de 0 en el borde a 1 en la boca) que entra en el primer 12 % del recorrido. Se dibuja junto con los halos, en `'lighter'`.
+
+**Abanico.** Una estrella triple coral: tres soles de distinto tamaño que giran despacio alrededor de su centro común, sobre una órbita apenas marcada. Glow `#F0875F` de radio 16 px con alpha 0,42; órbita `#F0875F` de 1 px a radio 5,4 px, con alpha 0,18; tres estrellas de 4 puntas `#F0875F` a 120° entre sí, de radio 7,5, 5,5 y 4,7 px (alpha 0,95), cada una con un núcleo de luz `#F6F3EE` de radio 2,8, 2 y 1,7 px (alpha 0,9). Giran a 0,9 rad/s.
+
+Con movimiento reducido, los tres quedan quietos; la baliza sigue.
 
 ### 5.10 Proyectiles
 
@@ -1016,71 +1095,73 @@ Pulso de luz con estela. Posición: `x, y` que `Motion.projectileAt` (`js/net/mo
 
 ### 5.11 Apariciones
 
-El servidor no avisa cuando aparece comida o un consumible, así que la arena lo detecta. Cuando `state.foods` cambia de referencia (el integrador reemplaza el array en cada frame del servidor), se compara contra el conjunto anterior con claves numéricas `x × 1000 + y` (sin strings). Lo nuevo entra con escala 0 a 1 en 450 ms con `easeOutBack` y un anillo que crece de `0,3·s` a `1,4·s` en 360 ms. Los consumibles se comparan por `id`. La primera vez que llega un estado (inicio de la partida o entrada como espectador) no hay animación de aparición.
+El servidor no avisa cuando aparece comida o un consumible, así que la arena lo detecta. Cuando `state.foods` cambia de referencia (el integrador reemplaza el array en cada frame del servidor), se compara contra el conjunto anterior con claves numéricas `x × 1000 + y` (sin strings). Lo nuevo entra con escala 0 a 1 en 450 ms con `easeOutBack` y un anillo del color de su valor que crece de `0,3·s` a `1,4·s` en 360 ms, con alpha 0,7. Los consumibles se comparan por `id`: entran con la misma escala y un anillo `#C7B8FF` de `0,3·s` a `1,8·s` en 420 ms. La primera vez que llega un estado (inicio de la partida o entrada como espectador) no hay animación de aparición.
 
 ### 5.12 Catálogo de efectos por evento
 
-INTEGRADOR llama al hook correspondiente por cada elemento de los arrays de `gameLogicFrame` (sección 9), **antes** de aplicar las posiciones nuevas a las serpientes. La arena guarda una referencia al último `state` recibido para ubicar serpientes por id.
+INTEGRADOR llama al hook correspondiente por cada elemento de los arrays de `gameLogicFrame` (sección 9) cuando el render alcanza ese frame, **antes** de aplicar las posiciones nuevas a las serpientes. La arena guarda una referencia al último `state` recibido para ubicar serpientes por id.
 
-Valores de partículas: `count` es la cantidad; `speed` en px/s; `life` en ms; `size` en px de radio para `s` igual a 20 (Arena lo multiplica por `s / 20` antes de llamar a `burst`); `gravity` en px/s² (negativa = sube, como flotación); `drag` es la fracción de velocidad que se conserva cada 1/60 s. "Si soy yo" significa `e.targetId`, `e.playerId` o `e.attackerId === state.myId`, según el caso. Las cantidades bajan al 50 % con movimiento reducido.
+Valores de partículas: `count` es la cantidad; `speed` en px/s; `life` en ms; `size` en px de radio para `s` igual a 20 (Arena lo multiplica por `s / 20` antes de llamar a `burst`); `drag` es la fracción de velocidad que se conserva cada 1/60 s. Todas las ráfagas de la arena usan `gravity` 0: en el vacío nada sube ni se hunde. Los anillos crecen con `easeOutCubic` mientras su alpha baja a 0, y los textos flotantes entran en el primer 15 % de su vida y se apagan desde el 55 %. "Si soy yo" significa `e.targetId`, `e.playerId` o `e.attackerId === state.myId`, según el caso. Las cantidades bajan al 50 % con movimiento reducido.
 
-- **Comer** (`onFoodEaten`, `foodEvents`). Centro de la celda. Ráfaga: `count` = 6 + 4 × valor, color de la comida (tabla 5.8), `speed` [30, 70 + 20 × valor], `life` [380, 700], `size` [1,2, 2,4], forma `dot`, `gravity` -10, `drag` 0,9. Anillo del mismo color de `0,4·s` a `1,8·s` en 320 ms con alpha 0,7. **Peristalsis**: un bulto luminoso (radio + 25 %, color `core`) recorre el cuerpo del que comió de la cabeza a la cola a 22 segmentos por segundo (máximo 3 a la vez por serpiente). Si soy yo: texto flotante "+{valor}" en el color de la comida, Recursive MONO 700, que sube 18 px y se desvanece en 700 ms. **Con la boca grande**, si la comida estaba a más de `1,2·s` de la cabeza (y a menos de `4·s`, para no cruzar un portal), una estela la lleva hasta la boca en 170 ms: un trazo del color de la comida de 2 px a 1 px y una perla de radio `0,9·s` que acelera (`t²`) hacia la cabeza, que sigue moviéndose.
-- **Impacto en el cuerpo** (`onHit`, `headshot` falso). En la celda del impacto. Fragmentos: `count` = min(48, 10 + 5 × `segmentsLost`), repartidos 60 % forma `spark` y 40 % `dot`, color `body` de la víctima, `speed` [60, 200], `life` [500, 1000], `size` [1,5, 3,2], `gravity` -20, `drag` 0,9. Chispa del atacante: 6 `spark` del color `body` del atacante, `speed` [80, 160], `life` [250, 400]. Destello: sprite `#E8FBFF` de radio `2,5·s` con alpha de 0,5 a 0 en 160 ms. **Cola desprendida**: los últimos `segmentsLost` puntos de render de la víctima (copiados en el hook, antes de que lleguen las posiciones nuevas) siguen dibujándose como cuerpo atenuado que deriva al azar (±10 px/s), se hunde a 8 px/s y se apaga en 900 ms. Texto flotante "-{segmentsLost}" (con signo menos tipográfico U+2212) en el color `text` de la víctima, siempre. Sacudida: si soy la víctima, 7 px durante 280 ms y `Backdrop.pulse('#FF4D6D', 0.25)`; si soy el atacante, 2,5 px durante 120 ms.
-- **Impacto en la cabeza** (`onHit`, `headshot` verdadero). Todo lo anterior con 12 fragmentos más, destello con alpha 0,7 y dos anillos (el segundo 90 ms después). **Nube de tinta**: 10 partículas de forma `ink`, color `deep` de la víctima, `size` [6, 14], `speed` [10, 40], `life` [1200, 1800], `drag` 0,95, `gravity` 0, alpha máximo 0,45, en `'source-over'`. Sobre el número flotante, la palabra "cabeza" en 11 px lógicos (con el mínimo de 10 px CSS). Sacudida: víctima 10 px durante 360 ms; atacante 4 px durante 160 ms.
-- **Bloqueo** (`onBlock`). En la celda del bloqueo. Burbujas: 14 de forma `bubble`, `#9FF4FF`, `speed` [40, 120], `life` [500, 900], `size` [1,5, 3,5], `gravity` -40, `drag` 0,9. Dos anillos `#9FF4FF` (el segundo 80 ms después). La campana del jugador estalla (5.7). Si soy el jugador o el atacante: texto flotante "Bloqueado" en `#9FF4FF`. Si soy el jugador: sacudida de 3 px durante 140 ms y `Backdrop.pulse('#9FF4FF', 0.15)`.
-- **Portal** (`onPortal`, con `fromX`, `fromY`, `toX`, `toY`). En los dos puntos de cruce sobre el borde: onda en media elipse aplastada contra el borde (radio `1,6·s` a lo largo del borde y `0,5·s` hacia adentro) del color `body`, alpha 0,6, 420 ms; 6 partículas `dot` por lado que se alejan del borde hacia adentro; la membrana del borde se enciende (5.2). Sin sacudida.
-- **Disparo** (`onProjectileFired`). En el punto de salida: 6 `spark` en cono (dirección del disparo, apertura 0,9 rad), color `body` del tirador, `speed` [80, 180], `life` [180, 320]. **Costo visible**: en la punta de la cola del tirador (último punto de render), una gota de luz de radio `0,35·s` se desprende, se hunde y se apaga en 500 ms, con 4 partículas chicas. La cabeza del tirador retrocede `0,15·s` durante 90 ms (solo visual). Si soy el tirador: sacudida de 1,5 px durante 80 ms. **Abanico**: los dos disparos laterales llegan con `spread: true` y solo hacen el cono de chispas de salida; la gota de la cola, el retroceso y la sacudida salen una vez, con el disparo central, porque la ráfaga cuesta un solo segmento.
-- **Proyectil expirado** (`onProjectileExpired`, **extensión**, `expiredProjectiles`). En la última celda dentro de la arena: 7 `dot` del color del proyectil (la arena recuerda el color por id; si no lo encuentra, `#4FD8FF`), `speed` [20, 60], `life` [300, 500]; anillo de `0,3·s` a `1·s` en 240 ms; la membrana del borde parpadea en ese punto.
-- **Consumible recogido** (`onConsumablePicked`, con `x`, `y`, `consumableType`). Anillo de `0,5·s` a `2,4·s` en 420 ms; 18 `dot` mitad en el color claro y mitad en el del sonar, `speed` [40, 120], `life` [500, 900], `gravity` -30. Colores por tipo: escudo `#9FF4FF` (anillo), `#C9F8FF` y `#B9A6FF`; boca grande `#FF8FD0`, `#FFD6EC` y `#FF8FD0`; abanico `#FF7A59`, `#FFE3D9` y `#FF7A59`. Solo el escudo infla la campana del jugador (5.7). Si soy yo: `Backdrop.pulse` con el color del anillo y alpha 0,2 (el toast lo pone INTEGRADOR, con un texto por tipo).
-- **Inicio de la partida** (`onRoundStart`; el nombre viene de cuando había rondas). Ola: un anillo desde el centro que crece de radio 0 a 450 en 800 ms con `easeOutExpo`, `lineWidth` de 40 a 2, turquesa con alpha 0,25 en `'lighter'`. Los halos de todas las serpientes se multiplican por 1,6 y vuelven a 1 en 600 ms. Serpiente propia: tres anillos de sonar seguidos (0, 200 y 400 ms), de `0,5·s` a `4·s` en 700 ms cada uno, y la etiqueta "Tú" (5.6). Se descartan las colas desprendidas y estelas de la partida anterior.
+- **Comer** (`onFoodEaten`, `foodEvents`). Centro de la celda. Ráfaga: `count` = 6 + 4 × valor, color de la comida (tabla 5.8), `speed` [30, 70 + 20 × valor], `life` [380, 700], `size` [1,2, 2,4], forma `dot`, `drag` 0,9. Anillo del mismo color de `0,4·s` a `1,8·s` en 320 ms con alpha 0,7. **Digestión**: un bulto de luz recorre el cuerpo del que comió de la cabeza a la cola a 22 segmentos por segundo (máximo 3 a la vez por serpiente): un glow `core` de radio `2,75 × r` con alpha 0,55 y un glow `body` de radio `3,75 × r` con alpha 0,35, que se apagan en el último 20 % del cuerpo. Si soy yo: texto flotante "+{valor}" en el color de la comida, Recursive 700 a 1,15 veces el tamaño de etiqueta, que sube 18 px y se desvanece en 700 ms. **Con la boca grande**, si la comida estaba a más de `1,2·s` de la cabeza (y a menos de `4·s`, para no cruzar un portal), una estela la lleva hasta la boca en 170 ms: un trazo del color de la comida de 2 px a 1 px y una perla de luz `#F6F3EE` de radio `0,9·s` que acelera (`t²`) hacia la cabeza, que sigue moviéndose.
+- **Impacto en el cuerpo** (`onHit`, `headshot` falso). En la celda del impacto. Fragmentos: `count` = min(48, 10 + 5 × `segmentsLost`), repartidos 60 % forma `spark` y 40 % `dot`, color `body` de la víctima, `speed` [60, 200], `life` [500, 1000], `size` [1,5, 3,2], `drag` 0,9. Chispa del atacante: 6 `spark` del color `body` del atacante, `speed` [80, 160], `life` [250, 400], `size` [1,2, 2,2]. Destello: sprite `#F6F3EE` de radio `2,5·s` con alpha de 0,5 a 0 en 160 ms. **Cola desprendida**: los últimos `segmentsLost` puntos de render de la víctima (copiados en el hook, antes de que lleguen las posiciones nuevas, hasta el primer corte de portal) siguen dibujándose como gas apagado (glow `body` cada 2 puntos con alpha 0,18, trazo `deep` con alpha 0,6 y una línea `body` fina con alpha 0,5), derivan hacia un lado al azar (hasta ±10 px/s en cada eje, sin hundirse) y se apagan en 900 ms. El gas del pedazo se deshace en polvo: 2 partículas `dot` cada 2 puntos, alternando `core` y `body`, `speed` [6, 28], `life` [600, 1200], `size` [0,6, 1,3], alpha 0,6, `drag` 0,97. Texto flotante con el signo menos tipográfico (U+2212) y `segmentsLost`, en el color `text` de la víctima, a 1,2 veces el tamaño de etiqueta, que sube 22 px en 900 ms, siempre. Sacudida: si soy la víctima, 7 px durante 280 ms y `Backdrop.pulse('#EC4F5A', 0.25)`; si soy el atacante, 2,5 px durante 120 ms.
+- **Impacto sin daño** (`onHit` con `segmentsLost` en 0: un disparo en la cabeza de una serpiente de un segmento). Las ráfagas y el destello salen igual, pero no hay cola desprendida ni número: el texto flotante dice "Sin daño" (800 ms). Si soy la víctima, sacudida de 3 px durante 140 ms.
+- **Impacto en la cabeza** (`onHit`, `headshot` verdadero). Todo lo anterior con 12 fragmentos más, destello con alpha 0,7 y dos anillos: uno `body` de la víctima de `0,4·s` a `2,2·s` en 420 ms (alpha 0,8, 2 px) y otro `#F6F3EE` de `0,4·s` a `3·s` en 480 ms (alpha 0,5), 90 ms después. **Polvo oscuro**: 12 partículas de forma `ink` (el nombre de la forma es heredado; hoy dibuja polvo), color `#1C1410`, `size` [5, 10] que se abre hasta [9, 17], `speed` [8, 34], `life` [1300, 2000], `drag` 0,96, alpha 0,55, en `'source-over'`; con 8 motas `dot` de polvo cálido `#8A5A3C`, `speed` [10, 50], `life` [900, 1500], `size` [0,8, 1,6], alpha 0,5, `drag` 0,95. Sobre el número flotante, la palabra "cabeza" en el tamaño de etiqueta (con el mínimo de 10 px CSS). Sacudida: víctima 10 px durante 360 ms; atacante 4 px durante 160 ms.
+- **Bloqueo** (`onBlock`). En la celda del bloqueo. Chispas de aurora: 10 `spark` `#C7B8FF`, `speed` [50, 150], `life` [450, 850], `size` [1,3, 2,8], y 6 `spark` `#A8EADF` (verde oxígeno), `speed` [40, 120], `life` [400, 750], `size` [1,1, 2,4], todas con `drag` 0,9. Dos anillos `#C7B8FF`: de `0,4·s` a `2·s` en 380 ms (alpha 0,8) y de `0,4·s` a `2,8·s` en 420 ms (alpha 0,5), 80 ms después. La magnetosfera del jugador estalla (5.7). Si soy el jugador o el atacante: texto flotante "Bloqueado" en `#C7B8FF` (900 ms). Si soy el jugador: sacudida de 3 px durante 140 ms y `Backdrop.pulse('#C7B8FF', 0.15)`.
+- **Portal** (`onPortal`, con `fromX`, `fromY`, `toX`, `toY`). En los dos puntos de cruce sobre el borde: onda en media elipse aplastada contra el borde (radio `1,6·s` a lo largo del borde y `0,5·s` hacia adentro, que se abre con `easeOutExpo`) del color `body`, trazo de 2 px con alpha 0,6 y glow con alpha 0,3, en 420 ms; 6 partículas `dot` por lado que se alejan del borde hacia adentro (apertura 1,6 rad, `speed` [30, 90], `life` [350, 650]); el borde se enciende (5.2). Sin sacudida.
+- **Disparo** (`onProjectileFired`). En el punto de salida: 6 `spark` en cono (dirección del disparo, apertura 0,9 rad), color `body` del tirador, `speed` [80, 180], `life` [180, 320], `drag` 0,88. **Costo visible**: en la punta de la cola del tirador (último punto de render), el segmento gastado se va en una bocanada de gas que se abre un 60 % y se apaga donde quedó en 500 ms (glow `core` de radio `0,84·s` con alpha 0,9 y glow `body` de radio `1,4·s` con alpha 0,6, al empezar), con 4 partículas chicas `body` (`speed` [10, 40], `life` [300, 500]). La cabeza del tirador retrocede `0,15·s` durante 90 ms (solo visual). Si soy el tirador: sacudida de 1,5 px durante 80 ms. **Abanico**: los dos disparos laterales llegan con `spread: true` y solo hacen el cono de chispas de salida; la bocanada de la cola, el retroceso y la sacudida salen una vez, con el disparo central, porque la ráfaga cuesta un solo segmento.
+- **Proyectil expirado** (`onProjectileExpired`, **extensión**, `expiredProjectiles`). En la última celda dentro de la arena: 7 `dot` del color del proyectil (la arena recuerda el color por id; si no lo encuentra, `#8FB2FF`), `speed` [20, 60], `life` [300, 500]; anillo de `0,3·s` a `1·s` en 240 ms; si quedó a menos de `2·s` de un borde, ese borde se enciende en ese punto durante 360 ms con alpha 0,7.
+- **Consumible recogido** (`onConsumablePicked`, con `x`, `y`, `consumableType`). Anillo del color de "anillo al tomarlo" (tabla 5.9) de `0,5·s` a `2,4·s` en 420 ms, con alpha 0,8 y 1,8 px; 18 `dot`, mitad en el color de las partículas claras y mitad en el de la baliza, `speed` [40, 120], `life` [500, 900], `size` [1,2, 2,6], `drag` 0,92. Solo el escudo infla la magnetosfera del jugador (5.7). Si soy yo: `Backdrop.pulse` con el color del anillo y alpha 0,2 (el toast lo pone INTEGRADOR, con un texto por tipo).
+- **Inicio de la partida** (`onRoundStart`; el nombre viene de cuando había rondas). Ola: un anillo desde el centro de la arena que crece de radio 0 a 450 en 800 ms con `easeOutExpo`, `lineWidth` de 40 a 2, `#5ED8C4` con alpha 0,25 en `'lighter'`, con una línea `#F6F3EE` de 2 px encima (alpha 0,18). Los halos de todas las serpientes se multiplican por 1,6 y vuelven a 1 en 600 ms. Serpiente propia: tres anillos `#F6F3EE` seguidos (0, 200 y 400 ms), de `0,5·s` a `4·s` en 700 ms cada uno, con alpha 0,5, y la etiqueta "Tú" (5.6). Se descartan las colas desprendidas y estelas de la partida anterior, y se reinician la detección de apariciones, el contador y la tensión.
 - **Fin de la partida** (`onRoundEnd({ winnerId })`). Ver 5.14.
 
-**Sacudida** (`Arena.shake(intensity, ms)`): desplazamiento `dx = I × k × sin(now × 0,071)`, `dy = I × k × cos(now × 0,053)` con `k = (1 - t)²` y `t` el progreso. Si hay varias activas, manda la de mayor intensidad restante. Solo mueve el contenido de la arena (no el HUD ni el marco). Con movimiento reducido no hace nada.
+**Sacudida** (`Arena.shake(intensity, ms)`): desplazamiento `dx = I × k × sin(now × 0,071)`, `dy = I × k × cos(now × 0,053)` con `k = (1 - t)²` y `t` el progreso. Si hay varias activas (hasta 4), manda la de mayor intensidad restante. Solo mueve el contenido de la arena (no el HUD ni el marco). Con movimiento reducido no hace nada.
 
-**Límite de destellos**: como máximo 3 destellos por segundo en total (los que excedan se omiten), siempre locales (nunca la arena entera en blanco) y con alpha máximo 0,7.
+**Límite de destellos**: como máximo 3 destellos por segundo en total (los que excedan se omiten), siempre locales (nunca la arena entera en blanco) y con alpha máximo 0,7 (0,25 con movimiento reducido, 3.6).
 
 ### 5.13 Contador de los últimos 10 segundos
 
-Reemplaza a `drawCountdown`. Con `state.playing` verdadero y `roundTimeLeft` entre 1 y 10, se dibuja el número entero centrado en (300, 312), en Fraunces itálica 300 desde los sprites de dígitos, en `'lighter'`, debajo de lo jugable (capa 6).
+Lo dibuja `drawCountdown`. Con `state.playing` verdadero y `roundTimeLeft` entre 1 y 10, se dibuja el número entero (redondeado hacia arriba) centrado en (W/2, H/2 + 12), que en 768 × 432 es (384, 228), en Fraunces itálica 300 desde los sprites de dígitos, en `'lighter'`, debajo de lo jugable (capa 6). El tamaño escala con el alto del mundo (`× H / 600`).
 
 | Segundos | Tamaño lógico | Color | Alpha base |
 |---|---|---|---|
-| 10 a 6 | 300 px | `#1FF2D2` | 0,10 |
-| 5 y 4 | 300 px | `#FFB547` | 0,14 |
-| 3 a 1 | 340 px | `#FF4D6D` | 0,20 |
+| 10 a 6 | 216 px | `#5ED8C4` | 0,10 |
+| 5 y 4 | 216 px | `#F08A3C` | 0,14 |
+| 3 a 1 | 244,8 px | `#EC4F5A` | 0,20 |
 
-En cada cambio de número: escala de 1,18 a 1 en 450 ms con `easeOutExpo` y alpha que arranca en el doble de la base y baja a la base. Con movimiento reducido, sin escala.
+En cada cambio de número: escala de 1,18 a 1 en 450 ms con `easeOutExpo` y alpha que arranca en el doble de la base y baja a la base; también dispara el golpe de la viñeta de tensión (5.2). Con movimiento reducido, sin escala.
 
 ### 5.14 Fin de la partida en la arena
 
 Al recibir `onRoundEnd({ winnerId })`, la arena entra en congelamiento durante 2400 ms (las llamadas a `render` siguen llegando con el último estado congelado):
 
-- La nieve marina y las cáusticas bajan al 25 % de su velocidad en 400 ms (cámara lenta).
-- Las serpientes que no ganaron bajan a alpha 0,35 y pierden el filamento, en 600 ms con `easeInOutSine`.
-- Sobre el ganador baja una columna de luz (sprite de degradado vertical de ancho `6·s`, de alpha 0 a 0,35 en 500 ms) y brota una fuente de plancton: 80 partículas repartidas en 1200 ms desde su cabeza, en sus colores `body` y `core`, ángulo hacia arriba con apertura de 1,2 rad, `speed` [40, 140], `gravity` -20, `life` [900, 1600]. Su etiqueta de nombre crece a 1,4 veces.
-- Si el ganador soy yo: `Backdrop.pulse('#C8FF3C', 0.5)`.
-- La viñeta de tensión y el contador gigante se desvanecen en 800 ms.
-- Si `winnerId` es nulo (empate), solo la cámara lenta.
+- **Cámara lenta**: el reloj de animación baja al 25 % de su velocidad en unos 400 ms. Estrellas, nebulosa, gas, ondulación, lunas y consumibles van más lentos; las partículas siguen a velocidad normal.
+- Las serpientes que no ganaron bajan a alpha 0,35 (con los niveles de atenuado de 5.3) y pierden el brillo interno del gas (núcleo, bocanadas y pulsos de luz), en 600 ms con `easeInOutSine`. El campo que lo controla conserva el nombre `filament`.
+- **Nova del ganador** (el efecto conserva el nombre `FX_COLUMN`, de la columna de luz que reemplaza): la criatura se enciende como una estrella cercana, debajo de lo jugable. Un halo `body` grande crece de radio `2,4·s` a `3,6·s` y una estrella de 4 puntas `#F6F3EE` con rayos de difracción largos, de `4·s` a `7·s`, las dos en 900 ms con `easeOutCubic`; un anillo `core` de 1,2 px se abre de `1,5·s` a `6·s` en 1800 ms mientras se apaga. El conjunto entra en 500 ms hasta alpha 0,5 y dura todo el congelamiento. **Polvo estelar** (efecto `FX_FOUNTAIN`): 80 partículas repartidas en 1200 ms desde su cabeza, alternando `body` y `core`, en todas direcciones, `speed` [40, 140], `life` [900, 1600], `size` [1,2, 2,6], `drag` 0,96. Su etiqueta crece a 1,4 veces en 500 ms y queda con alpha 1.
+- Si el ganador soy yo: `Backdrop.pulse('#EAC255', 0.5)`, y la etiqueta "Tú" se queda durante el congelamiento.
+- La viñeta de tensión, el tinte rojo de la nebulosa y el contador gigante se desvanecen en 800 ms.
+- Si `winnerId` es nulo (empate: el integrador lo manda nulo cuando hay más de un ganador), solo la cámara lenta y el fundido de la tensión y el contador.
 
 A los 2000 ms entra la pantalla final encima (4.17). Después del congelamiento, el integrador pasa a `Arena.renderIdle` debajo del final.
 
 ### 5.15 Modo atracción (renderIdle)
 
-`Arena.renderIdle(nowMs, { snakesPreview, caption })` mantiene la arena viva cuando no hay partida en curso: en la sala de espera y debajo de la pantalla final. Dibuja las capas de fondo (cáusticas al 70 %), la nieve marina, y una criatura por jugador de `snakesPreview` (**extensión** de forma: `[{ id, name, color, isMe }]`; `caption` es un texto opcional, también extensión).
+`Arena.renderIdle(nowMs, { snakesPreview, caption })` mantiene la arena viva cuando no hay partida en curso: en la sala de espera y debajo de la pantalla final. Dibuja las capas de fondo (nebulosa al 70 %), las estrellas cercanas a tamaño y alpha completos, con su encendido (5.2), y una criatura por jugador de `snakesPreview` (**extensión** de forma: `[{ id, name, color, isMe }]`; `caption` es un texto opcional, también extensión). No hay comida, consumibles, contador ni corona.
 
-- Cada criatura nada libre: rumbo que cambia suave (ruido de valor con período de 3 a 5 segundos), velocidad de 38 px/s, giro de evasión cuando se acerca a menos de 40 px de un borde (no cruza portales en este modo). El cuerpo se arma con un historial de posiciones muestreado cada `0,8 × s_idle` de recorrido, 10 puntos, con `s_idle = clamp(segmentSize, 14, 22)`. Se dibuja con el mismo renderizador de 5.4, incluidos fotóforos, señuelo y etiqueta con el nombre.
-- La propia (`isMe`) lleva etiqueta "Tú" en lima permanente y sonar.
-- **Eclosión** (id nuevo en `snakesPreview`): en un punto al azar a más de 80 px de los bordes, un anillo `core` que crece y 20 partículas; la criatura crece de 2 a 10 puntos en 1200 ms.
-- **Disolución** (id que desaparece): el cuerpo se convierte en partículas (3 por punto) que suben y se apagan en 900 ms.
-- Si `snakesPreview` llega vacío o ausente, nadan 3 criaturas anónimas atenuadas (alpha 0,5, sin etiqueta).
-- `caption`: si viene, se dibuja centrado a 28 px del borde inferior en Recursive 16 px `--bio-ink-2` con contorno oscuro.
-- Las posiciones de las criaturas persisten entre llamadas (claves por id), así una actualización de la lista no reinicia a nadie.
+- Cada criatura anda suelta: rumbo que cambia suave (ruido de valor con período de 3 a 5 segundos, hasta 1,5 rad/s), velocidad de 38 px/s, y giro hacia el centro cuando se acerca a menos de `40 + s_idle` px de un borde (no cruza portales en este modo). El cuerpo se arma con un historial de posiciones muestreado cada `0,8 × s_idle` de recorrido, 10 puntos, con `s_idle = clamp(segmentSize, 14, 22)` (14 con la celda de hoy). Se dibuja con el mismo renderizador de 5.4, incluidos gas, estrellas internas, ojos, polvo de la cola y etiqueta con el nombre.
+- La propia (`isMe`) lleva etiqueta "Tú" permanente y pulso.
+- **Eclosión** (id nuevo en `snakesPreview`): en un punto al azar a más de 80 px de los bordes, un anillo `core` que crece de `0,3·s_idle` a `2,4·s_idle` en 700 ms y 20 partículas `body` (`speed` [20, 80], `life` [500, 1000]); la criatura crece de 2 a 10 puntos en 1200 ms.
+- **Continuidad con la partida**: si el id corresponde a una serpiente dibujada en partida en los últimos 4 segundos, la criatura nace donde quedó esa serpiente (cabeza a más de 30 px de los bordes, historial tomado de su cuerpo) y el resto del cuerpo, desde el punto 11, se deshace en una nube de gas: una partícula cada 2 o 3 puntos, `body` y `core`, `speed` [12, 46], `life` [450, 1100].
+- **Disolución** (id que desaparece): el cuerpo se convierte en partículas (3 por punto, `speed` [10, 40]) que se dispersan sin subir y se apagan en 900 ms.
+- Si `snakesPreview` llega vacío o ausente, andan sueltas 3 criaturas anónimas atenuadas (alpha 0,5, sin etiqueta).
+- `caption`: si viene, se dibuja centrado a 28 px del borde inferior en Recursive 500 de 16 px CSS, color `#ADAABB` (`--bio-ink-2`), con contorno `rgba(3,3,7,0.9)` de 4 px; si no entra en el ancho, se achica.
+- Las posiciones de las criaturas persisten entre llamadas (claves por id), así una actualización de la lista no reinicia a nadie. Hasta 24 criaturas.
 
 ### 5.16 API de Particles
 
 `Particles.createSystem({ max })` devuelve un sistema con un pool preasignado de `max` partículas en arrays tipados (`Float32Array` para x, y, vx, vy, edad, vida, tamaño, tamaño final, alpha, gravedad, drag; `Uint8Array` para forma, blend e índice de color). Si el pool está lleno, la partícula nueva reemplaza a la más vieja (tope duro). Tope por defecto de la arena: 600 en Q2, 400 en Q1, 200 en Q0.
 
-- `burst(x, y, opts)`: `count` (12), `color` (`'#1FF2D2'`), `speed` ([40, 120]), `life` ([400, 800]), `size` ([1, 2,5]), `endSize` (opcional, para anillos), `spread` (2π), `angle` (0), `gravity` (-12), `drag` (0,92), `glow` (verdadero), `shape` (`'dot'`), `alpha` (1). Los rangos `[min, max]` se muestrean uniforme; un número fijo vale igual.
+- `burst(x, y, opts)`: `count` (12), `color` (`'#5ED8C4'`), `speed` ([40, 120]), `life` ([400, 800]), `size` ([1, 2,5]), `endSize` (opcional, para anillos), `spread` (2π), `angle` (0), `gravity` (-12; la arena pasa siempre 0), `drag` (0,92), `glow` (verdadero), `shape` (`'dot'`), `alpha` (1). Los rangos `[min, max]` se muestrean uniforme; un número fijo vale igual.
 - `emit(opts)`: una partícula con `x`, `y`, `vx`, `vy` explícitos y el resto de las opciones de `burst`.
 - `update(dtMs)`: integra con `dt` acotado a 50 ms. Vida: alpha sube en el primer 10 % y baja con `1 - easeInQuart` en el resto.
 - `draw(ctx)`: agrupa por forma para cambiar `globalCompositeOperation` pocas veces. Formas: `dot` (sprite de glow), `spark` (línea a lo largo de la velocidad, largo `velocidad × 0,03`), `ring` (círculo trazado que crece de `size` a `endSize`), `bubble` (círculo trazado con un brillo de 1 px arriba a la izquierda), `ink` (sprite oscuro en `'source-over'`).
@@ -1091,12 +1172,14 @@ A los 2000 ms entra la pantalla final encima (4.17). Después del congelamiento,
 
 Firmas del contrato, más las extensiones marcadas:
 
-- `Arena.init(canvasEl)`: toma `#game`, crea los cachés y observa el tamaño de su contenedor con `ResizeObserver` (con espera de 120 ms). Backing store = tamaño CSS × `min(devicePixelRatio, 2)` (1,5 en Q0), con `ctx.setTransform(escala, 0, 0, escala, 0, 0)` para trabajar siempre en 600 × 600 lógicos.
-- `Arena.setConfig({ segmentSize, width: 600, height: 600 })`: regenera grilla y cachés que dependen de `s`.
+- `Arena.init(canvasEl)`: toma `#game`, crea los cachés y observa el tamaño del canvas y de su contenedor con `ResizeObserver` (con espera de 120 ms). Backing store = ancho CSS × `min(devicePixelRatio, 2)` (1,5 en Q0), con un tope de 2200 px de ancho y el alto en la proporción del mundo; si la caja no tiene esa proporción, manda el lado más chico. Con `ctx.setTransform(escala, 0, 0, escala, 0, 0)` trabaja siempre en W × H lógicos. El primer frame nunca es negro: dibuja fondo, estrellas, bordes y viñeta.
+- `Arena.setConfig({ segmentSize, width, height, bigMouthReach })`: tamaño del mundo (768 × 432 por defecto), de la celda y alcance de la boca grande en celdas. Rehace el canvas y los cachés que dependen del tamaño o de `s`.
+- `Arena.resize()`: rehace el canvas en el momento, sin esperar al `ResizeObserver`. Scenes la llama al agrandar la arena para que no se vea estirada mientras anima (4.12).
 - `Arena.render(state, nowMs)` y `Arena.renderIdle(nowMs, opts)`: secciones 5.1 a 5.15. Calculan su propio `dt` a partir de `nowMs`.
 - Hooks: `onFoodEaten(e)`, `onHit(e)`, `onBlock(e)`, `onPortal(e)`, `onProjectileFired(e)`, `onConsumablePicked(e)`, `onRoundStart()`, `onRoundEnd({ winnerId })`, `shake(intensity, ms)`, y **extensión** `onProjectileExpired(e)`.
 - **Extensión** `Arena.bioColor(hex)`: sección 2.3.
-- **Calidad adaptativa** (interna): arranca en Q2 (Q1 con `pointer: coarse`). Con un promedio móvil de 90 frames mayor a 19 ms, baja un nivel y espera 5 segundos antes de volver a medir. No sube sola. Q1: sin capa B de cáusticas, halo cada 2 segmentos, nieve marina 45, tope de partículas 400. Q0: sin cáusticas ni ondulación, nieve marina 25, tope 200, estelas de 5 puntos, `devicePixelRatio` máximo 1,5.
+- Diagnóstico: `Arena.stats()` (calidad, partículas, tiempos de frame y de dibujo, ancho del backing store) y `Arena.setQuality(q, lock)`.
+- **Calidad adaptativa** (interna): arranca en Q2 (Q1 con `pointer: coarse`). Con un promedio móvil de 90 frames mayor a 19 ms (sin contar pausas de más de 1 s), baja un nivel y espera 5 segundos antes de volver a medir. No sube sola. Q1: nebulosa de una sola capa, halo y velo de inmunidad cada 3 puntos, núcleo de gas cada 2 puntos y sin bocanadas, 50 estrellas cercanas, polvo de la cola cada 220 ms, tope de partículas 400. Q0: además, nebulosa quieta horneada en el fondo, sin ondulación ni polvo de la cola, 28 estrellas cercanas, tope 200, estelas de 5 puntos y `devicePixelRatio` máximo 1,5.
 
 ## 6. HUD
 
@@ -1114,11 +1197,11 @@ Fases del temporizador (`data-phase`, también reflejado en `#scene-arena[data-p
 
 | Fase | Segundos restantes | Color | Comportamiento |
 |---|---|---|---|
-| `calm` | más de 20 | `#1FF2D2` | Quieto |
-| `warn` | 20 a 11 | `#FFB547` | Cambio de color en 300 ms |
-| `tension` | 10 a 0 | `#FF4D6D` | Latido por segundo (escala 1 a 1,12 a 1 en 220 ms con `--bio-ease-jelly`), glow `drop-shadow` en el SVG; desde 3, la cifra queda en `scale(1.16)` |
+| `calm` | más de 20 | `#5ED8C4` | Quieto |
+| `warn` | 20 a 11 | `#F08A3C` | Cambio de color en 300 ms |
+| `tension` | 10 a 0 | `#EC4F5A` | Latido por segundo (escala 1 a 1,12 a 1 en 220 ms con `--bio-ease-jelly`), glow `drop-shadow` en el SVG; desde 3, la cifra queda en `scale(1.16)` |
 
-**Efectos propios**: un `.hud-shield` por tipo (`data-effect`), en orden fijo: escudo, boca grande y abanico. Cada uno aparece con el revelado de 4.20 cuando el efecto está en `effects` del jugador propio: icono de 18 px (medusa, anémona o estrella), la palabra ("Escudo", "Boca grande", "Abanico"), el tiempo restante con coma decimal ("3,2 s", calculado con la hora del servidor del instante dibujado, que llega en `serverNow`: el reloj del cliente puede estar desfasado) y una barra de 40 × 3 px que se vacía. El color sale de `--fx`: `#9FF4FF` para el escudo, `#FF8FD0` para la boca grande y `#FF7A59` para el abanico; borde y fondo son ese color al 40 % y al 7 %. El icono late a 1,6 Hz. Al vencer, sale con opacidad y escala 0,9 en 240 ms. Con dos o más a la vez, cada uno queda en icono y tiempo: la palabra pasa a ser solo para el lector de pantalla y la barra se oculta, así los tres entran en la columna sin pisar el temporizador.
+**Efectos propios**: un `.hud-shield` por tipo (`data-effect`), en orden fijo: escudo, boca grande y abanico. Cada uno aparece con el revelado de 4.20 cuando el efecto está en `effects` del jugador propio: icono de 18 px (magnetosfera, agujero negro o estrella triple), la palabra ("Escudo", "Boca grande", "Abanico"), el tiempo restante con coma decimal ("3,2 s", calculado con la hora del servidor del instante dibujado, que llega en `serverNow`: el reloj del cliente puede estar desfasado) y una barra de 40 × 3 px que se vacía. El color sale de `--fx`: `#C7B8FF` para el escudo, `#F29BC9` para la boca grande y `#F0875F` para el abanico; borde y fondo son ese color al 40 % y al 7 %. El icono late a 1,6 Hz. Al vencer, sale con opacidad y escala 0,9 en 240 ms. Con dos o más a la vez, cada uno queda en icono y tiempo: la palabra pasa a ser solo para el lector de pantalla y la barra se oculta, así los tres entran en la columna sin pisar el temporizador.
 
 **Espectador**: `.hud-spectator`, píldora con borde violeta, icono de ojo y "Espectador".
 
@@ -1128,7 +1211,7 @@ Lista ordenada de los jugadores, en filas de 36 px. Cada jugador llega con el co
 
 - Cada fila: rango (MONO 600 14 px `--bio-ink-3`, 20 px de ancho), punto de 10 px en el color `body` con glow, nombre en Recursive 500 16 px color `text` (truncado con elipsis a 12 caracteres), puntaje en MONO 700 16 px alineado a la derecha, y debajo del nombre una barra de 2 px cuyo ancho es la proporción respecto del líder (`--w`), en el color `body` al 70 %, con transición de ancho de 300 ms.
 - Fila propia: borde izquierdo de 3 px lima, etiqueta "Tú" en lima 12 px después del nombre.
-- Con inmunidad: icono de medusa de 14 px en `#9FF4FF` después del nombre.
+- Con inmunidad: icono de escudo (magnetosfera) de 14 px en `#C7B8FF` después del nombre.
 - `gameover`: opacidad 0,4.
 - Métrica: siempre el largo actual (`score`), con la caption "Largo actual". Al terminar la partida conserva el último valor (ver 4.16).
 - Reordenamiento: FLIP de 280 ms con `--bio-ease-standard`, reutilizando los mismos `li` por `data-id` (nunca se reconstruye la lista con `innerHTML`). La fila que sube de posición recibe un glow de su color durante 400 ms.
@@ -1154,7 +1237,7 @@ Objetivo: 60 FPS con 8 serpientes de unos 60 segmentos más partículas, en una 
 
 - Prohibido `shadowBlur` en el render por frame. Brillo con sprites cacheados y `'lighter'`.
 - Sin allocations por frame en arena, partículas y fondo vivo (sección 5.3).
-- Tope duro de partículas: arena 600, fondo vivo 260.
+- Tope duro de partículas: arena 600; fondo vivo 202 estrellas y motas más 100 partículas de efecto (114 y 60 con `pointer: coarse`).
 - `devicePixelRatio` máximo 2 en la arena; el fondo vivo trabaja a media resolución (0,35 en partida).
 - El fondo vivo baja a 30 fps en partida y se detiene con `document.hidden`. La arena no se dibuja cuando su escena no está visible (lobby, login).
 - Calidad adaptativa de la arena (5.17).
@@ -1166,9 +1249,9 @@ Objetivo: 60 FPS con 8 serpientes de unos 60 segmentos más partículas, en una 
 ### 7.2 Accesibilidad
 
 - Contraste: los pares de la sección 2.1. Nombres sobre la arena con contorno oscuro y tamaño mínimo de 10 px CSS. Nada interactivo por debajo de 14 px.
-- El color nunca es la única señal: patrón de fotóforos por jugador (5.4), etiqueta "Tú" y sonar para el propio, nombres en la arena, icono además del color para el escudo.
+- El color nunca es la única señal: patrón de estrellitas del cuerpo por jugador (5.4), etiqueta "Tú" y pulso alrededor de la cabeza propia, nombres en la arena, icono además del color para el escudo.
 - Movimiento reducido: tabla 3.6. Fotosensibilidad: máximo 3 destellos por segundo, siempre locales, alpha máximo 0,7 (0,25 con movimiento reducido).
-- `prefers-contrast: more`: paneles con alpha 0,96, `--bio-ink-3` pasa a valer `--bio-ink-2`, sin cáusticas en la arena.
+- `prefers-contrast: more`: paneles con alpha 0,96, `--bio-ink-3` pasa a valer `--bio-ink-2`, sin nebulosa en la arena.
 - Teclado: todo se puede operar con Tab, Enter y Escape. Foco visible (3.4). El modal atrapa el foco. Las escenas inactivas tienen `inert`.
 - Lectores de pantalla: `<html lang="es">`; toasts con `role="status"` o `role="alert"`; `#overlay-round` con `aria-live="polite"` (anuncia "Gana la serpiente más larga, ¡Ya!"); el temporizador del HUD con `aria-label` y sin `aria-live` (sería ruido cada segundo); `#gameOverScreen` y `#finalScreen` con `role="dialog"` y `aria-labelledby`; el canvas con `aria-label="Arena de juego"`.
 - Táctil: objetivos de 44 × 44 px como mínimo; `touch-action: none` en la arena.
@@ -1186,8 +1269,8 @@ Responsables: LAYOUT (textos estáticos del HTML), INTEGRADOR (textos generados)
 | `<title>` | Snake Multiplayer |
 | `.intro-title`, wordmarks | snake |
 | `.intro-tagline`, línea de login | Multijugador en tiempo real |
-| `.intro-prompt` (teclado) | Pulsa cualquier tecla para sumergirte |
-| `.intro-prompt` (`pointer: coarse`) | Toca la pantalla para sumergirte |
+| `.intro-prompt` (teclado) | Pulsa cualquier tecla para entrar en órbita |
+| `.intro-prompt` (`pointer: coarse`) | Toca la pantalla para entrar en órbita |
 | `.intro-prompt` (sin destino aún) | Conectando… |
 | Saludo con sesión | Hola de nuevo, {nombre} |
 | `label[for=username]` | Tu nombre |
@@ -1363,14 +1446,14 @@ Responsable: INTEGRADOR. Esta sección resume lo que cambia en `SnakeGame.js` pa
 
 Al terminar, el servidor (`endMatch`) emite `gameEnd` y enseguida vuelve la sala a espera, así que el `updatePlayers` que sigue trae `playing` falso y serpientes de largo 3. El cliente marca `matchFinished` al recibir `gameEnd` y lo limpia con la siguiente `countdown` o `gameStart`; mientras está marcado, no vuelve a la sala por su cuenta (eso es solo para "No quedan jugadores suficientes") y el HUD conserva el resultado.
 
-**`gameLogicFrame`**, en este orden: despachar `foodEvents`, `hitEvents`, `blockEvents`, `portals`, `projectileEvents`, `expiredProjectiles` y `consumableEvents` a sus hooks de Arena; aplicar jugadores, proyectiles, comida y consumibles (como hoy); llamar a `HUD.update`; si `roundTimeLeft` llegó a 10, `Backdrop.setMood('tension')`, y desde ahí `Backdrop.pulse('#FF4D6D', 0.15)` en cada segundo nuevo.
+**`gameLogicFrame`**, en este orden: despachar `foodEvents`, `hitEvents`, `blockEvents`, `portals`, `projectileEvents`, `expiredProjectiles` y `consumableEvents` a sus hooks de Arena; aplicar jugadores, proyectiles, comida y consumibles (como hoy); llamar a `HUD.update`; si `roundTimeLeft` llegó a 10, `Backdrop.setMood('tension')`, y desde ahí `Backdrop.pulse('#EC4F5A', 0.15)` en cada segundo nuevo.
 
 **Otros eventos**:
 
 - `countdown`: `Overlays.countdown(count, state.round)`.
 - `gameStart`: `Scenes.go('game')`, `Overlays.roundStart(round, 3)`, `Arena.setConfig(...)`, `Arena.onRoundStart()`, `HUD.show()`, `Backdrop.setMood('game')`.
 - `roundEnd`: `Arena.onRoundEnd({ winnerId: data.winner ? data.winner.id : null })`, `Overlays.roundEnd(data, { colorsById })`, `HUD.update` con totales y `playing: false`, `Backdrop.setMood('game')` (sale de `tension`).
-- `configUpdated`: `Arena.setConfig({ segmentSize, width: 600, height: 600 })`, igual que en `gameStart` y `spectatingStarted`.
+- `configUpdated`: `Arena.setConfig({ segmentSize, width, height })` con el tamaño del mundo que manda el servidor, igual que en `gameStart` y `spectatingStarted`.
 - `gameEnd`: `Overlays.final(data, { colorsByName })`. `colorsByName` sale de `snakes` (los nombres son únicos dentro de una sala, `index.js:1087`) porque `finalScores` y `winner` no traen color ni id.
 - `spectatingStarted`: como `gameStart` pero sin `onRoundStart` ni `roundStart`.
 - `#backToMenuButton`: `Overlays.hideAll()` y `Scenes.go('lobby')` además de lo que hace hoy.
