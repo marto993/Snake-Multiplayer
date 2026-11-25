@@ -33,9 +33,9 @@ const HIT_REACH = 0.7;
 // breakShield: gasta un disparo en romper un escudo si el corte siguiente lo vale
 const SKILLS = {
   easy: {
-    thinkEvery: 4, delay: 5, aimError: 12, steerError: 16, depth: 1, width: 6, foodNoise: 0.7,
-    contest: false, aim: 0, range: 170, minShot: 2, shotPause: 1500, fireChance: 0.3,
-    powers: 0.2, dodge: 0, breakShield: false
+    thinkEvery: 4, delay: 6, aimError: 14, steerError: 22, depth: 1, width: 6, foodNoise: 0.9,
+    contest: false, aim: 0, range: 150, minShot: 2, shotPause: 2000, fireChance: 0.2,
+    powers: 0.1, dodge: 0, breakShield: false
   },
   medium: {
     thinkEvery: 2, delay: 4, aimError: 6, steerError: 8, depth: 2, width: 6, foodNoise: 0.35,
@@ -43,9 +43,9 @@ const SKILLS = {
     powers: 0.7, dodge: 0.15, breakShield: false
   },
   hard: {
-    thinkEvery: 1, delay: 2, aimError: 2.5, steerError: 2, depth: 3, width: 7, foodNoise: 0.1,
-    contest: true, aim: 0.7, range: 420, minShot: 2, shotPause: 350, fireChance: 0.9,
-    powers: 1, dodge: 0.6, breakShield: false
+    thinkEvery: 2, delay: 3, aimError: 3.5, steerError: 3, depth: 3, width: 7, foodNoise: 0.15,
+    contest: true, aim: 0.55, range: 380, minShot: 2.5, shotPause: 400, fireChance: 0.85,
+    powers: 1, dodge: 0.4, breakShield: false
   },
   extreme: {
     thinkEvery: 1, delay: 0, aimError: 0, steerError: 0, depth: 4, width: 8, foodNoise: 0,
