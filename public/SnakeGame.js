@@ -1889,7 +1889,7 @@ document.addEventListener('DOMContentLoaded', function () {
     select.dataset.botId = player.id;
     select.setAttribute('aria-label', 'Dificultad de ' + player.name);
     BOT_LEVELS.forEach(function (level) {
-      const option = el('option', null, 'Bot ' + level[1].toLowerCase());
+      const option = el('option', null, level[1]);
       option.value = level[0];
       option.selected = level[0] === player.bot;
       select.appendChild(option);

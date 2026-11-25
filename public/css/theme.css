@@ -1283,22 +1283,22 @@ kbd {
 .player-status:empty { display: none; }
 .player-status svg { width: 16px; height: 16px; }
 
-/* Bots: insignia o selector de dificultad en su fila, y cuántos hay debajo de la lista */
+/* Bots: insignia o selector de dificultad en su fila, y cuántos hay debajo de la lista. El selector
+   va al lado del nombre: con 7 bots, "Iniciar partida" entra en una pantalla de 860 px. */
 .player-bot { border-color: rgba(173, 170, 187, 0.3); color: var(--bio-ink-2); }
 .player-item[data-bot="extreme"] .player-bot,
 .player-item[data-bot="extreme"] .bot-level { border-color: rgba(236, 79, 90, 0.5); color: var(--bio-danger-soft); }
-.player-item > .bot-level { grid-column: 3; grid-row: 2; justify-self: start; }
+.player-item > .bot-level { grid-column: 4; grid-row: 1 / span 2; align-self: center; }
 .bot-level {
   appearance: none;
   -webkit-appearance: none;
-  min-height: 32px;
-  max-width: 100%;
-  padding: 0 30px 0 12px;
+  min-height: 28px;
+  padding: 0 24px 0 10px;
   border: 1px solid rgba(173, 170, 187, 0.3);
   border-radius: var(--bio-radius-pill);
-  background: var(--bio-abyss-600) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23ADAABB' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5.5 7.75L10 12.25l4.5-4.5'/%3E%3C/svg%3E") right 8px center / 16px 16px no-repeat;
+  background: var(--bio-abyss-600) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23ADAABB' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5.5 7.75L10 12.25l4.5-4.5'/%3E%3C/svg%3E") right 6px center / 14px 14px no-repeat;
   color: var(--bio-ink-2);
-  font-size: var(--bio-fs-14);
+  font-size: var(--bio-fs-12);
   font-weight: 600;
   cursor: pointer;
   transition: border-color var(--bio-dur-hover) var(--bio-ease-standard);

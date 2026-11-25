@@ -60,9 +60,10 @@ const PLAN_TICKS = 3;         // el plan de comida se rehace cada tantos pasos (
 const LOOK_AHEAD = 10;        // pasos hacia adelante al esquivar y al adelantar una cabeza
 const MAX_REACH_STEPS = 90;   // tope al simular el camino a una comida
 
+// Estrellas de hasta 8 letras, para que entren en la lista de la sala junto al selector de nivel
 const STAR_NAMES = [
   'Vega', 'Sirio', 'Rigel', 'Altair', 'Deneb', 'Antares', 'Mira', 'Polaris', 'Capella', 'Régulo',
-  'Espiga', 'Arturo', 'Aldebarán', 'Betelgeuse', 'Bellatrix', 'Canopo', 'Procyon', 'Fomalhaut'
+  'Espiga', 'Arturo', 'Canopo', 'Procyon', 'Adhara', 'Alnitak', 'Shaula', 'Hadar'
 ];
 
 function isBotLevel(level) {
