@@ -54,6 +54,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const PROFILE_RETRY_MAX = 6;          // reintentos del re-registro automático ("ya está conectado")
   const KEY_TO_ARROW = { 37: 37, 38: 38, 39: 39, 40: 40, 87: 38, 65: 37, 83: 40, 68: 39 }; // flechas y WASD
   const DIFFICULTY_NAMES = { easy: 'fácil', medium: 'medio', hard: 'difícil' };
+  const BOT_LEVELS = [['easy', 'Fácil'], ['medium', 'Medio'], ['hard', 'Difícil'], ['extreme', 'Extremo']];
   const REMAINS_FADE_MS = 2000;         // los restos de un corte se apagan en sus últimos 2 s
 
   // Mensajes del servidor que llegan en inglés (spec 8.6). Los que ya llegan en español pasan igual.
@@ -83,6 +84,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   const joinButton = $('joinButton');
   const createRoomButton = $('createRoomButton');
+  const createSoloButton = $('createSoloButton');
   const joinRoomButton = $('joinRoomButton');
   const startGameButton = $('startGameButton');
   const refreshRoomsButton = $('refreshRoomsButton');
@@ -91,6 +93,11 @@ document.addEventListener('DOMContentLoaded', function () {
   const roomsList = $('roomsList');
   const waitingSpan = $('waitingSpan');
   const playerList = $('playerList');
+  const botControls = $('botControls');
+  const botCount = $('botCount');
+  const addBotButton = $('addBotButton');
+  const removeBotButton = $('removeBotButton');
+  const botNote = $('botNote');
   const playersCount = $('playersCount');
   const roomInfo = $('roomInfo');
 
@@ -1059,6 +1066,7 @@ document.addEventListener('DOMContentLoaded', function () {
     snake.gameover = serverSnake.gameover;
     snake.scoreLeftToGrow = serverSnake.scoreLeftToGrow;
     snake.effects = serverSnake.effects || {};
+    snake.bot = serverSnake.bot || null; // nivel del bot, o null si es una persona
 
     return snake;
   }
@@ -1341,7 +1349,8 @@ document.addEventListener('DOMContentLoaded', function () {
     syncRoomControls();
     ui(function () { Overlays.hideAll(); Scenes.go('room'); });
 
-    if (created) toast('Sala ' + data.roomId + ' creada. Comparte el código para invitar.', 'success');
+    if (created && data.solo) toast('Elige cuántos bots quieres y la dificultad de cada uno', 'success', 5000);
+    else if (created) toast('Sala ' + data.roomId + ' creada. Comparte el código para invitar.', 'success');
     else toast('Entraste a la sala ' + data.roomId, 'success');
 
     // Actualizar lista de jugadores (ahora con botones de invitar)
@@ -1379,6 +1388,8 @@ document.addEventListener('DOMContentLoaded', function () {
         existingSnake.gameover = serverPlayer.gameover;
         existingSnake.scoreLeftToGrow = serverPlayer.scoreLeftToGrow;
         existingSnake.color = serverPlayer.color;
+        existingSnake.name = serverPlayer.name; // un bot cede su nombre si entra una persona que se llama igual
+        existingSnake.bot = serverPlayer.bot || null;
         existingSnake.effects = serverPlayer.effects || {};
         return existingSnake;
       }
@@ -1816,12 +1827,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
     toggleElement(startGameButton, canStart);
     startGameButton.disabled = startRequested;
+    syncBotControls(idleRoom && isHost);
 
     let waitText = '';
     if (idleRoom) {
       if (count < min) {
         const missing = min - count;
         waitText = missing === 1 ? 'Falta 1 jugador para empezar' : 'Faltan ' + missing + ' jugadores para empezar';
+        if (isHost) waitText += ': invita a alguien o agrega un bot';
       } else if (!isHost) {
         waitText = 'Esperando a que el anfitrión inicie la partida';
       }
@@ -1839,6 +1852,49 @@ document.addEventListener('DOMContentLoaded', function () {
 
     if (leaveRoomButton) toggleElement(leaveRoomButton, idleRoom);
     syncFinalControls();
+  }
+
+  function countBots() {
+    return snakes.filter(function (s) { return s.bot; }).length;
+  }
+
+  // Cuántos bots hay en la sala: el anfitrión los suma y los quita en la espera. La dificultad de
+  // cada uno se elige en su fila de la lista (updatePlayerList).
+  function syncBotControls(canEdit) {
+    if (!botControls) return;
+    const bots = countBots();
+    const max = (roomConfig && roomConfig.maxPlayers) || 8;
+    toggleElement(botControls, canEdit);
+    toggleElement(botNote, !!currentRoomId && !isSpectating && bots > 0);
+    if (botCount.textContent !== String(bots)) botCount.textContent = String(bots);
+    // aria-disabled y no disabled: al llegar al tope, el botón conserva el foco del teclado
+    addBotButton.setAttribute('aria-disabled', snakes.length >= max ? 'true' : 'false');
+    removeBotButton.setAttribute('aria-disabled', bots === 0 ? 'true' : 'false');
+  }
+
+  function changeBotCount(delta) {
+    const bots = countBots();
+    const humans = snakes.length - bots;
+    const max = (roomConfig && roomConfig.maxPlayers) || 8;
+    const next = Math.max(0, Math.min(max - humans, bots + delta));
+    if (next !== bots) socket.emit('setBotCount', { count: next });
+  }
+
+  // La dificultad de un bot: un selector para el anfitrión en la espera, una insignia para los demás
+  function botLevelEl(player, editable) {
+    const entry = BOT_LEVELS.find(function (level) { return level[0] === player.bot; }) || BOT_LEVELS[1];
+    if (!editable) return el('span', 'player-host player-bot', 'Bot ' + entry[1].toLowerCase());
+    const select = el('select', 'bot-level');
+    select.name = 'botLevel';
+    select.dataset.botId = player.id;
+    select.setAttribute('aria-label', 'Dificultad de ' + player.name);
+    BOT_LEVELS.forEach(function (level) {
+      const option = el('option', null, level[1]);
+      option.value = level[0];
+      option.selected = level[0] === player.bot;
+      select.appendChild(option);
+    });
+    return select;
   }
 
   // Botones de la pantalla final. El anfitrión puede jugar de nuevo con los que sigan en la sala; los
@@ -1870,6 +1926,11 @@ document.addEventListener('DOMContentLoaded', function () {
     // En partida, por largo; en la sala, en el orden en que entraron
     const sortedPlayers = playing ? snakes.toSorted(function (a, b) { return b.score - a.score; }) : snakes;
 
+    const canEditBots = !!currentRoomId && isHost && !isSpectating && !gameState.playing && !roundLive && !countdownActive;
+    // La lista se arma de nuevo en cada cambio: el selector que tenía el foco lo recupera
+    const focusedBot = document.activeElement && playerList.contains(document.activeElement)
+      ? document.activeElement.dataset.botId : null;
+
     const nextIds = new Set();
     const frag = document.createDocumentFragment();
     sortedPlayers.forEach(function (player, index) {
@@ -1889,6 +1950,10 @@ document.addEventListener('DOMContentLoaded', function () {
       name.title = player.name;
       listItem.appendChild(name);
       if (player.id === roomHostId) listItem.appendChild(el('span', 'player-host', 'Anfitrión'));
+      if (player.bot) {
+        listItem.dataset.bot = player.bot;
+        listItem.appendChild(botLevelEl(player, canEditBots));
+      }
 
       const score = el('span', 'player-score');
       if (playing) score.textContent = String(player.score);
@@ -1907,6 +1972,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
     playerList.replaceChildren(frag);
     knownPlayerIds = nextIds;
+    if (focusedBot) {
+      const again = Array.prototype.find.call(playerList.querySelectorAll('.bot-level'), function (select) {
+        return select.dataset.botId === focusedBot;
+      });
+      if (again) again.focus({ preventScroll: true });
+    }
 
     if (playersCount) {
       const max = roomConfig && roomConfig.maxPlayers;
@@ -2261,6 +2332,27 @@ document.addEventListener('DOMContentLoaded', function () {
     } else {
       toast('El nombre debe tener entre 2 y 20 caracteres', 'error');
       ui(function () { Scenes.go('login'); });
+    }
+  });
+
+  // Jugar solo: una sala que no figura en la lista, con bots ya puestos
+  createSoloButton.addEventListener('click', function () {
+    const username = currentUsername();
+    if (isValidUsername(username)) {
+      setPendingButton(createSoloButton);
+      socket.emit('createRoom', Object.assign(buildIdentity(username), { solo: true }));
+    } else {
+      toast('El nombre debe tener entre 2 y 20 caracteres', 'error');
+      ui(function () { Scenes.go('login'); });
+    }
+  });
+
+  addBotButton.addEventListener('click', function () { changeBotCount(1); });
+  removeBotButton.addEventListener('click', function () { changeBotCount(-1); });
+  playerList.addEventListener('change', function (event) {
+    const select = event.target;
+    if (select.classList.contains('bot-level')) {
+      socket.emit('setBotLevel', { id: select.dataset.botId, level: select.value });
     }
   });
 

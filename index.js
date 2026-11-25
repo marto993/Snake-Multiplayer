@@ -7,6 +7,7 @@ const { traceProjectile, fanDirections } = require('./game/projectiles');
 const { touchedAlong, wrapPoint, cellIndex } = require('./game/geometry');
 const { cutSnake, dropRemains } = require('./game/remains');
 const { matchResult, frenzyFoodTarget, crownHolder } = require('./game/match');
+const { isBotLevel, botLevel, botName, createBrain, stepBot } = require('./game/bots');
 const { createAssets } = require('./lib/assets');
 const { secureIndex, reportHandler, REPORT_PATH, REPORT_TYPES } = require('./lib/security');
 const sqlite3 = require('sqlite3').verbose();
@@ -197,7 +198,8 @@ function serializePlayers(players) {
     score: player.score,
     gameover: player.gameover,
     scoreLeftToGrow: player.scoreLeftToGrow,
-    effects: player.activeEffects(Date.now())
+    effects: player.activeEffects(Date.now()),
+    bot: player.bot // nivel del bot; en una persona es undefined y no viaja
   }));
 }
 
@@ -262,7 +264,8 @@ function validateRoomConfig(config) {
   return buildRoomConfig(config && config.difficulty, { roundTime: ROUND_TIME });
 }
 
-function createRoom(hostId, hostName) {
+// solo: sala para jugar contra bots. No figura en la lista; se puede entrar con el código o una invitación.
+function createRoom(hostId, hostName, solo = false) {
   const roomId = generateRoomId();
   const defaultConfig = validateRoomConfig({});
   
@@ -270,6 +273,7 @@ function createRoom(hostId, hostName) {
     id: roomId,
     host: hostId,
     hostName: hostName,
+    solo: solo,
     players: [],
     finished: false,
     gameState: {
@@ -447,6 +451,73 @@ function resetPlayerForRound(room, player, index) {
   player.segmentSize = room.config.segmentSize;
   if (room.config.turnDegrees) player.turnRate = room.config.turnDegrees * Math.PI / 180;
   player.reset(spawn.x, spawn.y, 1, 0, room.config.startLength);
+  if (player.bot) player.brain = createBrain(player.bot);
+}
+
+// ---------------------------------------------------------------------------
+// Bots: jugadores sin socket. Deciden en game/bots.js y juegan con las mismas reglas.
+// ---------------------------------------------------------------------------
+
+// Con qué bots arranca una sala de un jugador (después el anfitrión cambia cuántos y sus niveles)
+const SOLO_BOTS = 3;
+const SOLO_LEVEL = 'medium';
+
+function roomBots(room) {
+  return room.players.filter(player => player.bot);
+}
+
+function addBot(room, level) {
+  if (room.players.length >= room.config.maxPlayers) return null;
+  const { canvasWidth, canvasHeight, segmentSize, gameSpeed } = room.config;
+  const spawn = getPlayerSpawnPosition(room, room.players.length);
+  const id = `bot_${Math.random().toString(36).substring(2, 10)}`;
+  const bot = new Snake(id, botName(room.players.map(p => p.name)), segmentSize, canvasWidth, canvasHeight,
+    spawn.x, spawn.y, 1, 0, getNextAvailableColor(room), gameSpeed);
+  bot.bot = botLevel(level);
+  room.players.push(bot);
+  resetPlayerForRound(room, bot, room.players.length - 1);
+  return bot;
+}
+
+// Con la sala en espera: vuelve a ubicar a todos, repone la comida según cuántos son y avisa
+function refreshWaitingRoom(room) {
+  room.players.forEach((player, index) => resetPlayerForRound(room, player, index));
+  resetGameBoard(room);
+  generateFoods(room);
+  updateGameBoard(room);
+  io.to(room.id).emit('updatePlayers', serializePlayers(room.players),
+    { playing: room.gameState.playing, round: room.gameState.round },
+    room.config, { host: room.host, roomId: room.id });
+  broadcastOnlinePlayersList();
+}
+
+// Decisiones de los bots para este paso. Todos deciden sobre el mismo estado, el que los demás
+// vieron en el último frame, y recién después se aplican. Un error de un bot no corta la partida.
+function runBots(room, now) {
+  const bots = room.players.filter(player => player.bot && !player.gameover);
+  if (bots.length === 0) return;
+  const world = {
+    players: room.players,
+    foods: room.foods,
+    consumables: room.consumables,
+    projectiles: room.projectiles,
+    config: room.config,
+    now,
+    timeLeft: room.gameState.roundTimeLeft
+  };
+  const decisions = bots.map(bot => {
+    try {
+      return stepBot(bot.brain, bot, world);
+    } catch (error) {
+      console.error(`Error in bot ${bot.name} (${bot.bot}):`, error);
+      return null;
+    }
+  });
+  bots.forEach((bot, i) => {
+    if (!decisions[i]) return;
+    if (decisions[i].angle !== null) bot.steerTo(decisions[i].angle);
+    if (decisions[i].fire) createProjectile(room, bot);
+  });
 }
 
 function verifyCoordinate(room, x, y) {
@@ -789,7 +860,9 @@ async function endMatch(room) {
 
   const { ranking, winners } = matchResult(room.players);
   const lengthById = new Map(ranking.map(entry => [entry.id, entry.length]));
-  const updates = room.players.filter(player => player.playerId).map(player =>
+  // Una partida con bots no suma al ranking: si no, ganarle a los fáciles alcanzaría para encabezarlo
+  const ranked = roomBots(room).length === 0;
+  const updates = room.players.filter(player => ranked && player.playerId).map(player =>
     updatePlayerStats(player.playerId, {
       finalScore: lengthById.get(player.id) || 0,
       won: winners.includes(player.id)
@@ -888,6 +961,7 @@ function gameLogicLoop(room) {
   if (!room.gameState.playing) return;
   
   const { canvasWidth, canvasHeight, segmentSize } = room.config;
+  runBots(room, Date.now()); // sus disparos entran en los eventos de este mismo paso
   let portalEvents = [];
   let consumableEvents = [];
   // Eventos visuales del tick (todos los arrays viajan siempre, aunque estén vacíos)
@@ -1027,7 +1101,8 @@ io.on('connection', (socket) => {
       
       const playerProfile = await getOrCreatePlayer(data.username.trim(), data.playerId);
       
-      const roomId = createRoom(socket.id, playerProfile.stats.name);
+      const solo = data.solo === true;
+      const roomId = createRoom(socket.id, playerProfile.stats.name, solo);
       currentRoom = roomId;
       socket.join(roomId);
       
@@ -1051,10 +1126,12 @@ io.on('connection', (socket) => {
       player.playerId = playerProfile.playerId;
       room.players.push(player);
       resetPlayerForRound(room, player, room.players.length - 1);
+      for (let i = 0; solo && i < SOLO_BOTS; i++) addBot(room, SOLO_LEVEL);
       
       socket.emit('roomCreated', { 
         roomId, 
         isHost: true,
+        solo: room.solo,
         config: room.config,
         playerProfile: playerProfile
       });
@@ -1100,10 +1177,12 @@ io.on('connection', (socket) => {
       
       const playerProfile = await getOrCreatePlayer(data.username.trim(), data.playerId);
       
-      if (room.players.some(p => p.name === playerProfile.stats.name)) {
+      const sameName = room.players.find(p => p.name === playerProfile.stats.name);
+      if (sameName && !sameName.bot) {
         socket.emit('gameError', 'Username already taken in this room');
         return;
       }
+      if (sameName) sameName.name = botName(room.players.map(p => p.name)); // el bot cede el nombre
       
       currentRoom = data.roomId;
       socket.join(data.roomId);
@@ -1205,6 +1284,47 @@ io.on('connection', (socket) => {
     room.gameState.timeoutIdStartGame = setTimeout(() => startGame(room), 1000);
   });
 
+  // Sala propia en espera donde este socket puede cambiar los bots, o null (avisando por qué)
+  function roomForBotChange() {
+    const room = currentRoom ? getRoom(currentRoom) : null;
+    if (!room) return null;
+    if (room.host !== socket.id) {
+      socket.emit('gameError', 'Only the host can modify room settings');
+      return null;
+    }
+    if (room.gameState.playing || room.gameState.timeoutIdStartGame) {
+      socket.emit('gameError', 'Cannot modify settings during game');
+      return null;
+    }
+    return room;
+  }
+
+  // { count }: cuántos bots tiene que haber. Los nuevos entran con `level`, o con el del último bot.
+  socket.on('setBotCount', (data) => {
+    const room = roomForBotChange();
+    if (!room || !data || !Number.isInteger(data.count)) return;
+    const humans = room.players.length - roomBots(room).length;
+    const count = Math.max(0, Math.min(room.config.maxPlayers - humans, data.count));
+    const bots = roomBots(room);
+    if (count === bots.length) return;
+    const last = bots[bots.length - 1];
+    const level = isBotLevel(data.level) ? data.level : botLevel(last && last.bot);
+    while (roomBots(room).length < count) addBot(room, level);
+    const extra = roomBots(room).slice(count);
+    room.players = room.players.filter(player => !extra.includes(player));
+    refreshWaitingRoom(room);
+  });
+
+  // { id, level }: cambia la dificultad de un bot
+  socket.on('setBotLevel', (data) => {
+    const room = roomForBotChange();
+    if (!room || !data || !isBotLevel(data.level)) return;
+    const bot = roomBots(room).find(player => player.id === data.id);
+    if (!bot || bot.bot === data.level) return;
+    bot.bot = data.level;
+    refreshWaitingRoom(room);
+  });
+
   socket.on('attack', () => {
     if (!currentRoom) return;
     
@@ -1296,7 +1416,8 @@ io.on('connection', (socket) => {
               score: Number(player.score) || 0,
               gameover: Boolean(player.gameover),
               scoreLeftToGrow: Number(player.scoreLeftToGrow) || 0,
-              effects: player.activeEffects(Date.now())
+              effects: player.activeEffects(Date.now()),
+              bot: player.bot
             };
           } catch (err) {
             console.error('Error serializing player:', err);
@@ -1379,7 +1500,7 @@ io.on('connection', (socket) => {
 
   socket.on('getRooms', () => {
     const availableRooms = Array.from(rooms.values())
-      .filter(room => !room.finished)
+      .filter(room => !room.finished && !room.solo)
       .map(room => ({
         id: room.id,
         hostName: room.hostName,
@@ -1613,17 +1734,20 @@ io.on('connection', (socket) => {
         userData.roomId = null;
       }
       
+      // Los bots no son anfitriones ni sostienen una sala: sin personas, se borra
+      const nextHost = room.players.find(player => !player.bot);
+      if (!nextHost) {
+        // Quien estaba mirando vuelve a las salas, como cuando faltan jugadores
+        if (room.gameState.playing) io.to(roomId).emit('gameError', 'Not enough players to continue');
+        deleteRoom(roomId);
+        // NUEVO: Actualizar lista de jugadores en línea
+        broadcastOnlinePlayersList();
+        return;
+      }
       if (room.host === socket.id) {
-        if (room.players.length > 0) {
-          room.host = room.players[0].id;
-          room.hostName = room.players[0].name;
-          io.to(roomId).emit('newHost', { hostId: room.host, hostName: room.hostName });
-        } else {
-          deleteRoom(roomId);
-          // NUEVO: Actualizar lista de jugadores en línea
-          broadcastOnlinePlayersList();
-          return;
-        }
+        room.host = nextHost.id;
+        room.hostName = nextHost.name;
+        io.to(roomId).emit('newHost', { hostId: room.host, hostName: room.hostName });
       }
       
       if (room.players.length < room.config.minPlayers && room.gameState.playing) {

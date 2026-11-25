@@ -938,6 +938,7 @@ kbd {
   flex-direction: column;
   gap: 24px;
 }
+.lobby-create { display: flex; flex-direction: column; gap: 12px; }
 .join-by-code { display: flex; flex-direction: column; gap: 8px; }
 .join-row { display: flex; align-items: center; gap: 12px; }
 .join-row .btn { flex: 0 0 auto; }
@@ -1281,6 +1282,53 @@ kbd {
 }
 .player-status:empty { display: none; }
 .player-status svg { width: 16px; height: 16px; }
+
+/* Bots: insignia o selector de dificultad en su fila, y cuántos hay debajo de la lista. El selector
+   va al lado del nombre: con 7 bots, "Iniciar partida" entra en una pantalla de 860 px. */
+.player-bot { border-color: rgba(173, 170, 187, 0.3); color: var(--bio-ink-2); }
+.player-item[data-bot="extreme"] .player-bot,
+.player-item[data-bot="extreme"] .bot-level { border-color: rgba(236, 79, 90, 0.5); color: var(--bio-danger-soft); }
+.player-item > .bot-level { grid-column: 4; grid-row: 1 / span 2; align-self: center; }
+.bot-level {
+  appearance: none;
+  -webkit-appearance: none;
+  min-height: 28px;
+  padding: 0 24px 0 10px;
+  border: 1px solid rgba(173, 170, 187, 0.3);
+  border-radius: var(--bio-radius-pill);
+  background: var(--bio-abyss-600) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23ADAABB' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5.5 7.75L10 12.25l4.5-4.5'/%3E%3C/svg%3E") right 6px center / 14px 14px no-repeat;
+  color: var(--bio-ink-2);
+  font-size: var(--bio-fs-12);
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--bio-dur-hover) var(--bio-ease-standard);
+}
+.bot-level:hover { border-color: rgba(94, 216, 196, 0.45); }
+.bot-level:focus-visible { outline: 2px solid var(--bio-turquoise); outline-offset: 2px; }
+.bot-level option { background: var(--bio-abyss-700); color: var(--bio-ink); }
+/* Táctil: 16 px evita el zoom de iOS y el alto llega al dedo */
+@media (pointer: coarse) {
+  .bot-level { min-height: 44px; font-size: var(--bio-fs-16); }
+}
+.bot-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 48px;
+  padding: 0 4px 0 14px;
+  border: 1px dashed rgba(173, 170, 187, 0.18);
+  border-radius: var(--bio-radius-md);
+}
+.bot-controls-label { flex: 1; font-weight: 600; font-size: var(--bio-fs-14); color: var(--bio-ink-2); }
+.bot-count {
+  min-width: 2ch;
+  text-align: center;
+  font-weight: 700;
+  font-variation-settings: var(--bio-mono);
+  font-feature-settings: "tnum" 1;
+}
+.bot-controls .btn-icon[aria-disabled="true"] { opacity: 0.35; cursor: not-allowed; }
+.bot-note { font-size: var(--bio-fs-14); line-height: 20px; color: var(--bio-ink-3); }
 .player-item.current-player { box-shadow: inset 3px 0 0 var(--bio-lime); background: linear-gradient(90deg, rgba(234, 194, 85, 0.06), transparent 50%), var(--bio-abyss-800); }
 .player-item.current-player .player-name { color: var(--bio-lime-soft); }
 .player-item.eliminated { opacity: 0.4; }

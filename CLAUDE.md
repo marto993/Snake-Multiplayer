@@ -8,6 +8,7 @@ Real-time multiplayer Snake. Vanilla JS + Socket.IO + SQLite. **No build step, n
 npm install
 npm run dev    # nodemon, port 3000
 npm test       # unit tests in test/ (node --test, no dependencies)
+node tools/bot-duel.js extreme hard   # bot matches without network, to compare levels
 npm start      # production
 fly deploy     # deploy to Fly.io
 ```
@@ -16,15 +17,17 @@ fly deploy     # deploy to Fly.io
 
 | File | Lines | Owns |
 |------|-------|------|
-| `index.js` | ~1750 | Server: Express, Socket.IO, SQLite, game loop, rooms, projectiles, consumables, frenzy, crown, per-frame game events |
+| `index.js` | ~1840 | Server: Express, Socket.IO, SQLite, game loop, rooms, bots in rooms, projectiles, consumables, frenzy, crown, per-frame game events |
 | `game/difficulty.js` | ~90 | Difficulty table: `buildRoomConfig(difficulty, { roundTime })` builds the whole `room.config`; `POWERS` (big mouth, fan, frenzy, same on every level) and `consumableLimit(type, players)` |
 | `game/projectiles.js` | ~80 | `traceProjectile()`: moves a shot several cells per tick at any angle, hitting the first segment within `hitRadius` of each step (pure, no side effects); `fanDirections()` for the fan's three shots |
 | `game/geometry.js` | ~70 | Free-turn geometry: wrap-aware distances, swept contact (`touchedAlong`), portal wrap by center (`wrapPoint`), grid cell of a float position (pure) |
 | `game/remains.js` | ~60 | `cutSnake()` (hit damage) and `dropRemains()`: what a hit cuts off stays as food for 10 s (pure) |
+| `game/bots.js` | ~590 | Bot brain: `stepBot()` decides heading and fire once per tick from what a player sees; `SKILLS` holds the four levels (easy, medium, hard, extreme). Only the bot's own memory (`createBrain`) changes |
 | `game/match.js` | ~45 | `matchResult()`: ranking by length and winners (ties all win) at the end of the match; `frenzyFoodTarget()` and `crownHolder()` (longest snake, ties keep the previous holder) |
+| `tools/bot-duel.js` | ~215 | Plays whole bot matches without server or network, seeded and on a simulated clock; `playMatch()` is also used by the tests. Repeats `gameLogicLoop`'s rules |
 | `lib/assets.js` | ~190 | Serves the text files in `public/` precompressed (brotli 11 / gzip 9, in memory) and versions `index.html`'s local scripts and styles by content hash |
 | `lib/security.js` | ~110 | Strict CSP (report-only for now): per-request nonce on every `<script>` of `index.html`, Trusted Types, and the `/csp-report` endpoint |
-| `public/SnakeGame.js` | ~2350 | Client glue: socket handlers, game/UI state, controls (keys, touch, gamepad, click to fire), wiring events into the modules below. No drawing code. |
+| `public/SnakeGame.js` | ~2450 | Client glue: socket handlers, game/UI state, controls (keys, touch, gamepad, click to fire), wiring events into the modules below. No drawing code. |
 | `public/snakeClass.js` | ~380 | Snake entity — runs on **both** client and server. Effects (`effects`) and shot cooldown (`tryShot`) take the server time as `now` |
 | `public/index.html` | ~340 | Scene markup only (no inline CSS) |
 | `public/css/theme.css` | ~2700 | Space theme ("creatures of the void", palette from real astronomy; no neon or synthwave), `--bio-*` design tokens (names kept from the former abyss theme: `abyss` = void layers, `turquoise` = oxygen teal, `lime` = sulfur gold) |
@@ -37,7 +40,7 @@ fly deploy     # deploy to Fly.io
 | `docs/VISUAL_SPEC.md` | ~1400 | Visual spec: palette, typography, motion, scene map, effects catalog. Read it before touching visuals. |
 | `docs/MOTION_SPEC.md` | ~160 | Design: fixed difficulty levels (implemented) and continuous 4000×4000 movement (not yet) |
 | `docs/GAMEPLAY_SPEC.md` | ~120 | Design: shot cooldown, stacking effects, big mouth, fan, final frenzy, crown and controls, with their values (the anchor was tried and dropped) |
-| `test/` | | Unit tests (`node --test`): motion timeline, gamepad reading, `Snake`, difficulty table, geometry, projectile trace, remains, match result, static assets |
+| `test/` | | Unit tests (`node --test`): motion timeline, gamepad reading, `Snake`, bots, difficulty table, geometry, projectile trace, remains, match result, static assets |
 
 Script load order matters (index.html): socket.io → snakeClass → motion → particles → arena → backdrop → scenes → pad → SnakeGame. Each module is an IIFE that exposes its API on `window`; no ES modules. Declarations use `const`, and `let` only when the variable is reassigned; no `var`.
 
@@ -80,11 +83,12 @@ Script load order matters (index.html): socket.io → snakeClass → motion → 
 - **CSP (report-only).** `index.html` gets a fresh nonce on every `<script>` per request and a `Content-Security-Policy-Report-Only` with `'strict-dynamic'` and Trusted Types (`lib/security.js`). Don't add inline scripts, inline event handlers (`onclick=…`) or `innerHTML`: they would show up as violations in `/csp-report` (logged by the server). Chromium only registers `Reporting-Endpoints` over HTTPS, so local reports only arrive through `report-uri` browsers or a TLS proxy. When production reports stay clean, switch the header to `Content-Security-Policy`.
 - **No mouse aiming.** The mouse doesn't steer: pointing at a rival made aiming much easier than with keys. Left click on the arena still fires. On a hybrid device, moving the mouse hides the touch controls (`handlePointerMove`).
 - **Gamepad.** `updatePad()` in `SnakeGame.js` polls every connected pad every animation frame through `PadInput.readAll` (the first pad with input steers, any pad fires; some keyboards and receivers show up as a pad in slot 0): the left stick (deadzone 0.3) or the d-pad steers, A or the right trigger fires every `shotCooldownMs` while held. A stick at rest sends nothing, so keys still work. `STICK_SNAP` (0 = any angle, 8 = eight headings like the keys) applies to the gamepad stick and the touch joystick alike. Browsers expose a pad only after a button press, and only in a secure context (HTTPS or `localhost`, not the dev server opened by LAN IP). It rumbles on hits when `vibrationActuator.playEffect` exists and the pad was the last control used.
+- **Bots.** A bot is a `Snake` in `room.players` with `bot` set to its level and no socket; ids start with `bot_`. `runBots()` runs at the top of `gameLogicLoop`, before projectiles move, so a bot acts on the state of the last frame like a person does, and its shots go into that tick's `projectileEvents`. Bots only decide (`steerTo`, `createProjectile`): turning, cooldown and shot cost stay with the server. The host changes them with `setBotCount` / `setBotLevel` while the room waits. Bots are never host and never keep a room alive: when the last person leaves, the room is deleted. A match with bots doesn't touch the ranking. `createRoom` with `solo: true` makes a room with 3 medium bots that `getRooms` doesn't list (code and invites still work). Levels are tuned with `tools/bot-duel.js` against human-like proxies (reaction and 8 headings); the reaction delay (`delay`, in ticks) moves the result most. If `gameLogicLoop`'s rules change, change `tools/bot-duel.js` too.
 - **Touch controls.** `#touchControls` (floating joystick anywhere outside the fire button, fire button bottom right) is shown by `updateTouchControls()` in `SnakeGame.js` to players (not spectators) on touch screens from the countdown on, so a thumb held before "¡Ya!" steers as soon as the match starts. The joystick sends the same `steer` event as the keys and the gamepad. On touch screens in portrait, CSS covers the game with `#rotateHint` (the match is played in landscape).
 
 ## Testing
 
-`npm test` runs the unit tests in `test/` (Node's built-in runner). They cover the pieces that load in Node without a browser or a running server: `motion.js`, `pad.js`, `Snake` (reset, steering, effects, shot cooldown), `game/difficulty.js`, `game/geometry.js`, `game/projectiles.js`, `game/remains.js`, `game/match.js`, `lib/assets.js` and `lib/security.js`. Gameplay still needs a manual check: validate changes by running `npm run dev` and opening multiple browser windows (use incognito for distinct sessions). Inspect DB with `sqlite3 game_stats.db`.
+`npm test` runs the unit tests in `test/` (Node's built-in runner). They cover the pieces that load in Node without a browser or a running server: `motion.js`, `pad.js`, `Snake` (reset, steering, effects, shot cooldown), `game/bots.js` (shot prediction against the real projectile trace, dodging, reaction delay, level order in seeded matches), `game/difficulty.js`, `game/geometry.js`, `game/projectiles.js`, `game/remains.js`, `game/match.js`, `lib/assets.js` and `lib/security.js`. Gameplay still needs a manual check: validate changes by running `npm run dev` and opening multiple browser windows (use incognito for distinct sessions). Inspect DB with `sqlite3 game_stats.db`.
 
 `ROUND_TIME=10 npm run dev` shortens the match for testing (positive integers only; default 120). Headless browser checks work with `puppeteer-core` + `/snap/bin/chromium` (the snap can't write to host `/tmp`, so use a dir under `~`).
 
