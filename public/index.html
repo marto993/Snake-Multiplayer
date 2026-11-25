@@ -47,6 +47,12 @@
         <symbol id="i-close" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
             <path d="M5.5 5.5l9 9M14.5 5.5l-9 9"/>
         </symbol>
+        <symbol id="i-plus" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10 4.5v11M4.5 10h11"/>
+        </symbol>
+        <symbol id="i-minus" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4.5 10h11"/>
+        </symbol>
         <symbol id="i-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
             <path d="M5.5 7.75L10 12.25l4.5-4.5"/>
         </symbol>
@@ -124,7 +130,10 @@
             <div class="lobby-wrap">
                 <div id="roomSelection" class="lobby-card membrane">
                     <h2 class="scene-title" tabindex="-1" data-stagger>Salas</h2>
-                    <button type="button" id="createRoomButton" class="btn btn-primary btn-block btn-xl" data-breathe data-autofocus data-stagger>Crear sala</button>
+                    <div class="lobby-create" data-stagger>
+                        <button type="button" id="createRoomButton" class="btn btn-primary btn-block btn-xl" data-breathe data-autofocus>Crear sala</button>
+                        <button type="button" id="createSoloButton" class="btn btn-secondary btn-block">Jugar contra bots</button>
+                    </div>
 
                     <div class="join-by-code" data-stagger>
                         <label for="roomId" class="field-label">Código de sala</label>
@@ -164,6 +173,17 @@
                             <div class="players-block">
                                 <h2 class="players-heading" tabindex="-1">Jugadores <span id="playersCount" class="players-count"></span></h2>
                                 <ol id="playerList" class="player-list"></ol>
+                                <div id="botControls" class="bot-controls hidden" data-reveal role="group" aria-labelledby="botControlsLabel">
+                                    <span id="botControlsLabel" class="bot-controls-label">Bots</span>
+                                    <button type="button" id="removeBotButton" class="btn-icon" aria-label="Quitar un bot">
+                                        <svg class="icon" aria-hidden="true"><use href="#i-minus"/></svg>
+                                    </button>
+                                    <output id="botCount" class="bot-count">0</output>
+                                    <button type="button" id="addBotButton" class="btn-icon" aria-label="Agregar un bot">
+                                        <svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>
+                                    </button>
+                                </div>
+                                <p id="botNote" class="bot-note hidden">Las partidas con bots no suman al ranking.</p>
                             </div>
                             <div id="waitingSpan" class="waiting-message hidden" data-reveal role="status">Faltan jugadores para empezar</div>
                             <button type="button" id="startGameButton" class="btn btn-primary btn-block btn-lg hidden" data-reveal data-breathe>Iniciar partida</button>
