@@ -1,22 +1,48 @@
 /*
- * Resultado de la partida: gana la serpiente más larga cuando se acaba el tiempo.
- * Si varias empatan en el largo máximo, ganan todas.
+ * Resultado de la partida (docs/GAMEPLAY_SPEC.md, etapa 5). Termina antes de tiempo si queda una
+ * sola serpiente viva, o ninguna persona viva. Si se acaba el tiempo, gana la más larga de las vivas.
+ * Si varias empatan, ganan todas.
  */
 'use strict';
 
-// -> { ranking: [{ id, name, color, length }], winners: [id] }
-// ranking va de la más larga a la más corta; en un empate se respeta el orden de la sala.
+const lengthOf = player => (player.segments ? player.segments.length : 0);
+
+// -> { ranking: [{ id, name, color, length, eliminated? }], winners: [id] }
+// ranking: primero las vivas, de la más larga a la más corta; después las eliminadas, de la última
+// en caer a la primera. En un empate se respeta el orden de la sala. Si no queda ninguna viva
+// (las últimas cayeron en el mismo paso), ganan las que cayeron en ese paso.
 function matchResult(players) {
-  const ranking = players
-    .map((player, index) => ({
-      entry: { id: player.id, name: player.name, color: player.color, length: player.segments ? player.segments.length : 0 },
-      index
-    }))
-    .sort((a, b) => (b.entry.length - a.entry.length) || (a.index - b.index))
-    .map(item => item.entry);
-  const best = ranking.length ? ranking[0].length : 0;
-  const winners = ranking.filter(entry => entry.length === best).map(entry => entry.id);
+  const sorted = players
+    .map((player, index) => ({ player, index }))
+    .sort((a, b) => {
+      const outA = !!a.player.gameover;
+      const outB = !!b.player.gameover;
+      if (outA !== outB) return outA ? 1 : -1;
+      const d = outA
+        ? (b.player.eliminatedAt || 0) - (a.player.eliminatedAt || 0)
+        : lengthOf(b.player) - lengthOf(a.player);
+      return d || (a.index - b.index);
+    })
+    .map(item => item.player);
+  const ranking = sorted.map(player => {
+    const entry = { id: player.id, name: player.name, color: player.color, length: player.gameover ? 0 : lengthOf(player) };
+    if (player.gameover) entry.eliminated = true;
+    return entry;
+  });
+  const first = sorted[0];
+  const winners = !first ? [] : sorted
+    .filter(player => !!player.gameover === !!first.gameover && (first.gameover
+      ? (player.eliminatedAt || 0) === (first.eliminatedAt || 0)
+      : lengthOf(player) === lengthOf(first)))
+    .map(player => player.id);
   return { ranking, winners };
+}
+
+// La partida termina antes de tiempo si quedan una o ninguna serpiente viva, o si entre las vivas
+// no queda ninguna persona (en una sala con bots, nadie quiere mirarlos hasta el final)
+function matchOver(players) {
+  const alive = players.filter(player => !player.gameover);
+  return alive.length <= 1 || !alive.some(player => !player.bot);
 }
 
 // Frenesí: cuánta comida base hay en la arena en los últimos segundos (la normal es jugadores + foodExtra)
@@ -40,4 +66,4 @@ function crownHolder(players, prevId) {
   return top.includes(prevId) ? prevId : null;
 }
 
-module.exports = { matchResult, frenzyFoodTarget, crownHolder };
+module.exports = { matchResult, matchOver, frenzyFoodTarget, crownHolder };

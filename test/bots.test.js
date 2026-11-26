@@ -90,34 +90,58 @@ test('predice el segmento que toca un disparo contra una serpiente que sigue der
   assert.ok(exact / hits > 0.95, `acertó ${exact} de ${hits}`);
 });
 
+// La primera decisión que el bot aplica, con el mundo quieto: llega después de su tiempo de reacción
+function firstDecision(level, me, w) {
+  const brain = createBrain(level, seeded(1));
+  for (let n = 0; n < 12; n++) {
+    const decision = stepBot(brain, me, w);
+    if (decision.angle !== null) return decision;
+  }
+  return { angle: null, fire: false };
+}
+
 test('el extremo dispara a un rival que tiene enfrente', () => {
   const me = snake('a', 120, 200, 6);
   const rival = snake('b', 300, 150, 20, -Math.PI / 2);   // sube: su cuerpo cruza la línea de tiro
-  const { fire } = stepBot(createBrain('extreme', seeded(1)), me, world([me, rival]));
+  const { fire } = firstDecision('extreme', me, world([me, rival]));
   assert.equal(fire, true);
 });
 
 test('no dispara si no hay a quién, si el blanco no lo vale o si no puede', () => {
   const me = snake('a', 120, 200, 6);
   const far = snake('b', 300, 400, 20, 0);
-  assert.equal(stepBot(createBrain('extreme', seeded(1)), me, world([me, far])).fire, false);
+  assert.equal(firstDecision('extreme', me, world([me, far])).fire, false);
 
   const shielded = snake('b', 300, 182, 4, -Math.PI / 2);
   shielded.addEffect('immunity', 5000, 1000000);
-  assert.equal(stepBot(createBrain('extreme', seeded(1)), me, world([me, shielded])).fire, false);
+  assert.equal(firstDecision('extreme', me, world([me, shielded])).fire, false);
 
   const single = snake('c', 120, 200, 1);
   const target = snake('b', 300, 150, 20, -Math.PI / 2);
-  assert.equal(stepBot(createBrain('extreme', seeded(1)), single, world([single, target])).fire, false);
+  assert.equal(firstDecision('extreme', single, world([single, target])).fire, false);
 
   me.lastShotAt = 1000000 - 50;   // dentro de la pausa entre tiros
-  assert.equal(stepBot(createBrain('extreme', seeded(1)), me, world([me, target])).fire, false);
+  assert.equal(firstDecision('extreme', me, world([me, target])).fire, false);
+});
+
+test('entre un rival que puede eliminar y uno largo, igual de a mano, va por el que elimina', () => {
+  // Los dos vienen hacia la izquierda, uno arriba y otro abajo de su línea, a la misma distancia
+  const me = snake('a', 300, 216, 8);
+  const short = snake('b', 420, 150, 3, Math.PI);
+  const long = snake('c', 420, 282, 20, Math.PI);
+  const { angle } = firstDecision('extreme', me, world([me, short, long]));
+  assert.ok(angle < -0.05, `gira hacia ${angle.toFixed(2)} rad`);
+  // Con los lugares cambiados, gira para el otro lado
+  const short2 = snake('b', 420, 282, 3, Math.PI);
+  const long2 = snake('c', 420, 150, 20, Math.PI);
+  const other = firstDecision('extreme', me, world([me, short2, long2]));
+  assert.ok(other.angle > 0.05, `gira hacia ${other.angle.toFixed(2)} rad`);
 });
 
 test('va hacia la comida que tiene más cerca', () => {
   const me = snake('a', 300, 200, 3);
   const foods = [{ x: 300, y: 320, score: 3 }, { x: 700, y: 200, score: 3 }];
-  const { angle } = stepBot(createBrain('extreme', seeded(1)), me, world([me], { foods }));
+  const { angle } = firstDecision('extreme', me, world([me], { foods }));
   assert.ok(Math.abs(angle - Math.PI / 2) < 0.01, String(angle));
 });
 
@@ -126,13 +150,13 @@ test('el extremo esquiva un disparo que le daría en la cabeza', () => {
   const foods = [{ x: 420, y: 200, score: 5 }];
   // Viene de arriba hacia donde va a estar la cabeza dentro de 5 pasos
   const projectiles = [{ id: 'p', playerId: 'b', x: 360, y: 20, direction: { x: 0, y: 1 } }];
-  const { angle } = stepBot(createBrain('extreme', seeded(1)), me, world([me], { foods, projectiles }));
+  const { angle } = firstDecision('extreme', me, world([me], { foods, projectiles }));
   assert.ok(Math.abs(angle) > 0.3, String(angle));
-  const calm = stepBot(createBrain('extreme', seeded(1)), me, world([me], { foods }));
+  const calm = firstDecision('extreme', me, world([me], { foods }));
   assert.ok(Math.abs(calm.angle) < 0.01, String(calm.angle));
 });
 
-test('reacción: el fácil tarda varios pasos en decidir algo; el extremo, ninguno', () => {
+test('reacción: el fácil tarda varios pasos en decidir algo; el extremo, los menos', () => {
   const me = snake('a', 300, 200, 3);
   const w = world([me], { foods: [{ x: 300, y: 320, score: 3 }] });
   const firstMove = level => {
@@ -140,7 +164,8 @@ test('reacción: el fácil tarda varios pasos en decidir algo; el extremo, ningu
     for (let n = 1; n < 30; n++) if (stepBot(brain, me, w).angle !== null) return n;
     return Infinity;
   };
-  assert.equal(firstMove('extreme'), 1);
+  assert.equal(firstMove('extreme'), SKILLS.extreme.delay + 1);
+  for (const level of ['easy', 'medium', 'hard']) assert.ok(firstMove(level) > firstMove('extreme'), level);
   assert.ok(firstMove('easy') > SKILLS.easy.delay);
 });
 
@@ -165,11 +190,41 @@ test('cada nivel le gana al anterior casi siempre', () => {
     let won = 0;
     for (let g = 0; g < 6; g++) {
       const levels = g % 2 ? [order[i], order[i - 1]] : [order[i - 1], order[i]];
-      const { players } = playMatch(levels, { seed: 40 + g, time: 60 });
-      const [strong, weak] = [order[i], order[i - 1]].map(level => players.find(p => p.level === level).length);
-      if (strong > weak) won++;
+      const { players, winners } = playMatch(levels, { seed: 40 + g, time: 60 });
+      // Gana la última en pie o, si se acaba el tiempo, la más larga (un empate no cuenta)
+      const strong = players.find(p => p.level === order[i]).id;
+      if (winners.length === 1 && winners[0] === strong) won++;
     }
     assert.ok(won >= 4, `${order[i]} le ganó a ${order[i - 1]} ${won} de 6`);
+  }
+});
+
+test('el extremo le gana al difícil sin barrerlo en segundos', () => {
+  let seconds = 0;
+  for (let g = 0; g < 6; g++) {
+    const levels = g % 2 ? ['extreme', 'hard'] : ['hard', 'extreme'];
+    seconds += playMatch(levels, { seed: 300 + g, time: 60 }).seconds;
+  }
+  assert.ok(seconds / 6 >= 15, `las partidas duran ${(seconds / 6).toFixed(1)} s en promedio`);
+});
+
+test('con el abanico salen como mucho 3 ráfagas por cada uno que se toma', () => {
+  let fans = 0;
+  for (let g = 0; g < 4; g++) {
+    const { players } = playMatch(['hard', 'hard', 'hard', 'hard'], { seed: 90 + g, time: 60 });
+    for (const p of players) {
+      assert.ok(p.fanBursts <= 3 * p.fans, `${p.id}: ${p.fanBursts} ráfagas con ${p.fans} abanicos`);
+      fans += p.fans;
+    }
+  }
+  assert.ok(fans > 0, 'nadie tomó un abanico');
+});
+
+test('durante el escudo al nacer nadie queda fuera', () => {
+  const guard = config.spawnShield;
+  for (let g = 0; g < 8; g++) {
+    const { players } = playMatch(['extreme', 'hard', 'hard'], { seed: 70 + g, time: 20 });
+    for (const p of players) if (p.outAt !== null) assert.ok(p.outAt >= guard, `${p.level} quedó fuera a los ${p.outAt} s`);
   }
 });
 

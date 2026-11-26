@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { matchResult, frenzyFoodTarget, crownHolder } = require('../game/match');
+const { matchResult, matchOver, frenzyFoodTarget, crownHolder } = require('../game/match');
 
 const p = (id, length, color = '#fff') => ({
   id, name: 'n' + id, color, segments: Array.from({ length }, (_, i) => ({ x: i * 12, y: 0 }))
@@ -30,6 +30,40 @@ test('sala vacía: sin clasificación ni ganadores', () => {
 test('una serpiente sin segmentos cuenta como largo 0', () => {
   const r = matchResult([{ id: 'a', name: 'na', color: '#fff', segments: null }, p('b', 1)]);
   assert.deepEqual(r.ranking.map(e => [e.id, e.length]), [['b', 1], ['a', 0]]);
+});
+
+// Eliminación: la eliminada queda sin segmentos, con gameover y la hora del paso en que cayó
+const out = (id, at, extra) => Object.assign({ id, name: 'n' + id, color: '#fff', segments: [], gameover: true, eliminatedAt: at }, extra);
+
+test('las vivas van primero y las eliminadas después, de la última en caer a la primera', () => {
+  const r = matchResult([out('a', 1000), p('b', 5), out('c', 3000), p('d', 9), out('e', 2000)]);
+  assert.deepEqual(r.ranking.map(e => e.id), ['d', 'b', 'c', 'e', 'a']);
+  assert.deepEqual(r.ranking[2], { id: 'c', name: 'nc', color: '#fff', length: 0, eliminated: true });
+  assert.equal('eliminated' in r.ranking[0], false);
+});
+
+test('con una sola viva, gana ella aunque sea más corta que lo que fueron las otras', () => {
+  assert.deepEqual(matchResult([out('a', 1000), p('b', 2)]).winners, ['b']);
+});
+
+test('si las últimas caen en el mismo paso, ganan las dos', () => {
+  const r = matchResult([out('a', 1000), out('b', 5000), out('c', 5000)]);
+  assert.deepEqual(r.winners, ['b', 'c']);
+  assert.deepEqual(r.ranking.map(e => e.id), ['b', 'c', 'a']);
+});
+
+test('matchOver: termina con una o ninguna viva', () => {
+  assert.equal(matchOver([p('a', 3), p('b', 3)]), false);
+  assert.equal(matchOver([p('a', 3), out('b', 1)]), true);
+  assert.equal(matchOver([out('a', 1), out('b', 1)]), true);
+  assert.equal(matchOver([p('a', 3), p('b', 3), out('c', 1)]), false);
+});
+
+test('matchOver: con bots, termina cuando no queda ninguna persona viva', () => {
+  const bot = (id, length) => Object.assign(p(id, length), { bot: 'medium' });
+  assert.equal(matchOver([out('yo', 1), bot('b1', 5), bot('b2', 5)]), true);
+  assert.equal(matchOver([p('yo', 3), bot('b1', 5), bot('b2', 5)]), false);
+  assert.equal(matchOver([out('yo', 1), p('otra', 3), bot('b1', 5)]), false);
 });
 
 test('frenesí: la comida base sube un 50 %', () => {

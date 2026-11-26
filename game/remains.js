@@ -1,5 +1,5 @@
 /*
- * Restos: cuando un disparo corta una serpiente, lo que pierde queda en el mapa como comida.
+ * Restos: cuando un disparo le saca segmentos a una serpiente, lo que pierde queda en el mapa como comida.
  * Un buen disparo se vuelve la forma más rápida de crecer, para quien disparó o para el que
  * llegue antes. Los restos vencen a los 10 s y, a diferencia de la comida base, no reaparecen
  * al comerlos.
@@ -10,15 +10,12 @@ const REMAINS_TTL_MS = 10000;
 const MAX_DROPS = 30;   // por corte: un corte muy largo reparte su valor en 30 comidas
 const MAX_VALUE = 5;    // como la comida base
 
-// Daño de un impacto. En la cabeza: pierde hasta 3 segmentos de la cola y conserva la cabeza.
-// En el cuerpo: pierde desde el segmento tocado hasta la cola. No modifica `segments`.
-function cutSnake(segments, segmentIndex) {
-  if (segmentIndex === 0) {
-    const removed = Math.min(3, segments.length - 1);
-    const keep = segments.length - removed;
-    return { kept: segments.slice(0, keep), lost: segments.slice(keep) };
-  }
-  return { kept: segments.slice(0, segmentIndex), lost: segments.slice(segmentIndex) };
+// Daño de un impacto (docs/GAMEPLAY_SPEC.md, etapa 5): pierde `damage` segmentos de la cola, toque
+// donde toque. Si no le quedan segmentos, `kept` sale vacío: la serpiente queda eliminada.
+// No modifica `segments`.
+function cutSnake(segments, damage) {
+  const keep = Math.max(0, segments.length - damage);
+  return { kept: segments.slice(0, keep), lost: segments.slice(keep) };
 }
 
 // Comidas para los segmentos perdidos. Una por celda (dos segmentos en la misma celda suman),

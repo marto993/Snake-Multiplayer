@@ -6,7 +6,7 @@ const { buildRoomConfig, consumableLimit } = require('./game/difficulty');
 const { traceProjectile, fanDirections } = require('./game/projectiles');
 const { touchedAlong, wrapPoint, cellIndex } = require('./game/geometry');
 const { cutSnake, dropRemains } = require('./game/remains');
-const { matchResult, frenzyFoodTarget, crownHolder } = require('./game/match');
+const { matchResult, matchOver, frenzyFoodTarget, crownHolder } = require('./game/match');
 const { isBotLevel, botLevel, botName, createBrain, stepBot } = require('./game/bots');
 const { createAssets } = require('./lib/assets');
 const { secureIndex, reportHandler, REPORT_PATH, REPORT_TYPES } = require('./lib/security');
@@ -199,6 +199,7 @@ function serializePlayers(players) {
     gameover: player.gameover,
     scoreLeftToGrow: player.scoreLeftToGrow,
     effects: player.activeEffects(Date.now()),
+    fanShots: player.fanShots,
     bot: player.bot // nivel del bot; en una persona es undefined y no viaja
   }));
 }
@@ -372,6 +373,7 @@ function resetRoomToWaiting(room) {
   room.gameState.roundTimeLeft = room.config.roundTime;
   room.gameState.frenzy = false;
   room.gameState.leaderId = null;
+  room.gameState.spawnGuardUntil = 0;
   room.projectiles = [];
   room.pendingProjectileEvents = [];
   room.consumables = [];
@@ -503,7 +505,8 @@ function runBots(room, now) {
     projectiles: room.projectiles,
     config: room.config,
     now,
-    timeLeft: room.gameState.roundTimeLeft
+    timeLeft: room.gameState.roundTimeLeft,
+    guardUntil: room.gameState.spawnGuardUntil || 0
   };
   const decisions = bots.map(bot => {
     try {
@@ -682,9 +685,11 @@ function checkConsumableConsumption(room, player, from, step) {
   if (consumableIndex !== -1) {
     const consumable = room.consumables[consumableIndex];
     
-    // Activa el efecto (o reinicia su tiempo si ya lo tenía); la duración del nivel está en segundos
-    const duration = room.config.consumables[consumable.type]?.duration || 5;
-    player.addEffect(consumable.type, duration * 1000, Date.now());
+    // El abanico da ráfagas (o las repone); el resto activa el efecto (o reinicia su tiempo si ya lo
+    // tenía), con la duración del nivel en segundos
+    const settings = room.config.consumables[consumable.type] || {};
+    if (consumable.type === 'fan') player.giveFanShots(settings.shots || 3);
+    else player.addEffect(consumable.type, (settings.duration || 5) * 1000, Date.now());
     
     // Remover el consumible del mapa
     room.consumables.splice(consumableIndex, 1);
@@ -731,9 +736,9 @@ function createProjectile(room, player) {
   }
   player.updateTargets();
 
-  // Con el abanico salen tres: el central y dos abiertos fanDegrees a los lados, cada uno una celda
-  // delante de la cabeza en su propio rumbo
-  const directions = player.hasEffect('fan', now)
+  // Con el abanico salen tres (y se gasta una ráfaga): el central y dos abiertos fanDegrees a los
+  // lados, cada uno una celda delante de la cabeza en su propio rumbo
+  const directions = player.useFanShot()
     ? fanDirections(player.direction, room.config.fanDegrees)
     : [player.direction];
   if (!room.pendingProjectileEvents) room.pendingProjectileEvents = [];
@@ -764,9 +769,10 @@ function createProjectile(room, player) {
   return true;
 }
 
-// MODIFICADO: moveProjectiles para manejar inmunidad
-// frameEvents (opcional) acumula los eventos visuales del tick: hitEvents, blockEvents, expiredProjectiles
-function moveProjectiles(room, frameEvents = { hitEvents: [], blockEvents: [], expiredProjectiles: [] }) {
+// Proyectiles del paso: avanzan, se bloquean con el escudo o lastiman (y pueden eliminar).
+// frameEvents (opcional) acumula los eventos visuales del tick: hitEvents, blockEvents, expiredProjectiles.
+// now: la hora del paso; las que caen en el mismo paso quedan empatadas en la clasificación.
+function moveProjectiles(room, frameEvents = { hitEvents: [], blockEvents: [], expiredProjectiles: [] }, now = Date.now()) {
   const { segmentSize, canvasWidth, canvasHeight, projectileCells } = room.config;
   const bounds = { cell: segmentSize, width: canvasWidth, height: canvasHeight };
 
@@ -791,7 +797,8 @@ function moveProjectiles(room, frameEvents = { hitEvents: [], blockEvents: [], e
 
     const player = result.player;
     if (result.outcome === 'block') {
-      player.useImmunity(); // Consumir inmunidad
+      // El escudo se gasta al bloquear, salvo el de nacer mientras dura
+      if (now >= (room.gameState.spawnGuardUntil || 0)) player.useImmunity(now);
       console.log(`${player.name} used immunity to block projectile`);
       frameEvents.blockEvents.push({
         playerId: player.id,
@@ -803,24 +810,31 @@ function moveProjectiles(room, frameEvents = { hitEvents: [], blockEvents: [], e
       return false;
     }
 
-    // Impacto: en la cabeza quita hasta 3 segmentos; en el cuerpo, corta desde ahí.
-    // Lo que pierde queda en el mapa como restos (comida que vence a los 10 s).
-    const lengthBefore = player.segments.length;
-    const { kept, lost } = cutSnake(player.segments, result.segmentIndex);
-    player.segments = kept;
-    player.updateTargets();
-    room.foods.push(...dropRemains(lost, Date.now(), occupied));
-    frameEvents.hitEvents.push({
+    // Impacto: quita hitDamage segmentos de la cola, toque donde toque. Lo que pierde queda en el
+    // mapa como restos (comida que vence a los 10 s). Sin segmentos, queda fuera de la partida.
+    const { kept, lost } = cutSnake(player.segments, room.config.hitDamage);
+    room.foods.push(...dropRemains(lost, now, occupied));
+    const eliminated = kept.length === 0;
+    if (eliminated) {
+      player.eliminate(now);
+      console.log(`${player.name} was eliminated in room ${room.id}`);
+    } else {
+      player.segments = kept;
+      player.updateTargets();
+    }
+    const hitEvent = {
       targetId: player.id,
       attackerId: projectile.playerId,
       projectileId: projectile.id,
       x: result.x,
       y: result.y,
-      segmentsLost: lengthBefore - player.segments.length,
-      headshot: result.segmentIndex === 0,
+      segmentsLost: lost.length,
+      headshot: result.segmentIndex === 0, // solo visual: el daño es el mismo
       color: player.color,
       attackerColor: projectile.color
-    });
+    };
+    if (eliminated) hitEvent.eliminated = true;
+    frameEvents.hitEvents.push(hitEvent);
     return false;
   });
 }
@@ -846,14 +860,15 @@ function startRoundTimer(room) {
     if (room.gameState.roundTimeLeft <= 0) {
       clearInterval(room.gameState.roundTimerId);
       room.gameState.roundTimerId = null;
-      endMatch(room).catch(error => console.error('Error ending match:', error));
+      endMatch(room, 'time').catch(error => console.error('Error ending match:', error));
     }
   }, 1000);
 }
 
-// Fin de la partida: gana la serpiente más larga. Se guardan las estadísticas, todos reciben la
-// clasificación y la sala vuelve a espera con los mismos jugadores, lista para "Jugar de nuevo".
-async function endMatch(room) {
+// Fin de la partida: por tiempo (gana la más larga de las vivas) o por eliminación (queda una sola,
+// o ninguna persona). Se guardan las estadísticas, todos reciben la clasificación y la sala vuelve a
+// espera con los mismos jugadores, lista para "Jugar de nuevo". ending: 'time' | 'elimination'.
+async function endMatch(room, ending = 'time') {
   if (!isRoomAlive(room) || !room.gameState.playing) return;
   clearRoomGameTimers(room);
   room.gameState.playing = false;
@@ -875,7 +890,7 @@ async function endMatch(room) {
   }
   if (!isRoomAlive(room)) return;
 
-  io.to(room.id).emit('gameEnd', { ranking, winners });
+  io.to(room.id).emit('gameEnd', { ranking, winners, ending });
 
   resetRoomToWaiting(room);
   io.to(room.id).emit('updatePlayers', serializePlayers(room.players),
@@ -898,6 +913,13 @@ function startGame(room) {
     room.gameState.frenzy = false;
     room.gameState.leaderId = null;
     room.pendingProjectileEvents = []; // Arranca la ronda sin eventos de disparo viejos
+
+    // Escudo al nacer: todas salen en columna y con 3 segmentos, y cualquier impacto elimina.
+    // Hasta spawnGuardUntil bloquea todos los disparos sin gastarse (moveProjectiles).
+    const shieldStart = Date.now();
+    const shieldMs = (room.config.spawnShield || 0) * 1000;
+    room.gameState.spawnGuardUntil = shieldStart + shieldMs;
+    if (shieldMs > 0) room.players.forEach(player => player.addEffect('immunity', shieldMs, shieldStart));
     
     console.log(`Starting match in room ${room.id}`);
     io.to(room.id).emit('gameStart', {
@@ -985,7 +1007,7 @@ function gameLogicLoop(room) {
   }
   
   if (room.config.attacksEnabled) {
-    moveProjectiles(room, frameEvents);
+    moveProjectiles(room, frameEvents, tickNow);
   }
   
   room.players.forEach((player) => {
@@ -1086,6 +1108,11 @@ function gameLogicLoop(room) {
     },
     timestamp: Date.now()
   });
+
+  // Después del frame, así todos ven el impacto que la terminó
+  if (matchOver(room.players)) {
+    endMatch(room, 'elimination').catch(error => console.error('Error ending match:', error));
+  }
 }
 
 io.on('connection', (socket) => {
@@ -1417,6 +1444,7 @@ io.on('connection', (socket) => {
               gameover: Boolean(player.gameover),
               scoreLeftToGrow: Number(player.scoreLeftToGrow) || 0,
               effects: player.activeEffects(Date.now()),
+              fanShots: Number(player.fanShots) || 0,
               bot: player.bot
             };
           } catch (err) {
@@ -1754,6 +1782,14 @@ io.on('connection', (socket) => {
         // Partida en curso (ronda, pausa entre rondas o su cuenta regresiva): se corta y la sala
         // vuelve a espera. abortMatch cancela también el timeout de la ronda siguiente.
         abortMatch(room);
+        return;
+      }
+
+      // Irse en plena partida equivale a quedar fuera: si queda una sola viva, o ninguna persona
+      // viva, la partida termina (endMatch manda gameEnd y después el estado de la sala)
+      if (room.gameState.playing && matchOver(room.players)) {
+        endMatch(room, 'elimination').catch(error => console.error('Error ending match:', error));
+        broadcastOnlinePlayersList();
         return;
       }
       

@@ -5,26 +5,20 @@ const { cutSnake, dropRemains, REMAINS_TTL_MS } = require('../game/remains');
 const line = n => Array.from({ length: n }, (_, i) => ({ x: 120 - i * 12, y: 60 }));
 const none = () => false;
 
-test('impacto en la cabeza: pierde hasta 3 segmentos de la cola', () => {
-  const { kept, lost } = cutSnake(line(6), 0);
-  assert.deepEqual(kept, line(3));
-  assert.deepEqual(lost, [{ x: 84, y: 60 }, { x: 72, y: 60 }, { x: 60, y: 60 }]);
-});
-
-test('impacto en la cabeza: siempre conserva la cabeza', () => {
-  assert.deepEqual(cutSnake(line(2), 0), { kept: line(1), lost: [{ x: 108, y: 60 }] });
-  assert.deepEqual(cutSnake(line(1), 0), { kept: line(1), lost: [] });
-});
-
-test('impacto en el cuerpo: pierde desde el segmento tocado hasta la cola', () => {
-  const { kept, lost } = cutSnake(line(5), 2);
+test('un impacto quita `damage` segmentos de la cola', () => {
+  const { kept, lost } = cutSnake(line(6), 4);
   assert.deepEqual(kept, line(2));
-  assert.deepEqual(lost, [{ x: 96, y: 60 }, { x: 84, y: 60 }, { x: 72, y: 60 }]);
+  assert.deepEqual(lost, [{ x: 96, y: 60 }, { x: 84, y: 60 }, { x: 72, y: 60 }, { x: 60, y: 60 }]);
+});
+
+test('con tantos segmentos como el daño o menos, no queda nada', () => {
+  assert.deepEqual(cutSnake(line(4), 4), { kept: [], lost: line(4) });
+  assert.deepEqual(cutSnake(line(3), 4), { kept: [], lost: line(3) });
 });
 
 test('no modifica el array original', () => {
   const segs = line(5);
-  cutSnake(segs, 2);
+  cutSnake(segs, 4);
   assert.deepEqual(segs, line(5));
 });
 

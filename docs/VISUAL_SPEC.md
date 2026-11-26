@@ -707,7 +707,7 @@ Propósito: la arena es la protagonista; todo lo demás se aparta. Desde 1280 px
 ```
 ┌───────────────────────────────────────────────────────────────────────────┐
 │                ┌ .hud-bar ──────────────────────────────┐                 │
-│ ┌ .hud-board ─┐│ Gana la más larga    (1:42)     Escudo │┌ #gameInterface┐│
+│ ┌ .hud-board ─┐│ Última en pie o…     (1:42)     Escudo │┌ #gameInterface┐│
 │ │ 1 ● Ana  34 │└────────────────────────────────────────┘│ Sala K3J9QZ   ││
 │ │ 2 ● Tú   21 │┌ canvas#game ───────────────────────────┐│ Flechas o WASD││
 │ │ 3 ● Leo  12 ││                                        ││ Espacio       ││
@@ -741,7 +741,7 @@ En partida y con `pointer: coarse` la página no debe hacer scroll al tocar la a
 
 Responsable: ESCENAS (`Overlays.countdown(n)`). `#overlay-countdown` cubre `.arena-frame` (`position: absolute; inset: 0`), `pointer-events: none`.
 
-- Al primer número aparece un velo radial (`radial-gradient` de `rgba(3,3,7,0.55)` en el centro a `rgba(3,3,7,0.2)` en los bordes) con fundido de 300 ms. Arriba del número, la meta de la partida, "Gana la serpiente más larga", en Recursive 600 18 px `--bio-ink-2`.
+- Al primer número aparece un velo radial (`radial-gradient` de `rgba(3,3,7,0.55)` en el centro a `rgba(3,3,7,0.2)` en los bordes) con fundido de 300 ms. Arriba del número, la meta de la partida, "Gana la última en pie o la más larga" (`docs/GAMEPLAY_SPEC.md`, etapa 5), en Recursive 600 18 px `--bio-ink-2`.
 - El número va en Fraunces itálica 300, tamaño `calc(var(--arena-size) * 0.42)`. Colores: 3 en `--bio-turquoise`, 2 en `--bio-cyan`, 1 en `--bio-lime`, con el glow de texto display.
 - Cada número entra con escala 1,5 a 1, opacidad 0 a 1 y `blur(14px)` a 0 en 480 ms con `--bio-ease-out`. Detrás, un anillo (`span.countdown-ring`, borde de 2 px del mismo color) crece de 0,4 a 1,6 veces el tamaño del número mientras su opacidad baja de 0,6 a 0, en 900 ms.
 - Cuando llega el número siguiente, el anterior sale con escala 1 a 0,7, opacidad a 0 y `blur(8px)` en 260 ms con `--bio-ease-in`, y el nuevo entra a la vez.
@@ -751,7 +751,7 @@ Responsable: ESCENAS (`Overlays.countdown(n)`). `#overlay-countdown` cubre `.are
 
 Responsable: ESCENAS (`Overlays.roundStart()`) y ARENA (`Arena.onRoundStart()`), en el mismo instante (`gameStart`).
 
-`#overlay-round` muestra "¡Ya!" en Fraunces itálica 400, `--bio-lime`, tamaño `calc(var(--arena-size) * 0.28)` (mínimo 72 px), y encima "Gana la serpiente más larga" en Recursive 600 18 px. El velo de la cuenta regresiva se va en 400 ms. "¡Ya!" entra con escala 0,8 a 1 con `--bio-ease-jelly` en 420 ms, se sostiene 380 ms y sale con opacidad a 0, escala 1,15 y `blur(10px)` en 380 ms. Total: 1180 ms. En la arena, la ola de inicio (5.12). `Backdrop.pulse('#EAC255', 0.35)`.
+`#overlay-round` muestra "¡Ya!" en Fraunces itálica 400, `--bio-lime`, tamaño `calc(var(--arena-size) * 0.28)` (mínimo 72 px), y encima "Gana la última en pie o la más larga" en Recursive 600 18 px. El velo de la cuenta regresiva se va en 400 ms. "¡Ya!" entra con escala 0,8 a 1 con `--bio-ease-jelly` en 420 ms, se sostiene 380 ms y sale con opacidad a 0, escala 1,15 y `blur(10px)` en 380 ms. Total: 1180 ms. En la arena, la ola de inicio (5.12). `Backdrop.pulse('#EAC255', 0.35)`.
 
 ### 4.15 Últimos 10 segundos
 
@@ -768,7 +768,7 @@ Disparador: `roundTimeLeft` llega a 10. Lo pinta cada responsable en lo suyo:
 
 Responsables: ARENA (`Arena.onRoundEnd({ winnerId })`, con `winnerId` nulo si hay empate) e INTEGRADOR.
 
-- **0 ms.** Llega `gameEnd` con `{ ranking: [{ id, name, color, length }], winners: [id] }`. La arena congela el último estado y enfoca al ganador (5.14). El marcador del HUD conserva el resultado: la sala ya volvió a espera en el servidor y el `updatePlayers` que sigue trae las serpientes con largo 3, pero el HUD no se actualiza con eso.
+- **0 ms.** Llega `gameEnd` con `{ ranking: [{ id, name, color, length, eliminated? }], winners: [id], ending }` (`ending`: `'time'` o `'elimination'`). La arena congela el último estado y enfoca al ganador (5.14). El marcador del HUD conserva el resultado: la sala ya volvió a espera en el servidor y el `updatePlayers` que sigue trae las serpientes con largo 3, pero el HUD no se actualiza con eso.
 - **2000 ms.** Entra el final (4.17).
 
 No hay panel intermedio: la partida es una sola.
@@ -779,8 +779,8 @@ Responsable: ESCENAS (`Overlays.final(data)`, con los datos de `gameEnd`; los co
 
 - **0 ms.** El fondo de `#finalScreen` aparece en 600 ms.
 - **300 ms.** `#finalTitle` muestra el nombre del ganador (si hay empate, "Empate", sin animación por letra) en Fraunces itálica 300, `clamp(48px, 9vw, 112px)`, color `body` de su color bio con glow, `text-wrap: balance`. Cada letra es un `span.final-letter` (creado con `textContent`) que sube 30 px desde `blur(10px)` y opacidad 0, 700 ms con `--bio-ease-out`, escalonadas a 40 ms. Después, el glow del nombre respira.
-- **900 ms.** `#finalMessage` ("Gana con la serpiente más larga: {n} segmentos." o, en empate, "{A} y {B} terminan con {n} segmentos.") aparece subiendo 10 px.
-- **1200 ms.** Las filas de `#finalScoresList` (largo final de cada serpiente, de mayor a menor) entran escalonadas a 90 ms desde `translateY(20px)`. Las ganadoras (`.is-champion`) tienen borde izquierdo de 3 px de su color, fondo teñido con ese color al 8 % y el rango en Fraunces.
+- **900 ms.** `#finalMessage` aparece subiendo 10 px. Dice "Última en pie, con {n} segmentos." si la partida terminó por eliminación y quedó una sola; "Gana con la serpiente más larga: {n} segmentos." si ganó una por largo; "{A} y {B} terminan con {n} segmentos." en un empate por largo; y "{A} y {B} caen a la vez." si las últimas quedaron fuera en el mismo paso.
+- **1200 ms.** Las filas de `#finalScoresList` (primero las vivas por largo final, de mayor a menor, y después las que quedaron fuera, de la última en caer a la primera; en lugar del largo, "fuera") entran escalonadas a 90 ms desde `translateY(20px)`. Las ganadoras (`.is-champion`) tienen borde izquierdo de 3 px de su color, fondo teñido con ese color al 8 % y el rango en Fraunces.
 - **1700 ms.** `#finalHint` aparece con fundido: a un invitado le dice "{anfitrión} puede iniciar otra partida"; al anfitrión, solo si faltan jugadores ("Falta 1 jugador para jugar de nuevo").
 - **1800 ms.** `.final-actions` sube 10 px. Para el anfitrión: `#playAgainButton` ("Jugar de nuevo", principal, respira; deshabilitado si faltan jugadores), `#backToRoomButton` ("Volver a la sala", secundario) y `#backToMenuButton` ("Salir a las salas", silencioso). Para un invitado, lo mismo sin "Jugar de nuevo". Para un espectador, solo `#backToMenuButton` como principal, con el texto "Volver a las salas". El foco va al título, no a los botones: Espacio es la tecla de disparo.
 
@@ -834,7 +834,7 @@ LAYOUT estiliza estas estructuras; quien las genera (indicado en cada una) las c
 ```html
 <div class="hud-bar">
   <div class="hud-goal">
-    <span class="hud-goal-label">Gana la más larga</span>
+    <span class="hud-goal-label">Última en pie o la más larga</span>
   </div>
   <div class="hud-timer" data-phase="calm">          <!-- calm | warn | tension -->
     <svg class="hud-timer-ring" viewBox="0 0 64 64" aria-hidden="true">
@@ -1105,8 +1105,9 @@ Valores de partículas: `count` es la cantidad; `speed` en px/s; `life` en ms; `
 
 - **Comer** (`onFoodEaten`, `foodEvents`). Centro de la celda. Ráfaga: `count` = 6 + 4 × valor, color de la comida (tabla 5.8), `speed` [30, 70 + 20 × valor], `life` [380, 700], `size` [1,2, 2,4], forma `dot`, `drag` 0,9. Anillo del mismo color de `0,4·s` a `1,8·s` en 320 ms con alpha 0,7. **Digestión**: un bulto de luz recorre el cuerpo del que comió de la cabeza a la cola a 22 segmentos por segundo (máximo 3 a la vez por serpiente): un glow `core` de radio `2,75 × r` con alpha 0,55 y un glow `body` de radio `3,75 × r` con alpha 0,35, que se apagan en el último 20 % del cuerpo. Si soy yo: texto flotante "+{valor}" en el color de la comida, Recursive 700 a 1,15 veces el tamaño de etiqueta, que sube 18 px y se desvanece en 700 ms. **Con la boca grande**, si la comida estaba a más de `1,2·s` de la cabeza (y a menos de `4·s`, para no cruzar un portal), una estela la lleva hasta la boca en 170 ms: un trazo del color de la comida de 2 px a 1 px y una perla de luz `#F6F3EE` de radio `0,9·s` que acelera (`t²`) hacia la cabeza, que sigue moviéndose.
 - **Impacto en el cuerpo** (`onHit`, `headshot` falso). En la celda del impacto. Fragmentos: `count` = min(48, 10 + 5 × `segmentsLost`), repartidos 60 % forma `spark` y 40 % `dot`, color `body` de la víctima, `speed` [60, 200], `life` [500, 1000], `size` [1,5, 3,2], `drag` 0,9. Chispa del atacante: 6 `spark` del color `body` del atacante, `speed` [80, 160], `life` [250, 400], `size` [1,2, 2,2]. Destello: sprite `#F6F3EE` de radio `2,5·s` con alpha de 0,5 a 0 en 160 ms. **Cola desprendida**: los últimos `segmentsLost` puntos de render de la víctima (copiados en el hook, antes de que lleguen las posiciones nuevas, hasta el primer corte de portal) siguen dibujándose como gas apagado (glow `body` cada 2 puntos con alpha 0,18, trazo `deep` con alpha 0,6 y una línea `body` fina con alpha 0,5), derivan hacia un lado al azar (hasta ±10 px/s en cada eje, sin hundirse) y se apagan en 900 ms. El gas del pedazo se deshace en polvo: 2 partículas `dot` cada 2 puntos, alternando `core` y `body`, `speed` [6, 28], `life` [600, 1200], `size` [0,6, 1,3], alpha 0,6, `drag` 0,97. Texto flotante con el signo menos tipográfico (U+2212) y `segmentsLost`, en el color `text` de la víctima, a 1,2 veces el tamaño de etiqueta, que sube 22 px en 900 ms, siempre. Sacudida: si soy la víctima, 7 px durante 280 ms y `Backdrop.pulse('#EC4F5A', 0.25)`; si soy el atacante, 2,5 px durante 120 ms.
-- **Impacto sin daño** (`onHit` con `segmentsLost` en 0: un disparo en la cabeza de una serpiente de un segmento). Las ráfagas y el destello salen igual, pero no hay cola desprendida ni número: el texto flotante dice "Sin daño" (800 ms). Si soy la víctima, sacudida de 3 px durante 140 ms.
+- **Impacto sin daño** (`onHit` con `segmentsLost` en 0: con la regla vieja, un disparo en la cabeza de una serpiente de un segmento; con daño fijo no pasa, y queda por si el cliente habla con un servidor viejo). Las ráfagas y el destello salen igual, pero no hay cola desprendida ni número: el texto flotante dice "Sin daño" (800 ms). Si soy la víctima, sacudida de 3 px durante 140 ms.
 - **Impacto en la cabeza** (`onHit`, `headshot` verdadero). Todo lo anterior con 12 fragmentos más, destello con alpha 0,7 y dos anillos: uno `body` de la víctima de `0,4·s` a `2,2·s` en 420 ms (alpha 0,8, 2 px) y otro `#F6F3EE` de `0,4·s` a `3·s` en 480 ms (alpha 0,5), 90 ms después. **Polvo oscuro**: 12 partículas de forma `ink` (el nombre de la forma es heredado; hoy dibuja polvo), color `#1C1410`, `size` [5, 10] que se abre hasta [9, 17], `speed` [8, 34], `life` [1300, 2000], `drag` 0,96, alpha 0,55, en `'source-over'`; con 8 motas `dot` de polvo cálido `#8A5A3C`, `speed` [10, 50], `life` [900, 1500], `size` [0,8, 1,6], alpha 0,5, `drag` 0,95. Sobre el número flotante, la palabra "cabeza" en el tamaño de etiqueta (con el mínimo de 10 px CSS). Sacudida: víctima 10 px durante 360 ms; atacante 4 px durante 160 ms.
+- **Eliminación** (`onHit` con `eliminated` verdadero, `docs/GAMEPLAY_SPEC.md`, etapa 5). Todo lo del impacto en la cabeza, haya sido en la cabeza o no, con 20 fragmentos más. La cola desprendida es el cuerpo entero, cabeza incluida (hasta 96 puntos). Un tercer anillo `body` de la víctima, de `0,6·s` a `4,2·s` en 720 ms (alpha 0,6, 1,5 px), 160 ms después. En lugar del número, el texto flotante "Fuera" en el color `text` de la víctima, a 1,3 veces el tamaño de etiqueta, que sube 26 px en 1200 ms. Sacudida: víctima 12 px durante 420 ms y `Backdrop.pulse('#EC4F5A', 0.4)`; atacante 5 px durante 200 ms. Desde el frame siguiente la serpiente llega con `gameover` y sin segmentos, y la arena no la dibuja.
 - **Bloqueo** (`onBlock`). En la celda del bloqueo. Chispas de aurora: 10 `spark` `#C7B8FF`, `speed` [50, 150], `life` [450, 850], `size` [1,3, 2,8], y 6 `spark` `#A8EADF` (verde oxígeno), `speed` [40, 120], `life` [400, 750], `size` [1,1, 2,4], todas con `drag` 0,9. Dos anillos `#C7B8FF`: de `0,4·s` a `2·s` en 380 ms (alpha 0,8) y de `0,4·s` a `2,8·s` en 420 ms (alpha 0,5), 80 ms después. La magnetosfera del jugador estalla (5.7). Si soy el jugador o el atacante: texto flotante "Bloqueado" en `#C7B8FF` (900 ms). Si soy el jugador: sacudida de 3 px durante 140 ms y `Backdrop.pulse('#C7B8FF', 0.15)`.
 - **Portal** (`onPortal`, con `fromX`, `fromY`, `toX`, `toY`). En los dos puntos de cruce sobre el borde: onda en media elipse aplastada contra el borde (radio `1,6·s` a lo largo del borde y `0,5·s` hacia adentro, que se abre con `easeOutExpo`) del color `body`, trazo de 2 px con alpha 0,6 y glow con alpha 0,3, en 420 ms; 6 partículas `dot` por lado que se alejan del borde hacia adentro (apertura 1,6 rad, `speed` [30, 90], `life` [350, 650]); el borde se enciende (5.2). Sin sacudida.
 - **Disparo** (`onProjectileFired`). En el punto de salida: 6 `spark` en cono (dirección del disparo, apertura 0,9 rad), color `body` del tirador, `speed` [80, 180], `life` [180, 320], `drag` 0,88. **Costo visible**: en la punta de la cola del tirador (último punto de render), el segmento gastado se va en una bocanada de gas que se abre un 60 % y se apaga donde quedó en 500 ms (glow `core` de radio `0,84·s` con alpha 0,9 y glow `body` de radio `1,4·s` con alpha 0,6, al empezar), con 4 partículas chicas `body` (`speed` [10, 40], `life` [300, 500]). La cabeza del tirador retrocede `0,15·s` durante 90 ms (solo visual). Si soy el tirador: sacudida de 1,5 px durante 80 ms. **Abanico**: los dos disparos laterales llegan con `spread: true` y solo hacen el cono de chispas de salida; la bocanada de la cola, el retroceso y la sacudida salen una vez, con el disparo central, porque la ráfaga cuesta un solo segmento.
@@ -1189,7 +1190,7 @@ Responsable: ESCENAS (`HUD.update`, `HUD.show`, `HUD.hide`); LAYOUT estiliza el 
 
 Membrana de 64 px de alto (48 en móvil) del ancho de la arena, en tres zonas.
 
-- **Meta** (izquierda): "Gana la más larga" en Recursive 600 14 px `--bio-ink-2` (12 px en móvil), truncado con elipsis si no entra. Reemplaza a la ronda y sus pips: la partida es una sola.
+- **Meta** (izquierda): "Última en pie o la más larga" en Recursive 600 14 px `--bio-ink-2` (12 px en móvil), truncado con elipsis si no entra. Reemplaza a la ronda y sus pips: la partida es una sola.
 - **Temporizador** (centro): SVG de 64 × 64 a 56 px CSS. Pista de radio 26 y trazo de 4 px en `rgba(255,255,255,0.08)`; progreso de radio 26 y 4 px con extremos redondeados, `stroke-dasharray` de 163,4 (2π × 26) y `stroke-dashoffset = 163,4 × (1 - timeLeft / roundTime)`, con transición lineal de 1000 ms (así el anillo baja continuo entre los ticks de segundo). Un tercer círculo de radio 29 y trazo de 1 px con `stroke-dasharray: 2 6` gira una vuelta cada 40 segundos: son los cilios. La cifra va en el centro en Recursive MONO 700 24 px, como minutos y segundos ("1:42") desde un minuto y solo segundos por debajo; su `aria-label` lo dice en palabras ("1 minuto y 42 segundos").
 - **Estado** (derecha): un indicador por efecto propio activo o el badge de espectador.
 
@@ -1201,7 +1202,7 @@ Fases del temporizador (`data-phase`, también reflejado en `#scene-arena[data-p
 | `warn` | 20 a 11 | `#F08A3C` | Cambio de color en 300 ms |
 | `tension` | 10 a 0 | `#EC4F5A` | Latido por segundo (escala 1 a 1,12 a 1 en 220 ms con `--bio-ease-jelly`), glow `drop-shadow` en el SVG; desde 3, la cifra queda en `scale(1.16)` |
 
-**Efectos propios**: un `.hud-shield` por tipo (`data-effect`), en orden fijo: escudo, boca grande y abanico. Cada uno aparece con el revelado de 4.20 cuando el efecto está en `effects` del jugador propio: icono de 18 px (magnetosfera, agujero negro o estrella triple), la palabra ("Escudo", "Boca grande", "Abanico"), el tiempo restante con coma decimal ("3,2 s", calculado con la hora del servidor del instante dibujado, que llega en `serverNow`: el reloj del cliente puede estar desfasado) y una barra de 40 × 3 px que se vacía. El color sale de `--fx`: `#C7B8FF` para el escudo, `#F29BC9` para la boca grande y `#F0875F` para el abanico; borde y fondo son ese color al 40 % y al 7 %. El icono late a 1,6 Hz. Al vencer, sale con opacidad y escala 0,9 en 240 ms. Con dos o más a la vez, cada uno queda en icono y tiempo: la palabra pasa a ser solo para el lector de pantalla y la barra se oculta, así los tres entran en la columna sin pisar el temporizador.
+**Efectos propios**: un `.hud-shield` por tipo (`data-effect`), en orden fijo: escudo, boca grande y abanico. Cada uno aparece con el revelado de 4.20 cuando el efecto está en `effects` del jugador propio: icono de 18 px (magnetosfera, agujero negro o estrella triple), la palabra ("Escudo", "Boca grande", "Abanico"), el tiempo restante con coma decimal ("3,2 s", calculado con la hora del servidor del instante dibujado, que llega en `serverNow`: el reloj del cliente puede estar desfasado) y una barra de 40 × 3 px que se vacía. El abanico no vence (`docs/GAMEPLAY_SPEC.md`, etapa 5): aparece mientras el jugador tiene `fanShots`, muestra las ráfagas que quedan ("×3", "×2", "×1") en lugar del tiempo, y su barra baja una parte con cada ráfaga. El color sale de `--fx`: `#C7B8FF` para el escudo, `#F29BC9` para la boca grande y `#F0875F` para el abanico; borde y fondo son ese color al 40 % y al 7 %. El icono late a 1,6 Hz. Al vencer, sale con opacidad y escala 0,9 en 240 ms. Con dos o más a la vez, cada uno queda en icono y tiempo: la palabra pasa a ser solo para el lector de pantalla y la barra se oculta, así los tres entran en la columna sin pisar el temporizador.
 
 **Espectador**: `.hud-spectator`, píldora con borde violeta, icono de ojo y "Espectador".
 
@@ -1212,7 +1213,7 @@ Lista ordenada de los jugadores, en filas de 36 px. Cada jugador llega con el co
 - Cada fila: rango (MONO 600 14 px `--bio-ink-3`, 20 px de ancho), punto de 10 px en el color `body` con glow, nombre en Recursive 500 16 px color `text` (truncado con elipsis a 12 caracteres), puntaje en MONO 700 16 px alineado a la derecha, y debajo del nombre una barra de 2 px cuyo ancho es la proporción respecto del líder (`--w`), en el color `body` al 70 %, con transición de ancho de 300 ms.
 - Fila propia: borde izquierdo de 3 px lima, etiqueta "Tú" en lima 12 px después del nombre.
 - Con inmunidad: icono de escudo (magnetosfera) de 14 px en `#C7B8FF` después del nombre.
-- `gameover`: opacidad 0,4.
+- `gameover` (quedó fuera, `docs/GAMEPLAY_SPEC.md`, etapa 5): opacidad 0,4 y el puntaje dice "fuera" en lugar del largo. Con largo 0, queda al final del orden.
 - Métrica: siempre el largo actual (`score`), con la caption "Largo actual". Al terminar la partida conserva el último valor (ver 4.16).
 - Reordenamiento: FLIP de 280 ms con `--bio-ease-standard`, reutilizando los mismos `li` por `data-id` (nunca se reconstruye la lista con `innerHTML`). La fila que sube de posición recibe un glow de su color durante 400 ms.
 - Más de 8 jugadores: los 7 primeros más la fila propia con su rango real, separada por un espacio de 8 px con tres puntos tenues.
@@ -1253,7 +1254,7 @@ Objetivo: 60 FPS con 8 serpientes de unos 60 segmentos más partículas, en una 
 - Movimiento reducido: tabla 3.6. Fotosensibilidad: máximo 3 destellos por segundo, siempre locales, alpha máximo 0,7 (0,25 con movimiento reducido).
 - `prefers-contrast: more`: paneles con alpha 0,96, `--bio-ink-3` pasa a valer `--bio-ink-2`, sin nebulosa en la arena.
 - Teclado: todo se puede operar con Tab, Enter y Escape. Foco visible (3.4). El modal atrapa el foco. Las escenas inactivas tienen `inert`.
-- Lectores de pantalla: `<html lang="es">`; toasts con `role="status"` o `role="alert"`; `#overlay-round` con `aria-live="polite"` (anuncia "Gana la serpiente más larga, ¡Ya!"); el temporizador del HUD con `aria-label` y sin `aria-live` (sería ruido cada segundo); `#gameOverScreen` y `#finalScreen` con `role="dialog"` y `aria-labelledby`; el canvas con `aria-label="Arena de juego"`.
+- Lectores de pantalla: `<html lang="es">`; toasts con `role="status"` o `role="alert"`; `#overlay-round` con `aria-live="polite"` (anuncia "Gana la última en pie o la más larga, ¡Ya!"); el temporizador del HUD con `aria-label` y sin `aria-live` (sería ruido cada segundo); `#gameOverScreen` y `#finalScreen` con `role="dialog"` y `aria-labelledby`; el canvas con `aria-label="Arena de juego"`.
 - Táctil: objetivos de 44 × 44 px como mínimo; `touch-action: none` en la arena.
 - Las flechas, WASD y Espacio solo hacen `preventDefault` en partida, jugando y sin ser espectador (como hoy, `SnakeGame.js:745-769`), para no romper el scroll ni los inputs.
 - Escapar HTML: todo nombre de usuario, código de sala o texto que llegue del servidor se pone con `textContent`. Hoy hay `innerHTML` con nombres sin escapar en `SnakeGame.js:1353-1363` (salas), `1656-1661` (final) y `1781-1787` (ranking); el rediseño los reemplaza.
@@ -1329,18 +1330,18 @@ Responsables: LAYOUT (textos estáticos del HTML), INTEGRADOR (textos generados)
 
 | Elemento | Texto |
 |---|---|
-| HUD meta | Gana la más larga |
+| HUD meta | Última en pie o la más larga |
 | HUD temporizador | {m}:{ss} desde un minuto, {s} debajo (`aria-label`: "{m} minutos y {s} segundos") |
 | HUD caption | Largo actual |
 | HUD fila propia, etiqueta en arena | Tú |
 | HUD escudo | Escudo {x,y} s |
 | HUD espectador | Espectador |
-| Cuenta regresiva | Gana la serpiente más larga, luego 3, 2, 1 |
-| Inicio de la partida | Gana la serpiente más larga, ¡Ya! |
+| Cuenta regresiva | Gana la última en pie o la más larga, luego 3, 2, 1 |
+| Inicio de la partida | Gana la última en pie o la más larga, ¡Ya! |
 | `#finalTitle` | {nombre del ganador} (en empate, "Empate"; o "Sala cerrada") |
-| `#finalMessage` | Gana con la serpiente más larga: {n} segmentos. / En empate: {A} y {B} terminan con {n} segmentos. (singular: 1 segmento) |
+| `#finalMessage` | Última en pie, con {n} segmentos. / Gana con la serpiente más larga: {n} segmentos. / En empate: {A} y {B} terminan con {n} segmentos. / Si caen a la vez: {A} y {B} caen a la vez. (singular: 1 segmento) |
 | Título de la clasificación | Clasificación final |
-| `.final-total` | {n} segmentos (1 segmento) |
+| `.final-total` | {n} segmentos (1 segmento); si quedó fuera, "fuera" |
 | `#finalHint` | {anfitrión} puede iniciar otra partida / Falta 1 jugador para jugar de nuevo / Faltan {n} jugadores para jugar de nuevo |
 | `#playAgainButton` | Jugar de nuevo |
 | `#backToRoomButton` | Volver a la sala |
@@ -1353,7 +1354,7 @@ Responsables: LAYOUT (textos estáticos del HTML), INTEGRADOR (textos generados)
 | `.leaderboard-note` | Primero quienes jugaron 3 partidas o más, ordenados por porcentaje de victorias. |
 | `#closeLeaderboardModal` (`aria-label`) | Cerrar |
 | Pie | Hecho con [icono de corazón] por El Marto |
-| Textos flotantes en la arena | +{n} / -{n} (con U+2212) / cabeza / Bloqueado |
+| Textos flotantes en la arena | +{n} / -{n} (con U+2212) / cabeza / Fuera / Bloqueado |
 
 El orden del ranking descripto en la nota es el que aplica hoy `SnakeGame.js:1747-1776`.
 
@@ -1374,8 +1375,11 @@ Reemplazo de cada `addCanvasNotification` actual. "Sin toast" significa que el c
 | `gameStart`, `countdown`, `roundEnd`, `gameEnd` | Sin toast (overlays) | |
 | `spectatingStarted` | Mirando la sala {código} | info |
 | `spectatorJoined` | {nombre} está mirando la partida | info |
-| `consumableEvents` (soy yo) | Escudo activo: bloquea un disparo / Boca grande: comés desde más lejos / Abanico: disparás de a tres | success, 2500 ms |
+| `consumableEvents` (soy yo) | Escudo activo: bloquea un disparo / Boca grande: comés desde más lejos / Abanico: tus próximos 3 disparos salen de a tres | success, 2500 ms |
 | `gameState.frenzy` (empieza) | Frenesí: más comida hasta el final | info, 3000 ms |
+| `hitEvents` con `eliminated` (soy yo) | Quedaste fuera: sigues mirando hasta el final | info, 3500 ms |
+| `hitEvents` con `eliminated` (otra) | {atacante} dejó fuera a {víctima} / {víctima} quedó fuera (con su propio disparo) | info, 2500 ms |
+| Eliminación que termina la partida | Sin toast (lo cuenta el final) | |
 | `gamepadconnected` | Mando conectado: stick o cruceta para moverte, A o gatillo derecho para disparar | info, 3500 ms |
 | `gamepaddisconnected` | Mando desconectado | info, 2500 ms |
 | `consumableEvents` (otro) | Sin toast | |
@@ -1422,7 +1426,7 @@ const SERVER_ERRORS_ES = {
 Responsable: SERVIDOR. Todo es aditivo: no cambia ningún campo existente ni el orden de la lógica. Los cinco arrays nuevos de `gameLogicFrame` están siempre presentes, vacíos si no pasó nada. Todas las coordenadas son de celda (esquina superior izquierda), igual que `segments`.
 
 - **`foodEvents`**: se agrega en el bloque de comida de `gameLogicLoop` (`index.js:947-976`) cuando se come: `{ playerId: player.id, x: eatenFood.x, y: eatenFood.y, score: eatenFood.score, color: player.color }`.
-- **`hitEvents`**: en `moveProjectiles` (`index.js:651-663`), cuando un proyectil impacta un segmento sin inmunidad: `{ targetId: player.id, attackerId: projectile.playerId, x: segment.x, y: segment.y, segmentsLost, headshot: i === 0, color: player.color, attackerColor: projectile.color }`. `segmentsLost` es la cantidad realmente quitada: en la cabeza, las veces que se ejecutó `pop()`; en el cuerpo, `largoAntes - i`.
+- **`hitEvents`**: en `moveProjectiles` (`index.js:651-663`), cuando un proyectil impacta un segmento sin inmunidad: `{ targetId: player.id, attackerId: projectile.playerId, x: segment.x, y: segment.y, segmentsLost, headshot: i === 0, color: player.color, attackerColor: projectile.color }`. `segmentsLost` es la cantidad realmente quitada: con daño fijo, `min(hitDamage, largo)`. Si la víctima quedó sin segmentos, el evento suma `eliminated: true` (`docs/GAMEPLAY_SPEC.md`, etapa 5); `headshot` queda solo para el efecto.
 - **`blockEvents`**: en el mismo lugar, cuando la inmunidad bloquea (`index.js:645-649`): `{ playerId: player.id, attackerId: projectile.playerId, x: segment.x, y: segment.y }`.
 - **`projectileEvents`**: el disparo ocurre entre ticks (handler `attack`, `index.js:1195-1208`), así que `createProjectile` agrega el evento a `room.pendingProjectileEvents` (inicializado en `createRoom`) con `{ id, playerId, x, y, direction, color }` (posición de salida) y `gameLogicLoop` lo envía y vacía en el siguiente frame. `startNewRound` también lo vacía.
 - **`expiredProjectiles`**: en `moveProjectiles`, cuando el proyectil sale del mapa (`index.js:633-636`): `{ id, x, y }` con la posición anterior al último movimiento (la última celda dentro de la arena).

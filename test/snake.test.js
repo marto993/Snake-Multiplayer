@@ -42,6 +42,31 @@ test('los tres arrays no comparten objetos', () => {
   assert.equal(s.segments[1].x, 48);
 });
 
+test('eliminate: sin segmentos, sin efectos y con la hora en que cayó', () => {
+  const s = make();
+  s.reset(60, 120, 1, 0, 3);
+  s.scoreLeftToGrow = 2;
+  s.addEffect('fan', 5000, 1000);
+  s.eliminate(4000);
+  assert.equal(s.gameover, true);
+  assert.equal(s.eliminatedAt, 4000);
+  assert.deepEqual(s.segments, []);
+  assert.deepEqual(s.targetSegments, []);
+  assert.equal(s.score, 0);
+  assert.equal(s.scoreLeftToGrow, 0);
+  assert.deepEqual(s.effects, {});
+  assert.equal(s.canAttack(), false);
+});
+
+test('reset vuelve a poner en juego a una eliminada', () => {
+  const s = make();
+  s.eliminate(4000);
+  s.reset(60, 120, 1, 0, 3);
+  assert.equal(s.gameover, false);
+  assert.equal(s.eliminatedAt, null);
+  assert.equal(s.segments.length, 3);
+});
+
 // Giro libre
 const DEG = Math.PI / 180;
 const turning = (deg = 40) => {
@@ -140,6 +165,34 @@ test('useImmunity quita solo el escudo', () => {
   assert.equal(s.hasImmunity(10), false);
   assert.equal(s.hasEffect('fan', 10), true);
   assert.equal(s.useImmunity(10), false);
+});
+
+// Abanico: ráfagas contadas, que duran hasta usarlas
+test('abanico: tomarlo da las ráfagas y tomar otro las repone, no suma', () => {
+  const s = make();
+  assert.equal(s.fanShots, 0);
+  s.giveFanShots(3);
+  assert.equal(s.useFanShot(), true);
+  assert.equal(s.fanShots, 2);
+  s.giveFanShots(3);
+  assert.equal(s.fanShots, 3);
+});
+
+test('abanico: cada ráfaga gasta una y sin ráfagas no sale', () => {
+  const s = make();
+  s.giveFanShots(3);
+  assert.deepEqual([s.useFanShot(), s.useFanShot(), s.useFanShot(), s.useFanShot()], [true, true, true, false]);
+  assert.equal(s.fanShots, 0);
+});
+
+test('abanico: reset y eliminate lo vacían', () => {
+  const s = make();
+  s.giveFanShots(3);
+  s.reset(60, 120, 1, 0, 3);
+  assert.equal(s.fanShots, 0);
+  s.giveFanShots(3);
+  s.eliminate(1000);
+  assert.equal(s.fanShots, 0);
 });
 
 test('activeEffects devuelve una copia', () => {

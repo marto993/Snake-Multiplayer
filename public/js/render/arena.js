@@ -2587,15 +2587,16 @@
   const tails = [];
   for (let ti = 0; ti < TAIL_MAX; ti++) tails.push({ on: false, t0: 0, n: 0, bx: new Float32Array(TAIL_PTS), by: new Float32Array(TAIL_PTS), paint: null, vx: 0, vy: 0, t0n: 0, s: 20 });
 
-  function spawnTail(rec, lost, now) {
-    if (!rec || rec.n < 2 || lost <= 0) return;
+  // whole: se desprende el cuerpo entero, cabeza incluida (una eliminación)
+  function spawnTail(rec, lost, now, whole) {
+    if (!rec || rec.n < (whole ? 1 : 2) || lost <= 0) return;
     let slot = null, oldest = 1e18, oi = 0;
     for (let i = 0; i < TAIL_MAX; i++) {
       if (!tails[i].on) { slot = tails[i]; break; }
       if (tails[i].t0 < oldest) { oldest = tails[i].t0; oi = i; }
     }
     if (!slot) slot = tails[oi];
-    const n = Math.min(lost, rec.n - 1, TAIL_PTS);
+    const n = whole ? Math.min(rec.n, TAIL_PTS) : Math.min(lost, rec.n - 1, TAIL_PTS);
     const start = rec.n - n;
     // no copiar a través de un corte de portal: se corta en el primer salto
     let count = 0;
@@ -3349,11 +3350,13 @@
     const cx = cellCenterX(e.x), cy = cellCenterY(e.y);
     const vp = paintFor(e.color || snakeColorById(e.targetId) || '#00ff41');
     const ap = paintFor(e.attackerColor || snakeColorById(e.attackerId) || '#8FB2FF');
-    // segmentsLost llega en 0 cuando el disparo da en la cabeza de una serpiente de 1 segmento
-    // (index.js, moveProjectiles): hay impacto pero no daño, así que no se muestra "−1"
+    // segmentsLost en 0 era el impacto en la cabeza de una serpiente de 1 segmento con la regla vieja;
+    // con daño fijo un impacto siempre saca algo, pero un cliente puede hablar con un servidor viejo
     const lost = e.segmentsLost === undefined ? 1 : Math.max(0, e.segmentsLost | 0);
-    const head = !!e.headshot;
-    let total = Math.min(48, 10 + 5 * lost) + (head ? 12 : 0);
+    // Una eliminación (docs/GAMEPLAY_SPEC.md, etapa 5) es un impacto en la cabeza con un final más grande
+    const out = !!e.eliminated;
+    const head = !!e.headshot || out;
+    let total = Math.min(48, 10 + 5 * lost) + (head ? 12 : 0) + (out ? 20 : 0);
     total = scaleCount(total);
     const sparks = Math.round(total * 0.6);
     setBurst(sparks, vp.body, 60, 200, 500, 1000, 1.5, 3.2, 'spark', 0, 0.9);
@@ -3376,11 +3379,22 @@
       BO.alpha = 0.5;
       burstNow(cx, cy);
     }
-    // cola desprendida: los últimos puntos de la víctima (todavía en su posición previa)
+    // cola desprendida: los últimos puntos de la víctima (todavía en su posición previa); si quedó
+    // fuera, el cuerpo entero
     const rec = snakeRecs.get(e.targetId);
-    if (rec && rec.n > 1 && lost > 0) spawnTail(rec, lost, now);
+    if (rec && lost > 0) spawnTail(rec, lost, now, out);
     const tp = vp;
     const tx = cx, ty = cy - 0.7 * s;
+    if (out) {
+      // un tercer anillo, más lento, del color de la víctima
+      fxRing(cx, cy, 0.6 * s, 4.2 * s, 720, vp.body, 0.6, 1.5, 160);
+      fxText(tx, ty, 'Fuera', tp.text, labelPx() * 1.3, 26, 1200);
+      if (isMe(e.targetId)) {
+        shake(12, 420);
+        backdropPulse('#EC4F5A', 0.4);
+      } else if (isMe(e.attackerId)) shake(5, 200);
+      return;
+    }
     if (lost === 0) {
       fxText(tx, ty, 'Sin daño', tp.text, labelPx() * 1.05, 18, 800);
       if (isMe(e.targetId)) shake(3, 140);

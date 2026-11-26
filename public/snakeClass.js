@@ -19,11 +19,13 @@ class Snake {
       this.eatFood = false;
       this.score = 1; // Modificado: iniciar con puntaje 1 (tamaño inicial)
       this.gameover = false;
+      this.eliminatedAt = null; // hora del servidor en que quedó fuera
       this.scoreLeftToGrow = 0;
       
       // Efectos de los consumibles: un vencimiento por tipo (hora del servidor en ms), por ejemplo
       // { immunity: 1732300000000, fan: 1732300002500 }. Cada uno vence por su cuenta.
       this.effects = {};
+      this.fanShots = 0; // ráfagas de abanico que le quedan: no vencen, se gastan al disparar
       this.lastShotAt = -Infinity; // hora del servidor del último disparo, para la pausa entre tiros
       
       // Calcular interpolationSpeed basado en gameSpeed
@@ -238,6 +240,19 @@ class Snake {
         return active;
     }
 
+    // Abanico (docs/GAMEPLAY_SPEC.md, etapa 5): tomarlo deja `shots` ráfagas, o las repone si quedaban
+    // (no suma). Duran hasta usarlas.
+    giveFanShots(shots) {
+        this.fanShots = shots;
+    }
+
+    // Gasta una ráfaga: true si había
+    useFanShot() {
+        if (this.fanShots <= 0) return false;
+        this.fanShots--;
+        return true;
+    }
+
     // El escudo bloquea un disparo y se consume. `now` es opcional porque traceProjectile pregunta sin hora.
     hasImmunity(now = Date.now()) {
         return this.hasEffect('immunity', now);
@@ -289,24 +304,19 @@ class Snake {
       return projectile;
     }
     
-    // Modificado: GameOver ya no se usa en el nuevo sistema basado en tiempo
-    GameOver() {
-      // Este método se mantiene por compatibilidad pero ya no se usa
-      // en el nuevo sistema donde las rondas terminan por tiempo
+    // Queda fuera de la partida (docs/GAMEPLAY_SPEC.md, etapa 5): sin segmentos ni efectos.
+    // `now` es la hora del servidor del paso en que cayó; ordena a las eliminadas en la clasificación.
+    eliminate(now) {
       this.gameover = true;
-      this.direction.x = 0;
-      this.direction.y = 0;
-      this.segments = [
-        { x: 0, y: 0 }
-      ];
-      this.targetSegments = [
-        { x: 0, y: 0 }
-      ];
-      this.renderSegments = [
-        { x: 0, y: 0 }
-      ];
+      this.eliminatedAt = now;
+      this.segments = [];
+      this.targetSegments = [];
+      this.renderSegments = [];
       this.score = 0;
+      this.scoreLeftToGrow = 0;
+      this.eatFood = false;
       this.effects = {};
+      this.fanShots = 0;
     }
     
     // Reinicia la snake sin "morir": `length` segmentos en línea, el cuerpo detrás de la cabeza
@@ -323,10 +333,12 @@ class Snake {
       this.targetHeading = this.heading;
       this.score = length;
       this.gameover = false;
+      this.eliminatedAt = null;
       this.scoreLeftToGrow = 0;
       this.eatFood = false;
       
       this.effects = {};
+      this.fanShots = 0;
       this.lastShotAt = -Infinity;
     }
     

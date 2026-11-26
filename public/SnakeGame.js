@@ -559,18 +559,40 @@ document.addEventListener('DOMContentLoaded', function () {
   const PICKUP_TOASTS = {
     immunity: 'Escudo activo: bloquea un disparo',
     bigMouth: 'Boca grande: comés desde más lejos',
-    fan: 'Abanico: disparás de a tres'
+    fan: 'Abanico: tus próximos {n} disparos salen de a tres'
   };
+
+  function snakeName(id) {
+    for (let i = 0; i < snakes.length; i++) if (snakes[i].id === id) return snakes[i].name;
+    return '';
+  }
+
+  // Aviso de una eliminación: a la víctima, que sigue mirando; al resto, quién dejó fuera a quién
+  function eliminationToast(event) {
+    if (event.targetId === socket.id && !isSpectating) {
+      toast('Quedaste fuera: sigues mirando hasta el final', 'info', 3500);
+      return;
+    }
+    const victim = snakeName(event.targetId);
+    const attacker = event.attackerId === event.targetId ? '' : snakeName(event.attackerId);
+    if (!victim) return;
+    toast(attacker ? attacker + ' dejó fuera a ' + victim : victim + ' quedó fuera', 'info', 2500);
+  }
 
   function dispatchTimelineFrame(frame) {
     const data = frame.payload;
     dispatchFrameEvents(data);
+    // Si esta eliminación termina la partida, lo cuenta la pantalla final (la regla es matchOver, game/match.js)
+    const alive = (data.players || []).filter(function (p) { return !p.gameover; });
+    const ends = alive.length <= 1 || !alive.some(function (p) { return !p.bot; });
     callEach(data.hitEvents, function (event) {
-      if (event.targetId === socket.id && !isSpectating) rumble(!!event.headshot);
+      if (event.targetId === socket.id && !isSpectating) rumble(!!event.headshot || !!event.eliminated);
+      if (event.eliminated && !ends) eliminationToast(event);
     });
     callEach(data.consumableEvents, function (event) {
+      const shots = (roomConfig && roomConfig.consumables && roomConfig.consumables.fan && +roomConfig.consumables.fan.shots) || 3;
       const message = PICKUP_TOASTS[event.consumableType];
-      if (message && event.playerId === socket.id && !isSpectating) toast(message, 'success', 2500);
+      if (message && event.playerId === socket.id && !isSpectating) toast(message.replace('{n}', shots), 'success', 2500);
     });
   }
 
@@ -606,7 +628,7 @@ document.addEventListener('DOMContentLoaded', function () {
       else if (pb) Motion.snakeAt(null, pb.segments, 0, cell, period, snake.renderSegments);
       else continue;
       snake.direction = (pb || pa).direction;
-      if (pa) snake.effects = pa.effects || {};
+      if (pa) { snake.effects = pa.effects || {}; snake.fanShots = pa.fanShots | 0; }
     }
 
     renderServerT = s.rt;
@@ -707,7 +729,7 @@ document.addEventListener('DOMContentLoaded', function () {
       if (angle !== null) emitSteer(angle, perfNow());
     } else if (key === 32) {
       event.preventDefault();
-      socket.emit('attack');
+      if (!amOut()) socket.emit('attack');
     }
   }
 
@@ -731,7 +753,13 @@ document.addEventListener('DOMContentLoaded', function () {
   const arenaStage = canvas ? canvas.closest('.arena-stage') : null;
 
   function canSteer() {
-    return isConnected && !!gameState.playing && roundLive && !isSpectating;
+    return isConnected && !!gameState.playing && roundLive && !isSpectating && !amOut();
+  }
+
+  // Quedé fuera de la partida (docs/GAMEPLAY_SPEC.md, etapa 5): sigo mirando, sin controles
+  function amOut() {
+    for (let i = 0; i < snakes.length; i++) if (snakes[i].id === socket.id) return !!snakes[i].gameover;
+    return false;
   }
 
   function emitSteer(angle, now) {
@@ -1044,14 +1072,16 @@ document.addEventListener('DOMContentLoaded', function () {
   // Serpientes locales
   // ===========================================================================
   function createLocalSnake(serverSnake) {
+    // Una eliminada llega sin segmentos (por ejemplo, al entrar a mirar una partida empezada)
+    const head = serverSnake.segments[0] || { x: 0, y: 0 };
     const snake = new Snake(
       serverSnake.id,
       serverSnake.name,
       segmentSize,
       arenaW(),
       arenaH(),
-      serverSnake.segments[0].x,
-      serverSnake.segments[0].y,
+      head.x,
+      head.y,
       serverSnake.direction.x,
       serverSnake.direction.y,
       serverSnake.color,
@@ -1066,6 +1096,7 @@ document.addEventListener('DOMContentLoaded', function () {
     snake.gameover = serverSnake.gameover;
     snake.scoreLeftToGrow = serverSnake.scoreLeftToGrow;
     snake.effects = serverSnake.effects || {};
+    snake.fanShots = serverSnake.fanShots | 0;   // ráfagas de abanico que le quedan
     snake.bot = serverSnake.bot || null; // nivel del bot, o null si es una persona
 
     return snake;
@@ -1183,6 +1214,7 @@ document.addEventListener('DOMContentLoaded', function () {
         immune: immune,
         immuneUntil: immune ? shieldEnd : 0,
         effects: s.effects || null,
+        fanShots: s.fanShots | 0,
         isMe: !isSpectating && s.id === socket.id,
         gameover: !!s.gameover
       };
@@ -1391,6 +1423,7 @@ document.addEventListener('DOMContentLoaded', function () {
         existingSnake.name = serverPlayer.name; // un bot cede su nombre si entra una persona que se llama igual
         existingSnake.bot = serverPlayer.bot || null;
         existingSnake.effects = serverPlayer.effects || {};
+        existingSnake.fanShots = serverPlayer.fanShots | 0;
         return existingSnake;
       }
       return createLocalSnake(serverPlayer);
@@ -1588,6 +1621,7 @@ document.addEventListener('DOMContentLoaded', function () {
           localSnake.renderSegments = copySegments(serverSnake.segments);
           localSnake.direction = { x: serverSnake.direction.x, y: serverSnake.direction.y };
           localSnake.effects = serverSnake.effects || {};
+          localSnake.fanShots = serverSnake.fanShots | 0;
         }
         localSnake.score = serverSnake.score;
         localSnake.gameover = serverSnake.gameover;

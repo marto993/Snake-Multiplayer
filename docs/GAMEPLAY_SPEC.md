@@ -1,6 +1,6 @@
-# Diseño: poderes acumulables, cierre de la partida y controles
+# Diseño: poderes acumulables, cierre de la partida, controles y eliminación
 
-Este documento define los cambios de juego pensados para que la partida tenga más decisiones y un final más intenso: una pausa mínima entre disparos, consumibles que se acumulan, dos consumibles nuevos (boca grande y abanico), más comida en los últimos 20 segundos (el frenesí) y una corona para la serpiente más larga. Suma un cambio de controles: el mouse deja de apuntar y se puede jugar con mando. Las reglas de base no cambian: partida por tiempo, sin choques entre serpientes, gana la más larga.
+Este documento define los cambios de juego pensados para que la partida tenga más decisiones y un final más intenso: una pausa mínima entre disparos, consumibles que se acumulan, dos consumibles nuevos (boca grande y abanico), más comida en los últimos 20 segundos (el frenesí) y una corona para la serpiente más larga. Suma un cambio de controles: el mouse deja de apuntar y se puede jugar con mando. Las etapas 1 a 4 no tocan las reglas de base (partida por tiempo, sin choques entre serpientes, gana la más larga). La etapa 5 sí: cada impacto quita 3 segmentos, la serpiente que se queda sin segmentos sale de la partida, y si queda una sola, gana ella sin esperar al final del tiempo.
 
 Se probó también una habilidad defensiva, el ancla (frenar la serpiente 1,5 s y perder un solo segmento por impacto, con recarga), y se descartó: jugando no agregaba decisiones interesantes y sumaba un botón.
 
@@ -39,7 +39,7 @@ Los dos consumibles nuevos usan el sistema de temporizadores que ya existe. `ini
 
 En el mapa, cada consumible tiene silueta y color propios. Los tres comparten un pulso de baliza, cada uno en su color: es la seña de que algo se puede tomar. La boca grande es un agujero negro rosa (`#F29BC9`) visto de frente, con un disco de acreción en espiral. El abanico es una estrella triple coral (`#F0875F`). La comida son planetas que van de verde a ámbar, y el escudo es una aurora violeta, así que ninguno se confunde por forma. Las medidas exactas se agregan a `docs/VISUAL_SPEC.md`, en la sección de consumibles.
 
-Al tomar uno, el jugador recibe un aviso como el del escudo: "Boca grande: comés desde más lejos" o "Abanico: disparás de a tres".
+Al tomar uno, el jugador recibe un aviso como el del escudo: "Boca grande: comés desde más lejos" o "Abanico: disparás de a tres" (desde la etapa 5, "Abanico: tus próximos 3 disparos salen de a tres").
 
 ### Boca grande
 
@@ -47,7 +47,7 @@ Mientras está activa, la serpiente come desde 2,55 celdas, el triple del alcanc
 
 ### Abanico
 
-Mientras está activo, cada disparo sale de a tres: uno en el rumbo de la cabeza y dos abiertos 12° a cada lado. La ráfaga cuesta un segmento, como un disparo simple, y respeta la pausa entre tiros. Cada proyectil nace una celda delante de la cabeza en su propio rumbo y se resuelve por separado; dos de la misma ráfaga pueden cortar a la misma serpiente en el mismo paso. Los dos laterales viajan en `projectileEvents` con `spread: true`, y la arena no repite para ellos la gota de la cola ni el retroceso de la cabeza (`public/js/render/arena.js:2979`), porque el costo fue uno solo.
+Desde la etapa 5 el abanico no dura 6 s: da 3 ráfagas, que duran hasta usarlas (ver "Abanico: 3 ráfagas" en esa etapa). Mientras le quedan ráfagas, cada disparo sale de a tres: uno en el rumbo de la cabeza y dos abiertos 12° a cada lado. La ráfaga cuesta un segmento, como un disparo simple, y respeta la pausa entre tiros. Cada proyectil nace una celda delante de la cabeza en su propio rumbo y se resuelve por separado; dos de la misma ráfaga pueden cortar a la misma serpiente en el mismo paso. Los dos laterales viajan en `projectileEvents` con `spread: true`, y la arena no repite para ellos la gota de la cola ni el retroceso de la cabeza (`public/js/render/arena.js:2979`), porque el costo fue uno solo.
 
 ### HUD propio
 
@@ -85,6 +85,104 @@ La lectura del mando (ejes, zona muerta, cruceta y botones a un rumbo y un dispa
 
 El stick y el joystick táctil dan cualquier ángulo, más precisión que las ocho direcciones del teclado. Para probar empiezan así; un solo valor (`STICK_SNAP` en `SnakeGame.js`, 0 para cualquier ángulo, 8 para redondear a ocho rumbos) cambia los dos si hace falta igualarlos.
 
+## Etapa 5. Eliminación
+
+### Punto de partida
+
+Con las reglas de las etapas 1 a 4, el largo que una serpiente junta durante la partida casi no pesa en el resultado. Un impacto en el cuerpo corta desde el segmento tocado hasta la cola (`cutSnake`, `game/remains.js:15`), así que un disparo cerca de la cabeza le saca casi todo a una serpiente larga, y con `jugadores + foodExtra` comidas en la arena (22 con dos jugadores en el nivel medio) y el frenesí al final, volver a crecer es rápido. Ser larga es más un riesgo que una ventaja: el blanco es más grande y se puede perder de un tiro. Nadie puede quedar afuera, así que tampoco cuesta nada no jugar hasta el final.
+
+Se midió con una copia de `tools/bot-duel.js` sobre las reglas de `main` (commit `e876c38`): 4 bots `hard`, de 100 a 200 partidas de 120 s por regla. En la tabla, "líder" es la serpiente más larga a los 110 s, y el "pasivo" es un bot que sigue derecho sin disparar hasta los últimos 10 s. Con 4 jugadores, el azar da 25 % en las dos columnas.
+
+| Regla | Terminan antes de tiempo | El líder gana | El pasivo gana |
+|---|---|---|---|
+| Actual (corte hasta la cola, sin eliminación) | 0 % | 26 % | 26 % |
+| 3 por impacto y eliminación | 2 % | 65 % | 21 % |
+| 4 por impacto y eliminación | 18 % | 77 % | 11 % |
+| 5 por impacto y eliminación | 37 % | 84 % | 7 % |
+
+Con las reglas actuales, el largo a 10 s del final no anticipa nada, y no hacer nada rinde lo mismo que jugar. Con daño fijo el largo acumulado sí cuenta. Desde 4 por impacto, quedarse pasivo deja de convenir y una de cada cinco partidas termina antes de tiempo (una de cada cuatro en duelo). Bajar la comida a la mitad o sacar el frenesí casi no cambió cuántas partidas terminan antes (3 % y 2 % con 3 por impacto): la palanca es el daño. En esas mediciones los bots todavía calculaban el daño con la regla vieja y no salían a rematar a una serpiente corta; con personas, las partidas que terminan antes deberían ser más.
+
+### Daño fijo
+
+Cada impacto quita `hitDamage` segmentos (3) de la cola, toque donde toque. Lo que se pierde queda en el mapa como restos, igual que hoy (`dropRemains`). El impacto en la cabeza hace el mismo daño: `headshot` sigue viajando en `hitEvents` solo para el efecto visual y la vibración del mando. El escudo bloquea como siempre. Los disparos propios también lastiman a quien los tiró, como hoy.
+
+`cutSnake(segments, damage)` deja de recibir el índice del segmento tocado y devuelve `{ kept, lost }` con los últimos `min(damage, largo)` segmentos en `lost`. Si `kept` queda vacío, la serpiente es eliminada.
+
+El daño empezó en 4, el primer valor que en la medición del punto de partida dejaba de premiar la pasividad. Jugando contra los bots, con 4 era demasiado fácil quedar fuera contra `extreme` y demasiado fácil eliminar a los bots, así que bajó a 3. En el simulador, con un bot `hard` en el lugar de una persona contra tres bots del mismo nivel (40 partidas por caso):
+
+| Tres bots… | Con 4, la "persona" queda fuera | Con 3, la "persona" queda fuera |
+|---|---|---|
+| `medium` | 2 de 40 | 0 de 40 |
+| `hard` | 24 de 40, a los 43 s | 1 de 40 |
+| `extreme` | 40 de 40, a los 30 s | 14 de 40, a los 51 s |
+
+Con 3, entre rivales parejos casi nadie queda fuera: con 4 bots `hard`, ninguna de 100 partidas de 120 s termina antes de tiempo (con 4 por impacto, 27). La eliminación queda como un riesgo, sobre todo contra `extreme`, y casi todas las partidas se deciden por largo. Lo que la etapa vino a arreglar se mantiene: un bot que sigue derecho sin disparar hasta los últimos 10 s gana 0 de 100 (2 con 4 por impacto, 26 en `main`), porque con daño fijo el largo que se junta cuenta.
+
+### Eliminación
+
+Una serpiente eliminada pasa a `gameover`, se queda sin segmentos y sin efectos, y el servidor anota `eliminatedAt` (la hora del paso en que cayó). Sus últimos segmentos quedan como restos. Desde ahí no se mueve, no dispara, los proyectiles la ignoran y la corona la saltea; buena parte de esto ya existe en el servidor por el `gameover` del snake clásico (`index.js:1011`, `index.js:1362`, `index.js:1580`, `game/projectiles.js:33`, `game/match.js:60`). El evento del impacto lleva `eliminated: true`. Disparar no puede eliminar a nadie: hacen falta 2 segmentos para tirar y el tiro cuesta uno.
+
+`Snake.GameOver()`, que no se usaba, se reemplaza por `eliminate(now)`. `reset()` vuelve `eliminatedAt` a `null`.
+
+El jugador eliminado sigue en la sala y mira el resto de la partida en la misma escena. Los controles táctiles se ocultan.
+
+### Fin de la partida
+
+Al final de cada paso, después de mandar el frame (así todos ven el último impacto), el servidor revisa si la partida terminó: quedan una o ninguna serpiente viva, o entre las vivas no queda ninguna persona. Lo segundo cubre las salas con bots: si las personas quedaron afuera, nadie quiere mirar a los bots hasta el final. La función es pura y va en `game/match.js` (`matchOver(players)`). Si termina, llama a `endMatch` como cuando se acaba el tiempo.
+
+También se revisa cuando alguien se va en plena partida. Si quedan menos de `minPlayers` jugadores, la partida se corta como hoy (`abortMatch`); si no, puede terminar por eliminación: irse equivale a quedar afuera.
+
+`gameEnd` suma `ending`: `'time'` si se acabó el tiempo, `'elimination'` si terminó antes.
+
+### Clasificación
+
+Primero las serpientes vivas, de la más larga a la más corta; después las eliminadas, de la última en caer a la primera. En un empate se respeta el orden de la sala. Ganan las vivas más largas (en un empate, todas). Si no queda ninguna viva, porque las últimas cayeron en el mismo paso, ganan las que cayeron en ese paso.
+
+Cada entrada de `ranking` suma `eliminated: true` si la serpiente cayó; su `length` es 0. En la base de datos, `finalScore` guarda ese largo y `won` sale de `winners`, como hoy. Las partidas con bots siguen sin contar para el ranking global.
+
+### Escudo al nacer
+
+Todas las serpientes nacen en columna a 3 celdas de distancia (`getPlayerSpawnPosition`, `index.js:436`) y con 3 segmentos, así que cualquier impacto en el arranque elimina. En la medición con 8 bots y 3 por impacto, la primera eliminación llegaba a los 7 s. Para no quedar afuera antes de poder moverse, al "¡Ya!" cada serpiente recibe el escudo por `spawnShield` segundos (3). Mientras dura, bloquea todos los disparos sin gastarse: `startGame` anota `gameState.spawnGuardUntil` y `moveProjectiles` no consume el escudo antes de esa hora. Después vence como cualquier escudo; si la serpiente tomó uno en el mapa mientras tanto, ese sí se gasta al bloquear. Se ve con la magnetosfera que ya existe (`docs/VISUAL_SPEC.md`, 5.7).
+
+Un escudo que bloquea un solo disparo no alcanzaba: con el disparo sostenido (5 por segundo) o el abanico, el primer tiro lo rompe y el siguiente elimina. En el simulador, un bot `hard` quedaba fuera a los 1,2 s contra un `extreme`. Los bots saben que el escudo de nacer no se rompe (`world.guardUntil`) y no gastan tiros en él.
+
+### Abanico: 3 ráfagas
+
+Con la eliminación, el abanico decidía la partida. Una ráfaga cuesta un segmento y, con 4 por impacto, sacaba 12 si entraban los tres tiros; con el disparo sostenido salían 5 por segundo durante los 6 s que duraba. Se midió con 4 por impacto y 4 bots `hard`, 60 partidas por variante. Cada serpiente tenía el abanico un 11 % del tiempo y en ese rato hacía el 47 % de las eliminaciones: sacaba 2,7 veces más segmentos por segundo que sin él. Como los bots disparan menos que una persona, también se midió una variante en la que, con el abanico, el bot mantiene el disparo mientras tiene un rival a menos de 250 px: ahí sacaba 5,2 veces más por segundo, hacía el 64 % de las eliminaciones y el 85 % de las partidas terminaba antes de tiempo.
+
+| Variante | Eliminaciones con abanico | Si mantiene el disparo |
+|---|---|---|
+| 6 s, ráfagas sin límite (antes) | 47 % | 64 % |
+| Dura 3 s | 23 % | 53 % |
+| Aparece cada 24 s en vez de 12 | 34 % | 61 % |
+| Una ráfaga lastima una sola vez a cada serpiente | 30 % | 58 % |
+| 5 ráfagas | | 30 % |
+| 3 ráfagas que vencen a los 6 s | 28 % | 18 % |
+| 3 ráfagas que duran hasta usarlas | 34 % | 18 % |
+
+Acortarlo o hacerlo más escaso ayuda poco, porque lo que pesa es la cadencia: en 3 s con el disparo sostenido entran muchas ráfagas. Contar las ráfagas pone un tope al daño extra, dispare rápido o lento. Por eso el abanico da 3 ráfagas (`consumables.fan.shots` en la tabla) y no vence. Tomar otro mientras quedan ráfagas las repone a 3, no suma, como los demás efectos.
+
+La cuenta va en la serpiente (`Snake.fanShots`, con `giveFanShots(n)` al tomarlo y `useFanShot()` al disparar), no en `effects`, porque no tiene vencimiento. El servidor la manda en cada jugador del frame (`fanShots`). El indicador del HUD muestra las ráfagas que quedan ("×3") en lugar del tiempo, y la barra baja con cada una.
+
+### Bots
+
+Los bots aprenden la regla nueva. `segmentsLost` (`game/bots.js:265`) devuelve `min(hitDamage, largo)` en vez del corte hasta la cola. Un disparo que elimina a un rival vale más que los segmentos que le saca, porque saca a un competidor de la partida. Un disparo que viene y me eliminaría pesa más al esquivar y al decidir si busco un escudo.
+
+Los bots también dejan de dispararse encima. Deciden el tiro `delay` pasos antes de que salga (la reacción: 4 pasos en `medium`), y en ese tiempo la serpiente sigue girando; con un cuerpo largo que cruza un portal, la cola queda adelante en la misma fila. Con las reglas de `main`, un `medium` contra un `easy` perdía unos 56 segmentos por partida con sus propios disparos, y ganaba igual porque sus cortes eran mucho más grandes. Con daño fijo, eso lo dejaba perdiendo contra `easy`. Ahora, al salir el tiro, el bot revisa si su propio cuerpo quedó en la línea (`ownBodyInLine`) y, si es así, se lo aguanta.
+
+`tools/bot-duel.js` repite las reglas nuevas del paso (daño fijo, eliminación, escudo al nacer, fin por eliminación) y su tabla suma cuántas veces quedó afuera cada bot. El orden de los niveles en partidas con semilla (`test/bots.test.js`) se tiene que mantener.
+
+### En pantalla
+
+Las medidas y los textos exactos van en `docs/VISUAL_SPEC.md`. En resumen:
+
+- **Arena.** Una eliminación es un impacto con un final más grande: el cuerpo entero se desprende y se apaga como la cola de un impacto, la ráfaga es mayor, el texto flotante dice "Fuera" en lugar de "−3", y la sacudida y el pulso del fondo son más fuertes para la víctima.
+- **Avisos.** La víctima recibe "Quedaste fuera: sigues mirando hasta el final". El resto ve "{atacante} dejó fuera a {víctima}", o "{víctima} quedó fuera" si se lastimó con su propio disparo.
+- **Marcador.** La fila de una eliminada ya se atenúa (`.hud-row.is-out`); en lugar del largo muestra "fuera".
+- **Meta.** La cuenta regresiva y el "¡Ya!" dicen "Gana la última en pie o la más larga"; la meta del HUD, "Última en pie o la más larga".
+- **Final.** Las eliminadas muestran "fuera" en lugar del largo. Si la partida terminó por eliminación y quedó una sola, el mensaje es "Última en pie, con {n} segmentos."; si las últimas cayeron a la vez, "{A} y {B} caen a la vez."
+- **Espectadores.** Quien entra a mirar una partida con eliminadas recibe serpientes sin segmentos: `createLocalSnake` (`public/SnakeGame.js:1073`) no puede leer `segments[0]` sin revisar que exista.
+
 ## Valores
 
 Los de juego van en `game/difficulty.js`, con el mismo valor en los tres niveles, para poder ajustarlos por nivel después sin tocar el resto del código. La zona muerta del stick va en `public/js/input/pad.js`.
@@ -93,10 +191,12 @@ Los de juego van en `game/difficulty.js`, con el mismo valor en los tres niveles
 |---|---|
 | Pausa mínima entre disparos | 200 ms |
 | Boca grande: dura / alcance | 6 s / 2,55 celdas |
-| Abanico: dura / apertura | 6 s / 12° a cada lado |
+| Abanico: ráfagas / apertura | 3, hasta usarlas (desde la etapa 5; antes, 6 s) / 12° a cada lado |
 | Boca grande y abanico en el mapa | cada 12 s, máximo 1 (2 con 5 jugadores o más) |
 | Frenesí: desde / comida base | últimos 20 s / +50 % |
 | Stick del mando: zona muerta | 0,3 |
+| Daño por impacto | 3 segmentos, desde la cola (empezó en 4) |
+| Escudo al nacer | 3 s (bloquea todo sin gastarse) |
 
 ## Cómo se verifica
 
@@ -106,9 +206,16 @@ Cada etapa suma pruebas en `test/` para lo que carga en Node sin navegador:
 - **Etapa 2**: los rumbos del abanico (función pura en `game/projectiles.js`).
 - **Etapa 3**: la cantidad de comida del frenesí y la corona con empates (`game/match.js`).
 - **Etapa 4**: la lectura del mando: zona muerta, cruceta, prioridad entre stick y cruceta, botones de disparo y mandos sin mapeo estándar (`test/pad.test.js`).
+- **Etapa 5**: el daño fijo y el impacto que deja sin segmentos (`test/remains.test.js`); la clasificación con eliminadas, el empate de las que caen en el mismo paso y `matchOver` con y sin personas vivas (`test/match.test.js`); `eliminate` y `reset` (`test/snake.test.js`); los valores nuevos de la tabla (`test/difficulty.test.js`); que un bot prefiera el disparo que elimina y que el orden de los niveles se mantenga (`test/bots.test.js`).
 
 El juego se prueba a mano en cada etapa con `npm run dev` y dos ventanas (una en incógnito), y con `ROUND_TIME=30` para llegar rápido al frenesí. Lo que hay que mirar: que mantener el disparo dé 5 tiros por segundo (barra, botón táctil y mando), que el escudo siga bloqueando, que dos efectos se vean y venzan por separado, que mover el mouse no gire la serpiente y el clic dispare, que el mando gire y dispare, y que la consola no tenga errores.
+
+Para la etapa 5: en una sala para jugar solo, dejarse eliminar y ver que la partida termina al instante con los bots arriba en la clasificación; con dos ventanas y un bot, que la eliminada siga mirando y que la partida termine cuando cae la otra persona; que una tercera ventana pueda entrar a mirar una partida con eliminadas; y que el escudo al nacer bloquee todos los disparos en los primeros 3 s.
 
 ## Pendiente de ajuste
 
 Los valores son un punto de partida para ajustar jugando. Lo más probable es que haya que tocar la apertura del abanico, el aumento del frenesí y si el stick y el joystick táctil se redondean a ocho rumbos.
+
+Con los valores de `main`, contra `extreme` no había partida: un `hard` quedaba fuera a los 4 s en promedio (60 de 60 partidas), y repartir las salidas por la arena solo lo llevaba a 6 s. Ni 5 s de escudo al nacer lo cambiaban. Con reacción 0, puntería perfecta y 5 tiros por segundo, a 4 segmentos por impacto, una serpiente corta cae en menos de un segundo. Por eso `extreme` se ablandó un poco (`SKILLS` en `game/bots.js`): 2 pasos de reacción, 1,5° de error de puntería y 800 ms entre tiros propios. Contra un `hard` gana 55 de 60 partidas, que duran 31 s en promedio; contra tres `hard`, gana 25 de 30 y cada `hard` cae a los 34 s (antes, a los 10 s). `test/bots.test.js` pide que las partidas contra `hard` duren al menos 15 s en promedio. Con 3 por impacto, `extreme` le gana a un `hard` 44 de 60 partidas, que duran 79 s en promedio.
+
+De la etapa 5 falta ver jugando tres cosas: si con 3 por impacto las eliminaciones entre personas son tan raras como entre bots parejos (el daño es un valor de la tabla); cuánto molesta quedar afuera temprano y mirar el resto de la partida, que puede ser casi dos minutos; y si la serpiente más larga se escapa demasiado, porque con daño fijo cada impacto le pesa menos a quien tiene más segmentos. Si se extraña el tiro preciso, el impacto en la cabeza puede hacer más daño.
