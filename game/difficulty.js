@@ -22,10 +22,12 @@ const DEFAULT_DIFFICULTY = 'medium';
 // turnDegrees: cuánto puede girar la serpiente por paso. Como avanza una celda por paso, fija
 // el radio de giro: 40° da unos 17 px (1,4 cuerpos) y una vuelta en U de 5 pasos.
 // shotCooldownMs: pausa mínima entre dos disparos del mismo jugador (docs/GAMEPLAY_SPEC.md)
+// hitDamage: segmentos que quita un impacto, de la cola; sin segmentos, la serpiente queda fuera
+// spawnShield: segundos de escudo al "¡Ya!" (el de siempre: bloquea un disparo y se gasta)
 const LEVELS = {
-  easy:   { crossSeconds: 3.5, projectileCells: 3, foodExtra: 24, shieldEvery: 6,  shieldLasts: 5, turnDegrees: 40, shotCooldownMs: 200 },
-  medium: { crossSeconds: 3.3, projectileCells: 3, foodExtra: 20, shieldEvery: 8, shieldLasts: 4, turnDegrees: 40, shotCooldownMs: 200 },
-  hard:   { crossSeconds: 3.0, projectileCells: 3, foodExtra: 18,  shieldEvery: 10, shieldLasts: 3, turnDegrees: 40, shotCooldownMs: 200 }
+  easy:   { crossSeconds: 3.5, projectileCells: 3, foodExtra: 24, shieldEvery: 6,  shieldLasts: 5, turnDegrees: 40, shotCooldownMs: 200, hitDamage: 4, spawnShield: 3 },
+  medium: { crossSeconds: 3.3, projectileCells: 3, foodExtra: 20, shieldEvery: 8, shieldLasts: 4, turnDegrees: 40, shotCooldownMs: 200, hitDamage: 4, spawnShield: 3 },
+  hard:   { crossSeconds: 3.0, projectileCells: 3, foodExtra: 18,  shieldEvery: 10, shieldLasts: 3, turnDegrees: 40, shotCooldownMs: 200, hitDamage: 4, spawnShield: 3 }
 };
 
 // Poderes (docs/GAMEPLAY_SPEC.md): por ahora iguales en los tres niveles. Para ajustar uno por
@@ -72,6 +74,8 @@ function buildRoomConfig(difficulty, opts) {
     foodExtra: level.foodExtra,
     turnDegrees: level.turnDegrees,
     shotCooldownMs: level.shotCooldownMs,
+    hitDamage: level.hitDamage,
+    spawnShield: level.spawnShield,
     bigMouthReach: POWERS.bigMouthReach,
     fanDegrees: POWERS.fanDegrees,
     frenzy: { ...POWERS.frenzy },

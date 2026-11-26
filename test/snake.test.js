@@ -42,6 +42,31 @@ test('los tres arrays no comparten objetos', () => {
   assert.equal(s.segments[1].x, 48);
 });
 
+test('eliminate: sin segmentos, sin efectos y con la hora en que cayó', () => {
+  const s = make();
+  s.reset(60, 120, 1, 0, 3);
+  s.scoreLeftToGrow = 2;
+  s.addEffect('fan', 5000, 1000);
+  s.eliminate(4000);
+  assert.equal(s.gameover, true);
+  assert.equal(s.eliminatedAt, 4000);
+  assert.deepEqual(s.segments, []);
+  assert.deepEqual(s.targetSegments, []);
+  assert.equal(s.score, 0);
+  assert.equal(s.scoreLeftToGrow, 0);
+  assert.deepEqual(s.effects, {});
+  assert.equal(s.canAttack(), false);
+});
+
+test('reset vuelve a poner en juego a una eliminada', () => {
+  const s = make();
+  s.eliminate(4000);
+  s.reset(60, 120, 1, 0, 3);
+  assert.equal(s.gameover, false);
+  assert.equal(s.eliminatedAt, null);
+  assert.equal(s.segments.length, 3);
+});
+
 // Giro libre
 const DEG = Math.PI / 180;
 const turning = (deg = 40) => {

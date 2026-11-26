@@ -17,6 +17,8 @@ test('valores por nivel', () => {
   assert.deepEqual(levels.map(c => c.foodExtra), [24, 20, 18]);
   assert.deepEqual(levels.map(c => c.turnDegrees), [40, 40, 40]);
   assert.deepEqual(levels.map(c => c.shotCooldownMs), [200, 200, 200]);
+  assert.deepEqual(levels.map(c => c.hitDamage), [4, 4, 4]);
+  assert.deepEqual(levels.map(c => c.spawnShield), [3, 3, 3]);
   for (const type of ['bigMouth', 'fan']) {
     assert.deepEqual(levels.map(c => c.consumables[type]), Array(3).fill({ enabled: true, spawnInterval: 12, duration: 6 }));
   }

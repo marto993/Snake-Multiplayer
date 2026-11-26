@@ -19,6 +19,7 @@ class Snake {
       this.eatFood = false;
       this.score = 1; // Modificado: iniciar con puntaje 1 (tamaño inicial)
       this.gameover = false;
+      this.eliminatedAt = null; // hora del servidor en que quedó fuera
       this.scoreLeftToGrow = 0;
       
       // Efectos de los consumibles: un vencimiento por tipo (hora del servidor en ms), por ejemplo
@@ -289,23 +290,17 @@ class Snake {
       return projectile;
     }
     
-    // Modificado: GameOver ya no se usa en el nuevo sistema basado en tiempo
-    GameOver() {
-      // Este método se mantiene por compatibilidad pero ya no se usa
-      // en el nuevo sistema donde las rondas terminan por tiempo
+    // Queda fuera de la partida (docs/GAMEPLAY_SPEC.md, etapa 5): sin segmentos ni efectos.
+    // `now` es la hora del servidor del paso en que cayó; ordena a las eliminadas en la clasificación.
+    eliminate(now) {
       this.gameover = true;
-      this.direction.x = 0;
-      this.direction.y = 0;
-      this.segments = [
-        { x: 0, y: 0 }
-      ];
-      this.targetSegments = [
-        { x: 0, y: 0 }
-      ];
-      this.renderSegments = [
-        { x: 0, y: 0 }
-      ];
+      this.eliminatedAt = now;
+      this.segments = [];
+      this.targetSegments = [];
+      this.renderSegments = [];
       this.score = 0;
+      this.scoreLeftToGrow = 0;
+      this.eatFood = false;
       this.effects = {};
     }
     
@@ -323,6 +318,7 @@ class Snake {
       this.targetHeading = this.heading;
       this.score = length;
       this.gameover = false;
+      this.eliminatedAt = null;
       this.scoreLeftToGrow = 0;
       this.eatFood = false;
       
