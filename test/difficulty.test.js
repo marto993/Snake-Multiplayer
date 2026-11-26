@@ -17,7 +17,7 @@ test('valores por nivel', () => {
   assert.deepEqual(levels.map(c => c.foodExtra), [24, 20, 18]);
   assert.deepEqual(levels.map(c => c.turnDegrees), [40, 40, 40]);
   assert.deepEqual(levels.map(c => c.shotCooldownMs), [200, 200, 200]);
-  assert.deepEqual(levels.map(c => c.hitDamage), [4, 4, 4]);
+  assert.deepEqual(levels.map(c => c.hitDamage), [3, 3, 3]);
   assert.deepEqual(levels.map(c => c.spawnShield), [3, 3, 3]);
   assert.deepEqual(levels.map(c => c.consumables.bigMouth), Array(3).fill({ enabled: true, spawnInterval: 12, duration: 6 }));
   // El abanico no vence: da 3 ráfagas que duran hasta usarlas (docs/GAMEPLAY_SPEC.md, etapa 5)
