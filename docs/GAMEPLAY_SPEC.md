@@ -1,6 +1,6 @@
-# Diseño: poderes acumulables, cierre de la partida y controles
+# Diseño: poderes acumulables, cierre de la partida, controles y eliminación
 
-Este documento define los cambios de juego pensados para que la partida tenga más decisiones y un final más intenso: una pausa mínima entre disparos, consumibles que se acumulan, dos consumibles nuevos (boca grande y abanico), más comida en los últimos 20 segundos (el frenesí) y una corona para la serpiente más larga. Suma un cambio de controles: el mouse deja de apuntar y se puede jugar con mando. Las reglas de base no cambian: partida por tiempo, sin choques entre serpientes, gana la más larga.
+Este documento define los cambios de juego pensados para que la partida tenga más decisiones y un final más intenso: una pausa mínima entre disparos, consumibles que se acumulan, dos consumibles nuevos (boca grande y abanico), más comida en los últimos 20 segundos (el frenesí) y una corona para la serpiente más larga. Suma un cambio de controles: el mouse deja de apuntar y se puede jugar con mando. Las etapas 1 a 4 no tocan las reglas de base (partida por tiempo, sin choques entre serpientes, gana la más larga). La etapa 5 sí: cada impacto quita 4 segmentos, la serpiente que se queda sin segmentos sale de la partida, y si queda una sola, gana ella sin esperar al final del tiempo.
 
 Se probó también una habilidad defensiva, el ancla (frenar la serpiente 1,5 s y perder un solo segmento por impacto, con recarga), y se descartó: jugando no agregaba decisiones interesantes y sumaba un botón.
 
@@ -85,6 +85,70 @@ La lectura del mando (ejes, zona muerta, cruceta y botones a un rumbo y un dispa
 
 El stick y el joystick táctil dan cualquier ángulo, más precisión que las ocho direcciones del teclado. Para probar empiezan así; un solo valor (`STICK_SNAP` en `SnakeGame.js`, 0 para cualquier ángulo, 8 para redondear a ocho rumbos) cambia los dos si hace falta igualarlos.
 
+## Etapa 5. Eliminación
+
+### Punto de partida
+
+Con las reglas de las etapas 1 a 4, el largo que una serpiente junta durante la partida casi no pesa en el resultado. Un impacto en el cuerpo corta desde el segmento tocado hasta la cola (`cutSnake`, `game/remains.js:15`), así que un disparo cerca de la cabeza le saca casi todo a una serpiente larga, y con `jugadores + foodExtra` comidas en la arena (22 con dos jugadores en el nivel medio) y el frenesí al final, volver a crecer es rápido. Ser larga es más un riesgo que una ventaja: el blanco es más grande y se puede perder de un tiro. Nadie puede quedar afuera, así que tampoco cuesta nada no jugar hasta el final.
+
+Se midió con una copia de `tools/bot-duel.js` sobre las reglas de `main` (commit `e876c38`): 4 bots `hard`, de 100 a 200 partidas de 120 s por regla. En la tabla, "líder" es la serpiente más larga a los 110 s, y el "pasivo" es un bot que sigue derecho sin disparar hasta los últimos 10 s. Con 4 jugadores, el azar da 25 % en las dos columnas.
+
+| Regla | Terminan antes de tiempo | El líder gana | El pasivo gana |
+|---|---|---|---|
+| Actual (corte hasta la cola, sin eliminación) | 0 % | 26 % | 26 % |
+| 3 por impacto y eliminación | 2 % | 65 % | 21 % |
+| 4 por impacto y eliminación | 18 % | 77 % | 11 % |
+| 5 por impacto y eliminación | 37 % | 84 % | 7 % |
+
+Con las reglas actuales, el largo a 10 s del final no anticipa nada, y no hacer nada rinde lo mismo que jugar. Con daño fijo el largo acumulado sí cuenta. Desde 4 por impacto, quedarse pasivo deja de convenir y una de cada cinco partidas termina antes de tiempo (una de cada cuatro en duelo). Bajar la comida a la mitad o sacar el frenesí casi no cambió cuántas partidas terminan antes (3 % y 2 % con 3 por impacto): la palanca es el daño. En esas mediciones los bots todavía calculaban el daño con la regla vieja y no salían a rematar a una serpiente corta; con personas, las partidas que terminan antes deberían ser más.
+
+### Daño fijo
+
+Cada impacto quita `hitDamage` segmentos (4) de la cola, toque donde toque. Lo que se pierde queda en el mapa como restos, igual que hoy (`dropRemains`). El impacto en la cabeza hace el mismo daño: `headshot` sigue viajando en `hitEvents` solo para el efecto visual y la vibración del mando. El escudo bloquea como siempre. Los disparos propios también lastiman a quien los tiró, como hoy.
+
+`cutSnake(segments, damage)` deja de recibir el índice del segmento tocado y devuelve `{ kept, lost }` con los últimos `min(damage, largo)` segmentos en `lost`. Si `kept` queda vacío, la serpiente es eliminada.
+
+### Eliminación
+
+Una serpiente eliminada pasa a `gameover`, se queda sin segmentos y sin efectos, y el servidor anota `eliminatedAt` (la hora del paso en que cayó). Sus últimos segmentos quedan como restos. Desde ahí no se mueve, no dispara, los proyectiles la ignoran y la corona la saltea; buena parte de esto ya existe en el servidor por el `gameover` del snake clásico (`index.js:992`, `index.js:1338`, `index.js:1556`, `game/projectiles.js:33`, `game/match.js:34`). El evento del impacto lleva `eliminated: true`. Disparar no puede eliminar a nadie: hacen falta 2 segmentos para tirar y el tiro cuesta uno.
+
+`Snake.GameOver()` (`public/snakeClass.js:293`), que no se usa, se reemplaza por `eliminate(now)`. `reset()` vuelve `eliminatedAt` a `null`.
+
+El jugador eliminado sigue en la sala y mira el resto de la partida en la misma escena. Los controles táctiles se ocultan.
+
+### Fin de la partida
+
+Al final de cada paso, después de mandar el frame (así todos ven el último impacto), el servidor revisa si la partida terminó: quedan una o ninguna serpiente viva, o entre las vivas no queda ninguna persona. Lo segundo cubre las salas con bots: si las personas quedaron afuera, nadie quiere mirar a los bots hasta el final. La función es pura y va en `game/match.js` (`matchOver(players)`). Si termina, llama a `endMatch` como cuando se acaba el tiempo.
+
+También se revisa cuando alguien se va en plena partida. Si quedan menos de `minPlayers` jugadores, la partida se corta como hoy (`abortMatch`); si no, puede terminar por eliminación: irse equivale a quedar afuera.
+
+`gameEnd` suma `ending`: `'time'` si se acabó el tiempo, `'elimination'` si terminó antes.
+
+### Clasificación
+
+Primero las serpientes vivas, de la más larga a la más corta; después las eliminadas, de la última en caer a la primera. En un empate se respeta el orden de la sala. Ganan las vivas más largas (en un empate, todas). Si no queda ninguna viva, porque las últimas cayeron en el mismo paso, ganan las que cayeron en ese paso.
+
+Cada entrada de `ranking` suma `eliminated: true` si la serpiente cayó; su `length` es 0. En la base de datos, `finalScore` guarda ese largo y `won` sale de `winners`, como hoy. Las partidas con bots siguen sin contar para el ranking global.
+
+### Escudo al nacer
+
+Todas las serpientes nacen en columna a 3 celdas de distancia (`getPlayerSpawnPosition`, `index.js:435`) y con 3 segmentos, así que cualquier impacto en el arranque elimina. En la medición con 8 bots y 3 por impacto, la primera eliminación llegaba a los 7 s. Para no quedar afuera antes de poder moverse, al "¡Ya!" cada serpiente recibe el escudo de siempre por `spawnShield` segundos (3): bloquea el primer disparo y se gasta, igual que el consumible. Se ve con la magnetosfera que ya existe (`docs/VISUAL_SPEC.md`, 5.7).
+
+### Bots
+
+Los bots aprenden la regla nueva. `segmentsLost` (`game/bots.js:244`) devuelve `min(hitDamage, largo)` en vez del corte hasta la cola. Un disparo que elimina a un rival vale más que los segmentos que le saca, porque saca a un competidor de la partida. Un disparo que viene y me eliminaría pesa más al esquivar y al decidir si busco un escudo. `tools/bot-duel.js` repite las reglas nuevas del paso (daño fijo, eliminación, escudo al nacer, fin por eliminación) y su tabla suma cuántas veces quedó afuera cada bot. El orden de los niveles en partidas con semilla (`test/bots.test.js`) se tiene que mantener.
+
+### En pantalla
+
+Las medidas y los textos exactos van en `docs/VISUAL_SPEC.md`. En resumen:
+
+- **Arena.** Una eliminación es un impacto con un final más grande: el cuerpo entero se desprende y se apaga como la cola de un impacto, la ráfaga es mayor, el texto flotante dice "Fuera" en lugar de "−4", y la sacudida y el pulso del fondo son más fuertes para la víctima.
+- **Avisos.** La víctima recibe "Quedaste fuera: sigues mirando hasta el final". El resto ve "{atacante} dejó fuera a {víctima}", o "{víctima} quedó fuera" si se lastimó con su propio disparo.
+- **Marcador.** La fila de una eliminada ya se atenúa (`.hud-row.is-out`); en lugar del largo muestra "fuera".
+- **Meta.** La cuenta regresiva y el "¡Ya!" dicen "Gana la última en pie o la más larga"; la meta del HUD, "Última en pie o la más larga".
+- **Final.** Las eliminadas muestran "fuera" en lugar del largo. Si la partida terminó por eliminación y quedó una sola, el mensaje es "Última en pie, con {n} segmentos."; si las últimas cayeron a la vez, "{A} y {B} caen a la vez."
+- **Espectadores.** Quien entra a mirar una partida con eliminadas recibe serpientes sin segmentos: `createLocalSnake` (`public/SnakeGame.js:1046`) no puede leer `segments[0]` sin revisar que exista.
+
 ## Valores
 
 Los de juego van en `game/difficulty.js`, con el mismo valor en los tres niveles, para poder ajustarlos por nivel después sin tocar el resto del código. La zona muerta del stick va en `public/js/input/pad.js`.
@@ -97,6 +161,8 @@ Los de juego van en `game/difficulty.js`, con el mismo valor en los tres niveles
 | Boca grande y abanico en el mapa | cada 12 s, máximo 1 (2 con 5 jugadores o más) |
 | Frenesí: desde / comida base | últimos 20 s / +50 % |
 | Stick del mando: zona muerta | 0,3 |
+| Daño por impacto | 4 segmentos, desde la cola |
+| Escudo al nacer | 3 s (bloquea un disparo) |
 
 ## Cómo se verifica
 
@@ -106,9 +172,14 @@ Cada etapa suma pruebas en `test/` para lo que carga en Node sin navegador:
 - **Etapa 2**: los rumbos del abanico (función pura en `game/projectiles.js`).
 - **Etapa 3**: la cantidad de comida del frenesí y la corona con empates (`game/match.js`).
 - **Etapa 4**: la lectura del mando: zona muerta, cruceta, prioridad entre stick y cruceta, botones de disparo y mandos sin mapeo estándar (`test/pad.test.js`).
+- **Etapa 5**: el daño fijo y el impacto que deja sin segmentos (`test/remains.test.js`); la clasificación con eliminadas, el empate de las que caen en el mismo paso y `matchOver` con y sin personas vivas (`test/match.test.js`); `eliminate` y `reset` (`test/snake.test.js`); los valores nuevos de la tabla (`test/difficulty.test.js`); que un bot prefiera el disparo que elimina y que el orden de los niveles se mantenga (`test/bots.test.js`).
 
 El juego se prueba a mano en cada etapa con `npm run dev` y dos ventanas (una en incógnito), y con `ROUND_TIME=30` para llegar rápido al frenesí. Lo que hay que mirar: que mantener el disparo dé 5 tiros por segundo (barra, botón táctil y mando), que el escudo siga bloqueando, que dos efectos se vean y venzan por separado, que mover el mouse no gire la serpiente y el clic dispare, que el mando gire y dispare, y que la consola no tenga errores.
+
+Para la etapa 5: en una sala para jugar solo, dejarse eliminar y ver que la partida termina al instante con los bots arriba en la clasificación; con dos ventanas y un bot, que la eliminada siga mirando y que la partida termine cuando cae la otra persona; que una tercera ventana pueda entrar a mirar una partida con eliminadas; y que el escudo al nacer bloquee un disparo en los primeros 3 s.
 
 ## Pendiente de ajuste
 
 Los valores son un punto de partida para ajustar jugando. Lo más probable es que haya que tocar la apertura del abanico, el aumento del frenesí y si el stick y el joystick táctil se redondean a ocho rumbos.
+
+De la etapa 5 falta ver jugando tres cosas: si 4 por impacto se siente bien o conviene 3 o 5 (es un valor de la tabla); cuánto molesta quedar afuera temprano y mirar el resto de la partida, que puede ser casi dos minutos; y si la serpiente más larga se escapa demasiado, porque con daño fijo cada impacto le pesa menos a quien tiene más segmentos. Si se extraña el tiro preciso, el impacto en la cabeza puede hacer más daño.
