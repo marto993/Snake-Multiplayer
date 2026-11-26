@@ -17,7 +17,7 @@
  *
  *   Overlays.countdown(n)
  *   Overlays.roundStart()       "¡Ya!" al arrancar la partida
- *   Overlays.final(data)        data: { ranking: [{ id, name, color, length }], winners: [id], reason? }
+ *   Overlays.final(data)        data: { ranking: [{ id, name, color, length, eliminated? }], winners: [id], ending?, reason? }
  *   Overlays.hideAll()
  *   Overlays.open(el), Overlays.close(el)   (extensión) modales .modal
  *
@@ -635,9 +635,9 @@
       caption.textContent = 'Largo actual';
 
       bar.replaceChildren();
-      // Meta de la partida (una sola, por tiempo)
+      // Meta de la partida: quedar última en pie o, si se acaba el tiempo, ser la más larga
       const rw = mk('div', 'hud-goal');
-      rw.appendChild(mk('span', 'hud-goal-label', 'Gana la más larga'));
+      rw.appendChild(mk('span', 'hud-goal-label', 'Última en pie o la más larga'));
       // Temporizador
       timerWrap = mk('div', 'hud-timer');
       timerWrap.setAttribute('data-phase', 'calm');
@@ -886,7 +886,8 @@
       if (imm !== v.immune) { r.li.classList.toggle('is-immune', imm); r.imm.classList.toggle('hidden', !imm); v.immune = imm; }
       const out = !!p.gameover && !sortTotal;
       if (out !== v.out) { r.li.classList.toggle('is-out', out); v.out = out; }
-      const sc = String(metricOf(p) | 0);
+      // Quedó fuera (docs/GAMEPLAY_SPEC.md, etapa 5): en lugar del largo, "fuera"
+      const sc = p.gameover ? 'fuera' : String(metricOf(p) | 0);
       if (sc !== v.score) { r.score.textContent = sc; v.score = sc; }
       const ws = (Math.round(clamp(metricOf(p) / lead, 0, 1) * 100) / 100).toString();
       if (ws !== v.w) { r.li.style.setProperty('--w', ws); v.w = ws; }
@@ -1047,7 +1048,7 @@
 
     // ---------- 3, 2, 1
     // La meta de la partida, en la cuenta regresiva y en el "¡Ya!"
-    const GOAL_TEXT = 'Gana la serpiente más larga';
+    const GOAL_TEXT = 'Gana la última en pie o la más larga';
 
     function countdown(n) {
       n = parseInt(n, 10);
@@ -1189,7 +1190,8 @@
     }
 
     // ---------- Final
-    // Gana la serpiente más larga; si empatan, ganan todas las empatadas (título "Empate").
+    // Gana la última en pie o, si se acaba el tiempo, la más larga de las vivas; si empatan, ganan
+    // todas las empatadas (título "Empate"). data.ending: 'time' | 'elimination'.
     function final(data) {
       data = data || {};
       clearTimeout(st.finalTimer); st.finalTimer = 0;
@@ -1198,12 +1200,14 @@
       (Array.isArray(data.winners) ? data.winners : []).forEach(function (id) { winIds[String(id)] = true; });
       const list = (Array.isArray(data.ranking) ? data.ranking : []).map(function (e) {
         e = e || {};
-        return { id: String(e.id), name: e.name == null ? '' : String(e.name), color: e.color || '', length: +e.length || 0, winner: !!winIds[String(e.id)] };
+        return { id: String(e.id), name: e.name == null ? '' : String(e.name), color: e.color || '', length: +e.length || 0, winner: !!winIds[String(e.id)], out: !!e.eliminated };
       });
       const winners = list.filter(function (e) { return e.winner; });
       const winner = winners.length === 1 ? winners[0] : null;
       const champ = winner ? bio(winner.color) : BIO_DEFAULT;
-      st.finalData = { reason: reason, list: list, winner: winner, winners: winners, champ: champ };
+      // Última en pie: terminó por eliminación y quedó una sola viva
+      const lastStanding = data.ending === 'elimination' && list.filter(function (e) { return !e.out; }).length === 1;
+      st.finalData = { reason: reason, list: list, winner: winner, winners: winners, champ: champ, lastStanding: lastStanding };
       fillFinal(st.finalData);
       hideCountdown(true);
       hideRoundGo(true);
@@ -1239,10 +1243,15 @@
       }
       if (msg) {
         if (fd.reason) msg.textContent = fd.reason;
+        else if (fd.winner && fd.lastStanding) msg.textContent = 'Última en pie, con ' + best + plural(best, ' segmento', ' segmentos') + '.';
         else if (fd.winner) msg.textContent = 'Gana con la serpiente más larga: ' + best + plural(best, ' segmento', ' segmentos') + '.';
         else if (fd.winners.length > 1) {
           const names = fd.winners.map(function (w) { return w.name; });
-          msg.textContent = names.slice(0, -1).join(', ') + ' y ' + names[names.length - 1] + ' terminan con ' + best + plural(best, ' segmento', ' segmentos') + '.';
+          const joined = names.slice(0, -1).join(', ') + ' y ' + names[names.length - 1];
+          // Si las últimas cayeron en el mismo paso, no queda ninguna viva
+          msg.textContent = fd.winners[0].out
+            ? joined + ' caen a la vez.'
+            : joined + ' terminan con ' + best + plural(best, ' segmento', ' segmentos') + '.';
         } else msg.textContent = '';
       }
       if (ol) {
@@ -1257,7 +1266,7 @@
           li.appendChild(dot);
           const nm = mk('span', 'final-name', it.name); nm.title = it.name;
           li.appendChild(nm);
-          li.appendChild(mk('span', 'final-total', it.length + plural(it.length, ' segmento', ' segmentos')));
+          li.appendChild(mk('span', 'final-total', it.out ? 'fuera' : it.length + plural(it.length, ' segmento', ' segmentos')));
           ol.appendChild(li);
         }
       }
@@ -1285,7 +1294,7 @@
     function playFinal() {
       const fs = $('finalScreen');
       if (!fs) return;
-      const fd = st.finalData || { reason: '', list: [], winner: null, winners: [], champ: BIO_DEFAULT };
+      const fd = st.finalData || { reason: '', list: [], winner: null, winners: [], champ: BIO_DEFAULT, lastStanding: false };
       const title = $('finalTitle'), msg = $('finalMessage'), ol = $('finalScoresList'), back = qs(fs, '.final-actions');
       const hint = $('finalHint');
       const head = qs(fs, '.final-scores');

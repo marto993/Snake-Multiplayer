@@ -562,11 +562,32 @@ document.addEventListener('DOMContentLoaded', function () {
     fan: 'Abanico: disparás de a tres'
   };
 
+  function snakeName(id) {
+    for (let i = 0; i < snakes.length; i++) if (snakes[i].id === id) return snakes[i].name;
+    return '';
+  }
+
+  // Aviso de una eliminación: a la víctima, que sigue mirando; al resto, quién dejó fuera a quién
+  function eliminationToast(event) {
+    if (event.targetId === socket.id && !isSpectating) {
+      toast('Quedaste fuera: sigues mirando hasta el final', 'info', 3500);
+      return;
+    }
+    const victim = snakeName(event.targetId);
+    const attacker = event.attackerId === event.targetId ? '' : snakeName(event.attackerId);
+    if (!victim) return;
+    toast(attacker ? attacker + ' dejó fuera a ' + victim : victim + ' quedó fuera', 'info', 2500);
+  }
+
   function dispatchTimelineFrame(frame) {
     const data = frame.payload;
     dispatchFrameEvents(data);
+    // Si esta eliminación termina la partida, lo cuenta la pantalla final (la regla es matchOver, game/match.js)
+    const alive = (data.players || []).filter(function (p) { return !p.gameover; });
+    const ends = alive.length <= 1 || !alive.some(function (p) { return !p.bot; });
     callEach(data.hitEvents, function (event) {
-      if (event.targetId === socket.id && !isSpectating) rumble(!!event.headshot);
+      if (event.targetId === socket.id && !isSpectating) rumble(!!event.headshot || !!event.eliminated);
+      if (event.eliminated && !ends) eliminationToast(event);
     });
     callEach(data.consumableEvents, function (event) {
       const message = PICKUP_TOASTS[event.consumableType];
@@ -707,7 +728,7 @@ document.addEventListener('DOMContentLoaded', function () {
       if (angle !== null) emitSteer(angle, perfNow());
     } else if (key === 32) {
       event.preventDefault();
-      socket.emit('attack');
+      if (!amOut()) socket.emit('attack');
     }
   }
 
@@ -731,7 +752,13 @@ document.addEventListener('DOMContentLoaded', function () {
   const arenaStage = canvas ? canvas.closest('.arena-stage') : null;
 
   function canSteer() {
-    return isConnected && !!gameState.playing && roundLive && !isSpectating;
+    return isConnected && !!gameState.playing && roundLive && !isSpectating && !amOut();
+  }
+
+  // Quedé fuera de la partida (docs/GAMEPLAY_SPEC.md, etapa 5): sigo mirando, sin controles
+  function amOut() {
+    for (let i = 0; i < snakes.length; i++) if (snakes[i].id === socket.id) return !!snakes[i].gameover;
+    return false;
   }
 
   function emitSteer(angle, now) {
@@ -1044,14 +1071,16 @@ document.addEventListener('DOMContentLoaded', function () {
   // Serpientes locales
   // ===========================================================================
   function createLocalSnake(serverSnake) {
+    // Una eliminada llega sin segmentos (por ejemplo, al entrar a mirar una partida empezada)
+    const head = serverSnake.segments[0] || { x: 0, y: 0 };
     const snake = new Snake(
       serverSnake.id,
       serverSnake.name,
       segmentSize,
       arenaW(),
       arenaH(),
-      serverSnake.segments[0].x,
-      serverSnake.segments[0].y,
+      head.x,
+      head.y,
       serverSnake.direction.x,
       serverSnake.direction.y,
       serverSnake.color,
