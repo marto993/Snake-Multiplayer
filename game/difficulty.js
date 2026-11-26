@@ -32,13 +32,15 @@ const LEVELS = {
 
 // Poderes (docs/GAMEPLAY_SPEC.md): por ahora iguales en los tres niveles. Para ajustar uno por
 // nivel, pasarlo a LEVELS.
-// bigMouth / fan: aparecen cada spawnInterval s y duran duration s una vez tomados
+// bigMouth / fan: aparecen cada spawnInterval s. La boca grande dura duration s; el abanico da
+//   shots ráfagas, que duran hasta usarlas (con la eliminación, 6 s de ráfagas sin límite decidían
+//   la partida: docs/GAMEPLAY_SPEC.md, etapa 5)
 // bigMouthReach: alcance para comer con la boca grande, en celdas (el normal es 0,85)
 // fanDegrees: apertura de cada disparo lateral del abanico
 // frenzy: en los últimos lastSeconds de la partida la comida base sube foodBoost (0,5 = 50 %)
 const POWERS = {
   bigMouth: { spawnInterval: 12, duration: 6 },
-  fan: { spawnInterval: 12, duration: 6 },
+  fan: { spawnInterval: 12, shots: 3 },
   bigMouthReach: 2.55,
   fanDegrees: 12,
   frenzy: { lastSeconds: 20, foodBoost: 0.5 }

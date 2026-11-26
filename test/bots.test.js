@@ -208,6 +208,18 @@ test('el extremo le gana al difícil sin barrerlo en segundos', () => {
   assert.ok(seconds / 6 >= 15, `las partidas duran ${(seconds / 6).toFixed(1)} s en promedio`);
 });
 
+test('con el abanico salen como mucho 3 ráfagas por cada uno que se toma', () => {
+  let fans = 0;
+  for (let g = 0; g < 4; g++) {
+    const { players } = playMatch(['hard', 'hard', 'hard', 'hard'], { seed: 90 + g, time: 60 });
+    for (const p of players) {
+      assert.ok(p.fanBursts <= 3 * p.fans, `${p.id}: ${p.fanBursts} ráfagas con ${p.fans} abanicos`);
+      fans += p.fans;
+    }
+  }
+  assert.ok(fans > 0, 'nadie tomó un abanico');
+});
+
 test('durante el escudo al nacer nadie queda fuera', () => {
   const guard = config.spawnShield;
   for (let g = 0; g < 8; g++) {

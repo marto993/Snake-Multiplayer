@@ -597,13 +597,14 @@
         specEl, selfEl, selfDot, selfScore;
     let hideTimer = 0;
     const L = { time: -1, rt: -1, phase: '', playing: null, spec: null, self: '', selfC: '', final3: false };
-    // Efectos propios: un indicador por tipo, en orden fijo, cada uno con su tiempo restante
+    // Efectos propios: un indicador por tipo, en orden fijo, cada uno con su tiempo restante. El
+    // abanico no vence (count): muestra las ráfagas que le quedan (docs/GAMEPLAY_SPEC.md, etapa 5)
     const EFFECT_CHIPS = [
       { type: 'immunity', label: 'Escudo ', icon: 'jelly' },
       { type: 'bigMouth', label: 'Boca grande ', icon: 'anemone' },
-      { type: 'fan', label: 'Abanico ', icon: 'star' }
+      { type: 'fan', label: 'Abanico ', icon: 'star', count: true }
     ];
-    const chips = [];   // { type, el, time, bar, active, until, total, txt }
+    const chips = [];   // { type, el, time, bar, active, until, total, txt, count, n, max }
     let chipRaf = 0;
     // Los vencimientos son horas del servidor: se comparan con la hora del servidor (la del instante
     // dibujado, que llega en serverNow), no con el reloj del cliente, que puede estar desfasado
@@ -669,7 +670,7 @@
         meter.setAttribute('aria-hidden', 'true');
         meter.style.setProperty('--p', '1');
         el.appendChild(time); el.appendChild(meter);
-        chips.push({ type: def.type, el: el, time: time, bar: meter, active: false, until: 0, total: 0, txt: '' });
+        chips.push({ type: def.type, el: el, time: time, bar: meter, active: false, until: 0, total: 0, txt: '', count: !!def.count, n: 0, max: 0 });
       });
       specEl = mk('span', 'hud-spectator hidden');
       specEl.appendChild(icon('eye', 'hud-spectator-icon', 18));
@@ -742,6 +743,17 @@
       const fx = (me && !spectating && playing && me.effects) || null;
       for (let i = 0; i < chips.length; i++) {
         const ch = chips[i];
+        if (ch.count) {
+          const n = (me && !spectating && playing) ? Math.max(0, +me.fanShots || 0) : 0;
+          if ((n > 0) !== ch.active) setChip(ch, n > 0, 0);
+          if (n > 0 && n !== ch.n) {
+            if (n > ch.n) ch.max = n;   // al tomarlo (o reponerlo), es el total
+            ch.n = n;
+            ch.time.textContent = '×' + n;
+            ch.bar.style.setProperty('--p', (n / Math.max(1, ch.max)).toFixed(3));
+          }
+          continue;
+        }
         const until = fx ? +fx[ch.type] || 0 : 0;
         if ((until > 0) !== ch.active) setChip(ch, until > 0, until);
         else if (ch.active && Math.abs(until - ch.until) > 250 && Math.abs(until - serverNow()) <= 30000) {
@@ -773,6 +785,7 @@
         ch.el.classList.remove('hidden');   // la entrada (bio-reveal) y el latido del icono son CSS
         if (!chipRaf) tickChips();
       } else {
+        ch.n = 0;
         if (ch.el.classList.contains('hidden')) return;
         const a = reduced ? null : anim(ch.el, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(0.9)' }], { duration: M.quick, easing: M.in, fill: 'forwards' });
         done(a).then(function () { if (!ch.active) { ch.el.classList.add('hidden'); cancelAnim(a); } });
@@ -783,7 +796,7 @@
       let any = false;
       for (let i = 0; i < chips.length; i++) {
         const ch = chips[i];
-        if (!ch.active) continue;
+        if (!ch.active || ch.count) continue;
         any = true;
         if (ch.until) {
           const rem = ch.until - serverNow();

@@ -141,7 +141,7 @@ function ownBodyInLine(me, world) {
   const cell = cfg.segmentSize;
   const head = me.segments[0];
   const ctx = { speed: cfg.projectileCells * cell, radius: cell * HIT_REACH };
-  const directions = me.hasEffect('fan', now) ? fanDirections(me.direction, cfg.fanDegrees) : [me.direction];
+  const directions = me.fanShots > 0 ? fanDirections(me.direction, cfg.fanDegrees) : [me.direction];
   return directions.some(d => rayHit(makeRay(head.x + d.x * cell, head.y + d.y * cell, d, cfg), me.segments, [], ctx));
 }
 
@@ -434,7 +434,7 @@ function listTargets(brain, me, world, ctx) {
   if (skill.powers > 0 && ctx.ticksLeft > 40) {
     const canBeHurt = ctx.rivals.some(r => r.segments.length >= 2);
     for (const item of world.consumables) {
-      const active = me.hasEffect(item.type, now + 1500);
+      const active = item.type === 'fan' ? me.fanShots > 1 : me.hasEffect(item.type, now + 1500);
       let value = 0;
       // Con pocos segmentos, el escudo es lo que separa de quedar fuera
       if (item.type === 'immunity') value = canBeHurt ? 2 + me.segments.length * 0.12 + (wouldEliminate(me, cfg) ? 4 : 0) : 0;
@@ -584,7 +584,7 @@ function decide(brain, me, world) {
   const canShoot = cfg.attacksEnabled && me.segments.length >= 2 &&
     now - me.lastShotAt >= (cfg.shotCooldownMs || 0) && now - brain.lastShotAt >= skill.shotPause;
   if (canShoot) {
-    const directions = me.hasEffect('fan', now) ? fanDirections(me.direction, cfg.fanDegrees) : [me.direction];
+    const directions = me.fanShots > 0 ? fanDirections(me.direction, cfg.fanDegrees) : [me.direction];
     const aimError = skill.aimError ? rad(gaussian(rng) * skill.aimError) : 0;
     const felt = aimError
       ? directions.map(d => rotate(d, aimError))  // cree que apunta a otro lado: dispara de más o de menos

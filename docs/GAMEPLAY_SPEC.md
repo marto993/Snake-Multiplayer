@@ -39,7 +39,7 @@ Los dos consumibles nuevos usan el sistema de temporizadores que ya existe. `ini
 
 En el mapa, cada consumible tiene silueta y color propios. Los tres comparten un pulso de baliza, cada uno en su color: es la seña de que algo se puede tomar. La boca grande es un agujero negro rosa (`#F29BC9`) visto de frente, con un disco de acreción en espiral. El abanico es una estrella triple coral (`#F0875F`). La comida son planetas que van de verde a ámbar, y el escudo es una aurora violeta, así que ninguno se confunde por forma. Las medidas exactas se agregan a `docs/VISUAL_SPEC.md`, en la sección de consumibles.
 
-Al tomar uno, el jugador recibe un aviso como el del escudo: "Boca grande: comés desde más lejos" o "Abanico: disparás de a tres".
+Al tomar uno, el jugador recibe un aviso como el del escudo: "Boca grande: comés desde más lejos" o "Abanico: disparás de a tres" (desde la etapa 5, "Abanico: tus próximos 3 disparos salen de a tres").
 
 ### Boca grande
 
@@ -47,7 +47,7 @@ Mientras está activa, la serpiente come desde 2,55 celdas, el triple del alcanc
 
 ### Abanico
 
-Mientras está activo, cada disparo sale de a tres: uno en el rumbo de la cabeza y dos abiertos 12° a cada lado. La ráfaga cuesta un segmento, como un disparo simple, y respeta la pausa entre tiros. Cada proyectil nace una celda delante de la cabeza en su propio rumbo y se resuelve por separado; dos de la misma ráfaga pueden cortar a la misma serpiente en el mismo paso. Los dos laterales viajan en `projectileEvents` con `spread: true`, y la arena no repite para ellos la gota de la cola ni el retroceso de la cabeza (`public/js/render/arena.js:2979`), porque el costo fue uno solo.
+Desde la etapa 5 el abanico no dura 6 s: da 3 ráfagas, que duran hasta usarlas (ver "Abanico: 3 ráfagas" en esa etapa). Mientras le quedan ráfagas, cada disparo sale de a tres: uno en el rumbo de la cabeza y dos abiertos 12° a cada lado. La ráfaga cuesta un segmento, como un disparo simple, y respeta la pausa entre tiros. Cada proyectil nace una celda delante de la cabeza en su propio rumbo y se resuelve por separado; dos de la misma ráfaga pueden cortar a la misma serpiente en el mismo paso. Los dos laterales viajan en `projectileEvents` con `spread: true`, y la arena no repite para ellos la gota de la cola ni el retroceso de la cabeza (`public/js/render/arena.js:2979`), porque el costo fue uno solo.
 
 ### HUD propio
 
@@ -136,6 +136,24 @@ Todas las serpientes nacen en columna a 3 celdas de distancia (`getPlayerSpawnPo
 
 Un escudo que bloquea un solo disparo no alcanzaba: con el disparo sostenido (5 por segundo) o el abanico, el primer tiro lo rompe y el siguiente elimina. En el simulador, un bot `hard` quedaba fuera a los 1,2 s contra un `extreme`. Los bots saben que el escudo de nacer no se rompe (`world.guardUntil`) y no gastan tiros en él.
 
+### Abanico: 3 ráfagas
+
+Con la eliminación, el abanico decidía la partida. Una ráfaga cuesta un segmento y, si entran los tres tiros, saca 12; con el disparo sostenido salen 5 por segundo durante los 6 s que duraba. Se midió con 4 bots `hard`, 60 partidas por variante. Cada serpiente tenía el abanico un 11 % del tiempo y en ese rato hacía el 47 % de las eliminaciones: sacaba 2,7 veces más segmentos por segundo que sin él. Como los bots disparan menos que una persona, también se midió una variante en la que, con el abanico, el bot mantiene el disparo mientras tiene un rival a menos de 250 px: ahí sacaba 5,2 veces más por segundo, hacía el 64 % de las eliminaciones y el 85 % de las partidas terminaba antes de tiempo.
+
+| Variante | Eliminaciones con abanico | Si mantiene el disparo |
+|---|---|---|
+| 6 s, ráfagas sin límite (antes) | 47 % | 64 % |
+| Dura 3 s | 23 % | 53 % |
+| Aparece cada 24 s en vez de 12 | 34 % | 61 % |
+| Una ráfaga lastima una sola vez a cada serpiente | 30 % | 58 % |
+| 5 ráfagas | | 30 % |
+| 3 ráfagas que vencen a los 6 s | 28 % | 18 % |
+| 3 ráfagas que duran hasta usarlas | 34 % | 18 % |
+
+Acortarlo o hacerlo más escaso ayuda poco, porque lo que pesa es la cadencia: en 3 s con el disparo sostenido entran muchas ráfagas. Contar las ráfagas pone un tope al daño extra, dispare rápido o lento. Por eso el abanico da 3 ráfagas (`consumables.fan.shots` en la tabla) y no vence. Tomar otro mientras quedan ráfagas las repone a 3, no suma, como los demás efectos.
+
+La cuenta va en la serpiente (`Snake.fanShots`, con `giveFanShots(n)` al tomarlo y `useFanShot()` al disparar), no en `effects`, porque no tiene vencimiento. El servidor la manda en cada jugador del frame (`fanShots`). El indicador del HUD muestra las ráfagas que quedan ("×3") en lugar del tiempo, y la barra baja con cada una.
+
 ### Bots
 
 Los bots aprenden la regla nueva. `segmentsLost` (`game/bots.js:265`) devuelve `min(hitDamage, largo)` en vez del corte hasta la cola. Un disparo que elimina a un rival vale más que los segmentos que le saca, porque saca a un competidor de la partida. Un disparo que viene y me eliminaría pesa más al esquivar y al decidir si busco un escudo.
@@ -163,7 +181,7 @@ Los de juego van en `game/difficulty.js`, con el mismo valor en los tres niveles
 |---|---|
 | Pausa mínima entre disparos | 200 ms |
 | Boca grande: dura / alcance | 6 s / 2,55 celdas |
-| Abanico: dura / apertura | 6 s / 12° a cada lado |
+| Abanico: ráfagas / apertura | 3, hasta usarlas (desde la etapa 5; antes, 6 s) / 12° a cada lado |
 | Boca grande y abanico en el mapa | cada 12 s, máximo 1 (2 con 5 jugadores o más) |
 | Frenesí: desde / comida base | últimos 20 s / +50 % |
 | Stick del mando: zona muerta | 0,3 |

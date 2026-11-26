@@ -1202,7 +1202,7 @@ Fases del temporizador (`data-phase`, también reflejado en `#scene-arena[data-p
 | `warn` | 20 a 11 | `#F08A3C` | Cambio de color en 300 ms |
 | `tension` | 10 a 0 | `#EC4F5A` | Latido por segundo (escala 1 a 1,12 a 1 en 220 ms con `--bio-ease-jelly`), glow `drop-shadow` en el SVG; desde 3, la cifra queda en `scale(1.16)` |
 
-**Efectos propios**: un `.hud-shield` por tipo (`data-effect`), en orden fijo: escudo, boca grande y abanico. Cada uno aparece con el revelado de 4.20 cuando el efecto está en `effects` del jugador propio: icono de 18 px (magnetosfera, agujero negro o estrella triple), la palabra ("Escudo", "Boca grande", "Abanico"), el tiempo restante con coma decimal ("3,2 s", calculado con la hora del servidor del instante dibujado, que llega en `serverNow`: el reloj del cliente puede estar desfasado) y una barra de 40 × 3 px que se vacía. El color sale de `--fx`: `#C7B8FF` para el escudo, `#F29BC9` para la boca grande y `#F0875F` para el abanico; borde y fondo son ese color al 40 % y al 7 %. El icono late a 1,6 Hz. Al vencer, sale con opacidad y escala 0,9 en 240 ms. Con dos o más a la vez, cada uno queda en icono y tiempo: la palabra pasa a ser solo para el lector de pantalla y la barra se oculta, así los tres entran en la columna sin pisar el temporizador.
+**Efectos propios**: un `.hud-shield` por tipo (`data-effect`), en orden fijo: escudo, boca grande y abanico. Cada uno aparece con el revelado de 4.20 cuando el efecto está en `effects` del jugador propio: icono de 18 px (magnetosfera, agujero negro o estrella triple), la palabra ("Escudo", "Boca grande", "Abanico"), el tiempo restante con coma decimal ("3,2 s", calculado con la hora del servidor del instante dibujado, que llega en `serverNow`: el reloj del cliente puede estar desfasado) y una barra de 40 × 3 px que se vacía. El abanico no vence (`docs/GAMEPLAY_SPEC.md`, etapa 5): aparece mientras el jugador tiene `fanShots`, muestra las ráfagas que quedan ("×3", "×2", "×1") en lugar del tiempo, y su barra baja una parte con cada ráfaga. El color sale de `--fx`: `#C7B8FF` para el escudo, `#F29BC9` para la boca grande y `#F0875F` para el abanico; borde y fondo son ese color al 40 % y al 7 %. El icono late a 1,6 Hz. Al vencer, sale con opacidad y escala 0,9 en 240 ms. Con dos o más a la vez, cada uno queda en icono y tiempo: la palabra pasa a ser solo para el lector de pantalla y la barra se oculta, así los tres entran en la columna sin pisar el temporizador.
 
 **Espectador**: `.hud-spectator`, píldora con borde violeta, icono de ojo y "Espectador".
 
@@ -1375,7 +1375,7 @@ Reemplazo de cada `addCanvasNotification` actual. "Sin toast" significa que el c
 | `gameStart`, `countdown`, `roundEnd`, `gameEnd` | Sin toast (overlays) | |
 | `spectatingStarted` | Mirando la sala {código} | info |
 | `spectatorJoined` | {nombre} está mirando la partida | info |
-| `consumableEvents` (soy yo) | Escudo activo: bloquea un disparo / Boca grande: comés desde más lejos / Abanico: disparás de a tres | success, 2500 ms |
+| `consumableEvents` (soy yo) | Escudo activo: bloquea un disparo / Boca grande: comés desde más lejos / Abanico: tus próximos 3 disparos salen de a tres | success, 2500 ms |
 | `gameState.frenzy` (empieza) | Frenesí: más comida hasta el final | info, 3000 ms |
 | `hitEvents` con `eliminated` (soy yo) | Quedaste fuera: sigues mirando hasta el final | info, 3500 ms |
 | `hitEvents` con `eliminated` (otra) | {atacante} dejó fuera a {víctima} / {víctima} quedó fuera (con su propio disparo) | info, 2500 ms |

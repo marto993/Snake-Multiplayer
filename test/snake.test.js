@@ -167,6 +167,34 @@ test('useImmunity quita solo el escudo', () => {
   assert.equal(s.useImmunity(10), false);
 });
 
+// Abanico: ráfagas contadas, que duran hasta usarlas
+test('abanico: tomarlo da las ráfagas y tomar otro las repone, no suma', () => {
+  const s = make();
+  assert.equal(s.fanShots, 0);
+  s.giveFanShots(3);
+  assert.equal(s.useFanShot(), true);
+  assert.equal(s.fanShots, 2);
+  s.giveFanShots(3);
+  assert.equal(s.fanShots, 3);
+});
+
+test('abanico: cada ráfaga gasta una y sin ráfagas no sale', () => {
+  const s = make();
+  s.giveFanShots(3);
+  assert.deepEqual([s.useFanShot(), s.useFanShot(), s.useFanShot(), s.useFanShot()], [true, true, true, false]);
+  assert.equal(s.fanShots, 0);
+});
+
+test('abanico: reset y eliminate lo vacían', () => {
+  const s = make();
+  s.giveFanShots(3);
+  s.reset(60, 120, 1, 0, 3);
+  assert.equal(s.fanShots, 0);
+  s.giveFanShots(3);
+  s.eliminate(1000);
+  assert.equal(s.fanShots, 0);
+});
+
 test('activeEffects devuelve una copia', () => {
   const s = make();
   s.addEffect('bigMouth', 6000, 0);

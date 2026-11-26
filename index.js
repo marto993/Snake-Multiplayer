@@ -199,6 +199,7 @@ function serializePlayers(players) {
     gameover: player.gameover,
     scoreLeftToGrow: player.scoreLeftToGrow,
     effects: player.activeEffects(Date.now()),
+    fanShots: player.fanShots,
     bot: player.bot // nivel del bot; en una persona es undefined y no viaja
   }));
 }
@@ -684,9 +685,11 @@ function checkConsumableConsumption(room, player, from, step) {
   if (consumableIndex !== -1) {
     const consumable = room.consumables[consumableIndex];
     
-    // Activa el efecto (o reinicia su tiempo si ya lo tenía); la duración del nivel está en segundos
-    const duration = room.config.consumables[consumable.type]?.duration || 5;
-    player.addEffect(consumable.type, duration * 1000, Date.now());
+    // El abanico da ráfagas (o las repone); el resto activa el efecto (o reinicia su tiempo si ya lo
+    // tenía), con la duración del nivel en segundos
+    const settings = room.config.consumables[consumable.type] || {};
+    if (consumable.type === 'fan') player.giveFanShots(settings.shots || 3);
+    else player.addEffect(consumable.type, (settings.duration || 5) * 1000, Date.now());
     
     // Remover el consumible del mapa
     room.consumables.splice(consumableIndex, 1);
@@ -733,9 +736,9 @@ function createProjectile(room, player) {
   }
   player.updateTargets();
 
-  // Con el abanico salen tres: el central y dos abiertos fanDegrees a los lados, cada uno una celda
-  // delante de la cabeza en su propio rumbo
-  const directions = player.hasEffect('fan', now)
+  // Con el abanico salen tres (y se gasta una ráfaga): el central y dos abiertos fanDegrees a los
+  // lados, cada uno una celda delante de la cabeza en su propio rumbo
+  const directions = player.useFanShot()
     ? fanDirections(player.direction, room.config.fanDegrees)
     : [player.direction];
   if (!room.pendingProjectileEvents) room.pendingProjectileEvents = [];
@@ -1441,6 +1444,7 @@ io.on('connection', (socket) => {
               gameover: Boolean(player.gameover),
               scoreLeftToGrow: Number(player.scoreLeftToGrow) || 0,
               effects: player.activeEffects(Date.now()),
+              fanShots: Number(player.fanShots) || 0,
               bot: player.bot
             };
           } catch (err) {

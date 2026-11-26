@@ -559,7 +559,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const PICKUP_TOASTS = {
     immunity: 'Escudo activo: bloquea un disparo',
     bigMouth: 'Boca grande: comés desde más lejos',
-    fan: 'Abanico: disparás de a tres'
+    fan: 'Abanico: tus próximos {n} disparos salen de a tres'
   };
 
   function snakeName(id) {
@@ -590,8 +590,9 @@ document.addEventListener('DOMContentLoaded', function () {
       if (event.eliminated && !ends) eliminationToast(event);
     });
     callEach(data.consumableEvents, function (event) {
+      const shots = (roomConfig && roomConfig.consumables && roomConfig.consumables.fan && +roomConfig.consumables.fan.shots) || 3;
       const message = PICKUP_TOASTS[event.consumableType];
-      if (message && event.playerId === socket.id && !isSpectating) toast(message, 'success', 2500);
+      if (message && event.playerId === socket.id && !isSpectating) toast(message.replace('{n}', shots), 'success', 2500);
     });
   }
 
@@ -627,7 +628,7 @@ document.addEventListener('DOMContentLoaded', function () {
       else if (pb) Motion.snakeAt(null, pb.segments, 0, cell, period, snake.renderSegments);
       else continue;
       snake.direction = (pb || pa).direction;
-      if (pa) snake.effects = pa.effects || {};
+      if (pa) { snake.effects = pa.effects || {}; snake.fanShots = pa.fanShots | 0; }
     }
 
     renderServerT = s.rt;
@@ -1095,6 +1096,7 @@ document.addEventListener('DOMContentLoaded', function () {
     snake.gameover = serverSnake.gameover;
     snake.scoreLeftToGrow = serverSnake.scoreLeftToGrow;
     snake.effects = serverSnake.effects || {};
+    snake.fanShots = serverSnake.fanShots | 0;   // ráfagas de abanico que le quedan
     snake.bot = serverSnake.bot || null; // nivel del bot, o null si es una persona
 
     return snake;
@@ -1212,6 +1214,7 @@ document.addEventListener('DOMContentLoaded', function () {
         immune: immune,
         immuneUntil: immune ? shieldEnd : 0,
         effects: s.effects || null,
+        fanShots: s.fanShots | 0,
         isMe: !isSpectating && s.id === socket.id,
         gameover: !!s.gameover
       };
@@ -1420,6 +1423,7 @@ document.addEventListener('DOMContentLoaded', function () {
         existingSnake.name = serverPlayer.name; // un bot cede su nombre si entra una persona que se llama igual
         existingSnake.bot = serverPlayer.bot || null;
         existingSnake.effects = serverPlayer.effects || {};
+        existingSnake.fanShots = serverPlayer.fanShots | 0;
         return existingSnake;
       }
       return createLocalSnake(serverPlayer);
@@ -1617,6 +1621,7 @@ document.addEventListener('DOMContentLoaded', function () {
           localSnake.renderSegments = copySegments(serverSnake.segments);
           localSnake.direction = { x: serverSnake.direction.x, y: serverSnake.direction.y };
           localSnake.effects = serverSnake.effects || {};
+          localSnake.fanShots = serverSnake.fanShots | 0;
         }
         localSnake.score = serverSnake.score;
         localSnake.gameover = serverSnake.gameover;

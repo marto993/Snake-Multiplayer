@@ -57,7 +57,7 @@ function playMatch(levels, { seed = 1, time = 120, difficulty = 'medium' } = {})
       snake.reset(x, y, 1, 0, cfg.startLength);
       snake.level = level;
       snake.brain = createBrain(level, rng);
-      snake.stats = { shots: 0, hits: 0, cut: 0, lost: 0, eaten: 0, peak: cfg.startLength, out: 0 };
+      snake.stats = { shots: 0, hits: 0, cut: 0, lost: 0, eaten: 0, peak: cfg.startLength, out: 0, fans: 0, fanBursts: 0 };
       // Escudo al nacer, como en startGame: hasta guardUntil bloquea todo sin gastarse
       if (cfg.spawnShield > 0) snake.addEffect('immunity', cfg.spawnShield * 1000, now);
       return snake;
@@ -107,7 +107,9 @@ function playMatch(levels, { seed = 1, time = 120, difficulty = 'medium' } = {})
         p.segments.pop();
         p.updateTargets();
         p.stats.shots++;
-        const dirs = p.hasEffect('fan', now) ? fanDirections(p.direction, cfg.fanDegrees) : [p.direction];
+        const fan = p.useFanShot();
+        if (fan) p.stats.fanBursts++;
+        const dirs = fan ? fanDirections(p.direction, cfg.fanDegrees) : [p.direction];
         for (const d of dirs) {
           projectiles.push({ id: 's' + shotId++, playerId: p.id, x: head.x + d.x * cell, y: head.y + d.y * cell, direction: { ...d } });
         }
@@ -153,7 +155,8 @@ function playMatch(levels, { seed = 1, time = 120, difficulty = 'medium' } = {})
         const touched = touchedAlong(from, step, consumables, cell * PICKUP_REACH, w, h);
         if (touched.length) {
           const [item] = consumables.splice(touched[0], 1);
-          p.addEffect(item.type, cfg.consumables[item.type].duration * 1000, now);
+          if (item.type === 'fan') { p.giveFanShots(cfg.consumables.fan.shots); p.stats.fans++; }
+          else p.addEffect(item.type, cfg.consumables[item.type].duration * 1000, now);
         }
         const reach = cell * (p.hasEffect('bigMouth', now) ? cfg.bigMouthReach : EAT_REACH);
         const eaten = touchedAlong(from, step, foods, reach, w, h).map(i => foods[i]);
