@@ -31,6 +31,10 @@ const HIT_REACH = 0.7;
 // powers: cuánto le interesan los consumibles
 // dodge: probabilidad de esquivar un disparo que ve venir
 // breakShield: gasta un disparo en romper un escudo si el corte siguiente lo vale
+//
+// El extremo no reacciona al instante ni tira sin pausa: con la eliminación, reacción 0, puntería
+// perfecta y 5 tiros por segundo dejaban fuera a un difícil a los 4 s. Así le sigue ganando casi
+// siempre, pero en unos 35 s (docs/GAMEPLAY_SPEC.md, etapa 5).
 const SKILLS = {
   easy: {
     thinkEvery: 4, delay: 6, aimError: 14, steerError: 22, depth: 1, width: 6, foodNoise: 0.9,
@@ -48,8 +52,8 @@ const SKILLS = {
     powers: 1, dodge: 0.4, breakShield: false
   },
   extreme: {
-    thinkEvery: 1, delay: 0, aimError: 0, steerError: 0, depth: 4, width: 8, foodNoise: 0,
-    contest: true, aim: 1, range: 900, minShot: 0.8, shotPause: 0, fireChance: 1,
+    thinkEvery: 1, delay: 2, aimError: 1.5, steerError: 0, depth: 4, width: 8, foodNoise: 0,
+    contest: true, aim: 1, range: 900, minShot: 0.8, shotPause: 800, fireChance: 1,
     powers: 1, dodge: 1, breakShield: true
   }
 };
