@@ -110,9 +110,9 @@ Cada impacto quita `hitDamage` segmentos (4) de la cola, toque donde toque. Lo q
 
 ### Eliminación
 
-Una serpiente eliminada pasa a `gameover`, se queda sin segmentos y sin efectos, y el servidor anota `eliminatedAt` (la hora del paso en que cayó). Sus últimos segmentos quedan como restos. Desde ahí no se mueve, no dispara, los proyectiles la ignoran y la corona la saltea; buena parte de esto ya existe en el servidor por el `gameover` del snake clásico (`index.js:992`, `index.js:1338`, `index.js:1556`, `game/projectiles.js:33`, `game/match.js:34`). El evento del impacto lleva `eliminated: true`. Disparar no puede eliminar a nadie: hacen falta 2 segmentos para tirar y el tiro cuesta uno.
+Una serpiente eliminada pasa a `gameover`, se queda sin segmentos y sin efectos, y el servidor anota `eliminatedAt` (la hora del paso en que cayó). Sus últimos segmentos quedan como restos. Desde ahí no se mueve, no dispara, los proyectiles la ignoran y la corona la saltea; buena parte de esto ya existe en el servidor por el `gameover` del snake clásico (`index.js:1011`, `index.js:1362`, `index.js:1580`, `game/projectiles.js:33`, `game/match.js:60`). El evento del impacto lleva `eliminated: true`. Disparar no puede eliminar a nadie: hacen falta 2 segmentos para tirar y el tiro cuesta uno.
 
-`Snake.GameOver()` (`public/snakeClass.js:293`), que no se usa, se reemplaza por `eliminate(now)`. `reset()` vuelve `eliminatedAt` a `null`.
+`Snake.GameOver()`, que no se usaba, se reemplaza por `eliminate(now)`. `reset()` vuelve `eliminatedAt` a `null`.
 
 El jugador eliminado sigue en la sala y mira el resto de la partida en la misma escena. Los controles táctiles se ocultan.
 
@@ -132,11 +132,17 @@ Cada entrada de `ranking` suma `eliminated: true` si la serpiente cayó; su `len
 
 ### Escudo al nacer
 
-Todas las serpientes nacen en columna a 3 celdas de distancia (`getPlayerSpawnPosition`, `index.js:435`) y con 3 segmentos, así que cualquier impacto en el arranque elimina. En la medición con 8 bots y 3 por impacto, la primera eliminación llegaba a los 7 s. Para no quedar afuera antes de poder moverse, al "¡Ya!" cada serpiente recibe el escudo de siempre por `spawnShield` segundos (3): bloquea el primer disparo y se gasta, igual que el consumible. Se ve con la magnetosfera que ya existe (`docs/VISUAL_SPEC.md`, 5.7).
+Todas las serpientes nacen en columna a 3 celdas de distancia (`getPlayerSpawnPosition`, `index.js:436`) y con 3 segmentos, así que cualquier impacto en el arranque elimina. En la medición con 8 bots y 3 por impacto, la primera eliminación llegaba a los 7 s. Para no quedar afuera antes de poder moverse, al "¡Ya!" cada serpiente recibe el escudo por `spawnShield` segundos (3). Mientras dura, bloquea todos los disparos sin gastarse: `startGame` anota `gameState.spawnGuardUntil` y `moveProjectiles` no consume el escudo antes de esa hora. Después vence como cualquier escudo; si la serpiente tomó uno en el mapa mientras tanto, ese sí se gasta al bloquear. Se ve con la magnetosfera que ya existe (`docs/VISUAL_SPEC.md`, 5.7).
+
+Un escudo que bloquea un solo disparo no alcanzaba: con el disparo sostenido (5 por segundo) o el abanico, el primer tiro lo rompe y el siguiente elimina. En el simulador, un bot `hard` quedaba fuera a los 1,2 s contra un `extreme`. Los bots saben que el escudo de nacer no se rompe (`world.guardUntil`) y no gastan tiros en él.
 
 ### Bots
 
-Los bots aprenden la regla nueva. `segmentsLost` (`game/bots.js:244`) devuelve `min(hitDamage, largo)` en vez del corte hasta la cola. Un disparo que elimina a un rival vale más que los segmentos que le saca, porque saca a un competidor de la partida. Un disparo que viene y me eliminaría pesa más al esquivar y al decidir si busco un escudo. `tools/bot-duel.js` repite las reglas nuevas del paso (daño fijo, eliminación, escudo al nacer, fin por eliminación) y su tabla suma cuántas veces quedó afuera cada bot. El orden de los niveles en partidas con semilla (`test/bots.test.js`) se tiene que mantener.
+Los bots aprenden la regla nueva. `segmentsLost` (`game/bots.js:265`) devuelve `min(hitDamage, largo)` en vez del corte hasta la cola. Un disparo que elimina a un rival vale más que los segmentos que le saca, porque saca a un competidor de la partida. Un disparo que viene y me eliminaría pesa más al esquivar y al decidir si busco un escudo.
+
+Los bots también dejan de dispararse encima. Deciden el tiro `delay` pasos antes de que salga (la reacción: 4 pasos en `medium`), y en ese tiempo la serpiente sigue girando; con un cuerpo largo que cruza un portal, la cola queda adelante en la misma fila. Con las reglas de `main`, un `medium` contra un `easy` perdía unos 56 segmentos por partida con sus propios disparos, y ganaba igual porque sus cortes eran mucho más grandes. Con daño fijo, eso lo dejaba perdiendo contra `easy`. Ahora, al salir el tiro, el bot revisa si su propio cuerpo quedó en la línea (`ownBodyInLine`) y, si es así, se lo aguanta.
+
+`tools/bot-duel.js` repite las reglas nuevas del paso (daño fijo, eliminación, escudo al nacer, fin por eliminación) y su tabla suma cuántas veces quedó afuera cada bot. El orden de los niveles en partidas con semilla (`test/bots.test.js`) se tiene que mantener.
 
 ### En pantalla
 
@@ -147,7 +153,7 @@ Las medidas y los textos exactos van en `docs/VISUAL_SPEC.md`. En resumen:
 - **Marcador.** La fila de una eliminada ya se atenúa (`.hud-row.is-out`); en lugar del largo muestra "fuera".
 - **Meta.** La cuenta regresiva y el "¡Ya!" dicen "Gana la última en pie o la más larga"; la meta del HUD, "Última en pie o la más larga".
 - **Final.** Las eliminadas muestran "fuera" en lugar del largo. Si la partida terminó por eliminación y quedó una sola, el mensaje es "Última en pie, con {n} segmentos."; si las últimas cayeron a la vez, "{A} y {B} caen a la vez."
-- **Espectadores.** Quien entra a mirar una partida con eliminadas recibe serpientes sin segmentos: `createLocalSnake` (`public/SnakeGame.js:1046`) no puede leer `segments[0]` sin revisar que exista.
+- **Espectadores.** Quien entra a mirar una partida con eliminadas recibe serpientes sin segmentos: `createLocalSnake` (`public/SnakeGame.js:1073`) no puede leer `segments[0]` sin revisar que exista.
 
 ## Valores
 
@@ -162,7 +168,7 @@ Los de juego van en `game/difficulty.js`, con el mismo valor en los tres niveles
 | Frenesí: desde / comida base | últimos 20 s / +50 % |
 | Stick del mando: zona muerta | 0,3 |
 | Daño por impacto | 4 segmentos, desde la cola |
-| Escudo al nacer | 3 s (bloquea un disparo) |
+| Escudo al nacer | 3 s (bloquea todo sin gastarse) |
 
 ## Cómo se verifica
 
@@ -181,5 +187,9 @@ Para la etapa 5: en una sala para jugar solo, dejarse eliminar y ver que la part
 ## Pendiente de ajuste
 
 Los valores son un punto de partida para ajustar jugando. Lo más probable es que haya que tocar la apertura del abanico, el aumento del frenesí y si el stick y el joystick táctil se redondean a ocho rumbos.
+
+Con la etapa 5 implementada y los bots al tanto de la regla, `tools/bot-duel.js` da esto con 4 bots `hard` en 100 partidas de 120 s: el 26 % termina antes de tiempo y la partida dura 111 s en promedio. Un bot que sigue derecho sin disparar hasta los últimos 10 s gana 1 de 100 (en `main` ganaba 26 de 100).
+
+Contra `extreme` no hay partida: un `hard` queda fuera a los 4 s en promedio (60 de 60 partidas), y repartir las salidas por la arena solo lo lleva a 6 s. Ni 5 s de escudo al nacer lo cambian. Con reacción 0, puntería perfecta y 5 tiros por segundo, a 4 segmentos por impacto, una serpiente corta cae en menos de un segundo. Ablandarlo (2 pasos de reacción y 800 ms entre tiros propios) sigue ganando 26 de 30, pero las partidas contra `hard` duran 24 s. Queda por decidir si `extreme` se ajusta así o se deja como desafío.
 
 De la etapa 5 falta ver jugando tres cosas: si 4 por impacto se siente bien o conviene 3 o 5 (es un valor de la tabla); cuánto molesta quedar afuera temprano y mirar el resto de la partida, que puede ser casi dos minutos; y si la serpiente más larga se escapa demasiado, porque con daño fijo cada impacto le pesa menos a quien tiene más segmentos. Si se extraña el tiro preciso, el impacto en la cabeza puede hacer más daño.
