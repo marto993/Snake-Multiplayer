@@ -59,6 +59,13 @@ const DISCOUNT = 0.965;       // por paso: un punto a 20 pasos (1,3 s) vale la m
 const PLAN_TICKS = 3;         // el plan de comida se rehace cada tantos pasos (o si el objetivo ya no está)
 const LOOK_AHEAD = 10;        // pasos hacia adelante al esquivar y al adelantar una cabeza
 const MAX_REACH_STEPS = 90;   // tope al simular el camino a una comida
+// Eliminación (docs/GAMEPLAY_SPEC.md, etapa 5), en segmentos: dejar fuera a un rival saca a un
+// competidor de la partida; quedar fuera es lo peor que puede pasar
+const KILL_VALUE = 8;
+const DEATH_COST = 20;
+// Si mi cuerpo está en la línea más allá del blanco (la cola que todavía no cruzó un portal queda
+// adelante, en la misma fila), un tiro que le erra me da a mí: probabilidad de que eso pase
+const MISS_RISK = 0.5;
 
 // Estrellas de hasta 8 letras, para que entren en la lista de la sala junto al selector de nivel
 const STAR_NAMES = [
@@ -118,7 +125,20 @@ function stepBot(brain, me, world) {
     angle = due.angle;
     fire = fire || due.fire;
   }
+  // El tiro se decidió `delay` pasos atrás y la serpiente siguió girando: si ahora su cuerpo está en
+  // la línea, se lo aguanta (con daño fijo, tirarse encima es de lo que más segmentos le costaba)
+  if (fire && ownBodyInLine(me, world)) fire = false;
   return { angle, fire };
+}
+
+// Si el disparo que saldría ahora, en el rumbo de la cabeza (o alguno del abanico), toca el propio cuerpo
+function ownBodyInLine(me, world) {
+  const { config: cfg, now } = world;
+  const cell = cfg.segmentSize;
+  const head = me.segments[0];
+  const ctx = { speed: cfg.projectileCells * cell, radius: cell * HIT_REACH };
+  const directions = me.hasEffect('fan', now) ? fanDirections(me.direction, cfg.fanDegrees) : [me.direction];
+  return directions.some(d => rayHit(makeRay(head.x + d.x * cell, head.y + d.y * cell, d, cfg), me.segments, [], ctx));
 }
 
 // ---------------------------------------------------------------------------
@@ -241,11 +261,18 @@ function makeRay(x, y, direction, cfg) {
   return { x, y, dx: direction.x, dy: direction.y, length: Math.max(0, length) };
 }
 
-function segmentsLost(length, index) {
-  return index === 0 ? Math.min(3, length - 1) : length - index;
+// Un impacto quita hitDamage segmentos de la cola, toque donde toque
+function segmentsLost(length, cfg) {
+  return Math.min(cfg.hitDamage, length);
 }
 
-// Cuánto valen los segmentos que pierde un rival: lo que baja él y lo que puedo comer de los restos
+// Si un impacto la deja fuera (contando lo que ya comió y todavía no creció)
+function wouldEliminate(snake, cfg) {
+  return snake.segments.length + snake.scoreLeftToGrow <= cfg.hitDamage;
+}
+
+// Cuánto valen los segmentos que pierde un rival: lo que baja él, lo que puedo comer de los restos
+// y, si queda fuera, que deja de competir
 function cutValue(me, rival, lost, at, world, ctx) {
   const mine = me.segments.length + me.scoreLeftToGrow;
   const theirs = rival.segments.length + rival.scoreLeftToGrow;
@@ -260,7 +287,7 @@ function cutValue(me, rival, lost, at, world, ctx) {
     }
     if (d > 260) collect *= 0.6;
   }
-  return lost * (hurt + collect);
+  return lost * (hurt + collect) + (wouldEliminate(rival, world.config) ? KILL_VALUE : 0);
 }
 
 function distance(a, b, cfg) {
@@ -281,17 +308,24 @@ function shotValue(me, head, directions, world, ctx, skill) {
       if (hit && (!best || hit.enter < best.enter)) { best = hit; target = rival; }
     }
     const own = rayHit(ray, me.segments, [], ctx);
+    // Disparar cuesta uno antes de que el tiro vuelva: el impacto cae sobre lo que queda
+    const left = me.segments.length - 1;
+    const selfCost = own && !me.hasEffect('immunity', world.now)
+      ? segmentsLost(left, world.config) + (left <= world.config.hitDamage ? DEATH_COST : 0)
+      : 0;
     if (own && (!best || own.enter < best.enter)) {
-      if (!me.hasEffect('immunity', world.now)) self = Math.max(self, segmentsLost(me.segments.length, own.index));
+      self = Math.max(self, selfCost);
       continue;
     }
     if (!best || best.enter > skill.range) continue;
-    const lost = segmentsLost(target.segments.length, best.index);
+    if (own) self = Math.max(self, selfCost * MISS_RISK);
+    const lost = segmentsLost(target.segments.length, world.config);
     const sure = best.guess ? Math.max(0.1, 1 - 0.16 * best.guess) : 1;
     let value = cutValue(me, target, lost, best, world, ctx) * sure;
-    if (target.hasEffect('immunity', world.now + best.steps * ctx.tickMs)) {
-      // El escudo bloquea y se gasta: solo conviene si detrás viene un corte grande
-      value = skill.breakShield && lost >= 8 ? value * 0.3 : 0;
+    const arrives = world.now + best.steps * ctx.tickMs;
+    if (target.hasEffect('immunity', arrives)) {
+      // El escudo bloquea y se gasta (el de nacer, ni eso): solo conviene si el tiro siguiente la deja fuera
+      value = skill.breakShield && wouldEliminate(target, world.config) && arrives >= (world.guardUntil || 0) ? value * 0.3 : 0;
     }
     perRival.set(target.id, Math.max(value, perRival.get(target.id) || 0));
   }
@@ -325,11 +359,12 @@ function bestAim(me, world, ctx, skill) {
     const steps = Math.max(1, Math.ceil(d / ctx.speed));
     const index = k + turns + steps - 1;
     const length = rival.segments.length;
-    if (index < 1 || index >= length) return;
+    if (index < 0 || index >= length) return;
     const guess = k < 0 ? -k : 0;
     const sure = guess ? Math.max(0.1, 1 - 0.16 * guess) : 1;
-    let value = cutValue(me, rival, length - index, p, world, ctx) * sure;
-    if (rival.hasEffect('immunity', world.now + (turns + steps) * ctx.tickMs)) value *= skill.breakShield && length - index >= 8 ? 0.3 : 0;
+    let value = cutValue(me, rival, segmentsLost(length, world.config), p, world, ctx) * sure;
+    const arrives = world.now + (turns + steps) * ctx.tickMs;
+    if (rival.hasEffect('immunity', arrives)) value *= skill.breakShield && wouldEliminate(rival, world.config) && arrives >= (world.guardUntil || 0) ? 0.3 : 0;
     value = (value - 1) * Math.pow(DISCOUNT, turns);
     if (!best || value > best.value) best = { angle, turns, value };
   };
@@ -337,7 +372,7 @@ function bestAim(me, world, ctx, skill) {
   for (const rival of ctx.rivals) {
     const ahead = ctx.ahead.get(rival.id);
     for (let j = 0; j < Math.min(6, ahead.length); j++) consider(rival, ahead[j], -(j + 1));
-    // Los segmentos más cercanos a la cabeza son los que más cortan: del medio en adelante, salteado
+    // Cualquier segmento quita lo mismo: los primeros uno por uno y del resto, salteado
     const n = rival.segments.length;
     for (let k = 0; k < n; k += k < 8 ? 1 : 3) consider(rival, rival.segments[k], k);
   }
@@ -397,7 +432,8 @@ function listTargets(brain, me, world, ctx) {
     for (const item of world.consumables) {
       const active = me.hasEffect(item.type, now + 1500);
       let value = 0;
-      if (item.type === 'immunity') value = canBeHurt ? 2 + me.segments.length * 0.12 : 0;
+      // Con pocos segmentos, el escudo es lo que separa de quedar fuera
+      if (item.type === 'immunity') value = canBeHurt ? 2 + me.segments.length * 0.12 + (wouldEliminate(me, cfg) ? 4 : 0) : 0;
       else if (item.type === 'bigMouth') value = 6;
       else if (item.type === 'fan') value = canBeHurt ? 2 + longest(ctx.rivals) * 0.1 : 0;
       if (active) value *= 0.25;
@@ -472,14 +508,15 @@ function angleTo(from, to, cfg) {
 // Defensa
 // ---------------------------------------------------------------------------
 
-// Segmentos que pierdo por los disparos que vienen, si mi cabeza sigue el camino `heads`
-function incomingDamage(me, heads, threats, ctx) {
+// Segmentos que pierdo por los disparos que vienen, si mi cabeza sigue el camino `heads`; quedar
+// fuera cuesta mucho más que los segmentos
+function incomingDamage(me, heads, threats, ctx, cfg) {
   let damage = 0;
   for (const ray of threats) {
     const hit = rayHit(ray, me.segments, heads, ctx);
-    if (hit) damage += segmentsLost(me.segments.length, hit.index);
+    if (hit) damage += segmentsLost(me.segments.length, cfg);
   }
-  return damage;
+  return damage >= me.segments.length ? damage + DEATH_COST : damage;
 }
 
 // Rumbo final: el deseado, salvo que otro evite un disparo
@@ -501,7 +538,7 @@ function safest(brain, me, world, ctx, desired, urgency) {
 
   if (!threats.length) return desired;
 
-  const cost = angle => incomingDamage(me, futureHeads(me, angle, LOOK_AHEAD, cfg), threats, ctx) * 2;
+  const cost = angle => incomingDamage(me, futureHeads(me, angle, LOOK_AHEAD, cfg), threats, ctx, cfg) * 2;
   const base = cost(desired);
   if (base === 0) return desired;
   let best = { angle: desired, cost: base };

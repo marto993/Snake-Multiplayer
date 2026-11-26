@@ -114,6 +114,20 @@ test('no dispara si no hay a quién, si el blanco no lo vale o si no puede', () 
   assert.equal(stepBot(createBrain('extreme', seeded(1)), me, world([me, target])).fire, false);
 });
 
+test('entre un rival que puede eliminar y uno largo, igual de a mano, va por el que elimina', () => {
+  // Los dos vienen hacia la izquierda, uno arriba y otro abajo de su línea, a la misma distancia
+  const me = snake('a', 300, 216, 8);
+  const short = snake('b', 420, 150, 3, Math.PI);
+  const long = snake('c', 420, 282, 20, Math.PI);
+  const { angle } = stepBot(createBrain('extreme', seeded(1)), me, world([me, short, long]));
+  assert.ok(angle < -0.05, `gira hacia ${angle.toFixed(2)} rad`);
+  // Con los lugares cambiados, gira para el otro lado
+  const short2 = snake('b', 420, 282, 3, Math.PI);
+  const long2 = snake('c', 420, 150, 20, Math.PI);
+  const other = stepBot(createBrain('extreme', seeded(1)), me, world([me, short2, long2]));
+  assert.ok(other.angle > 0.05, `gira hacia ${other.angle.toFixed(2)} rad`);
+});
+
 test('va hacia la comida que tiene más cerca', () => {
   const me = snake('a', 300, 200, 3);
   const foods = [{ x: 300, y: 320, score: 3 }, { x: 700, y: 200, score: 3 }];
@@ -165,11 +179,20 @@ test('cada nivel le gana al anterior casi siempre', () => {
     let won = 0;
     for (let g = 0; g < 6; g++) {
       const levels = g % 2 ? [order[i], order[i - 1]] : [order[i - 1], order[i]];
-      const { players } = playMatch(levels, { seed: 40 + g, time: 60 });
-      const [strong, weak] = [order[i], order[i - 1]].map(level => players.find(p => p.level === level).length);
-      if (strong > weak) won++;
+      const { players, winners } = playMatch(levels, { seed: 40 + g, time: 60 });
+      // Gana la última en pie o, si se acaba el tiempo, la más larga (un empate no cuenta)
+      const strong = players.find(p => p.level === order[i]).id;
+      if (winners.length === 1 && winners[0] === strong) won++;
     }
     assert.ok(won >= 4, `${order[i]} le ganó a ${order[i - 1]} ${won} de 6`);
+  }
+});
+
+test('durante el escudo al nacer nadie queda fuera', () => {
+  const guard = config.spawnShield;
+  for (let g = 0; g < 8; g++) {
+    const { players } = playMatch(['extreme', 'hard', 'hard'], { seed: 70 + g, time: 20 });
+    for (const p of players) if (p.outAt !== null) assert.ok(p.outAt >= guard, `${p.level} quedó fuera a los ${p.outAt} s`);
   }
 });
 
